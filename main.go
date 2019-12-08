@@ -1,15 +1,21 @@
 package main
 
 import (
-	"path/filepath"
+	"fmt"
+	"os"
 
+	"./cmd"
 	"./db"
-
-	homedir "github.com/mitchellh/go-homedir"
 )
 
 func main() {
-	home, _ := homedir.Dir()
-	dbPath := filepath.Join(home, "db.db")
-	db.Init(dbPath)
+	db.Init("db.db")
+	must(cmd.RootCmd.Execute())
+}
+
+func must(err error) {
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 }

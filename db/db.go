@@ -2,18 +2,22 @@ package db
 
 import (
 	"github.com/jinzhu/gorm"
+	_ "github.com/mattn/go-sqlite3" // SQLite3 driver
 )
 
-var db *gorm.DB
+var DB *gorm.DB
 
 // Init the database
 func Init(path string) *gorm.DB {
-	db, err := gorm.Open("sqlite3", path)
+	var err error
+	DB, err = gorm.Open("sqlite3", path)
 	if err != nil {
 		panic("failed to connect database")
 	}
-	defer db.Close()
 
-	InitExpenses(db)
-	return db
+	InitExpenses()
+	InitIncomes()
+	InitTags()
+	InitCategories()
+	return DB
 }
