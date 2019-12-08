@@ -27,8 +27,8 @@ func InitCategories() {
 	DB.FirstOrCreate(&Category{}, Category{Name: "GRANTS", Expense: false})
 }
 
-func GetCategory(name string) Category {
+func GetCategory(name string, expense bool) Category {
 	var category Category
-	DB.First(&category, &Category{Name: strings.ToUpper(name)})
+	DB.First(&category, &Category{Name: strings.ToUpper(name), Expense: expense})
 	return category
 }

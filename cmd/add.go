@@ -15,20 +15,23 @@ var addCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(3),
 	Run: func(cmd *cobra.Command, args []string) {
 		price, _ := strconv.ParseFloat(args[0], 32)
-		if !Income {
-			expense := repo.Expense{
-				Date:          Date,
-				Price:         float32(price),
-				Paid:          false,
-				CategoryRefer: repo.GetCategory(args[1]).ID,
-				TagRefer:      repo.GetOrCreateTag(args[2], !Income).ID,
-				CreditCard:    CreditCard,
-				Currency:      Currency,
-			}
-			repo.CreateExpense(expense)
-			fmt.Printf("Added to your expense list.\n")
+		category := repo.GetCategory(args[1], !Income)
+		tag := repo.GetOrCreateTag(args[2], !Income)
+		item := repo.Item{
+			Date:          Date,
+			Price:         float32(price),
+			Paid:          false,
+			CategoryRefer: category.ID,
+			TagRefer:      tag.ID,
+			CreditCard:    CreditCard,
+			Currency:      Currency,
+			Expense:       !Income,
+		}
+		item = repo.CreateItem(item)
+		if Income {
+			fmt.Printf("Added (%s - %s - %s$%0.2f) to your incomes.\n", category.Name, tag.Name, Currency, item.Price)
 		} else {
-
+			fmt.Printf("Added (%s - %s - %s$%0.2f) to your expenses.\n", category.Name, tag.Name, Currency, item.Price)
 		}
 
 	},

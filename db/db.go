@@ -15,8 +15,7 @@ func Init(path string) *gorm.DB {
 		panic("failed to connect database")
 	}
 
-	InitExpenses()
-	InitIncomes()
+	InitItems()
 	InitTags()
 	InitCategories()
 	return DB

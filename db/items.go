@@ -4,21 +4,28 @@ import (
 	"github.com/jinzhu/gorm"
 )
 
-// Income in the db
-type Income struct {
+// Item in the db
+type Item struct {
 	gorm.Model
 	Date          string
 	Price         float32
 	Paid          bool
+	CreditCard    bool
 	Category      Category `gorm:"foreignkey:CategoryRefer"`
 	CategoryRefer uint
 	Tag           Tag `gorm:"foreignkey:TagRefer"`
 	TagRefer      uint
 	Currency      string
+	Expense       bool
 }
 
-// InitIncomes schema
-func InitIncomes() {
+// InitItems schema
+func InitItems() {
 	// Migrate the schema
-	DB.AutoMigrate(&Income{})
+	DB.AutoMigrate(&Item{})
+}
+
+func CreateItem(item Item) {
+	DB.NewRecord(&item)
+	DB.Create(&item)
 }
