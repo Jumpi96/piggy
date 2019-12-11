@@ -16,6 +16,7 @@ func Init(path string) *gorm.DB {
 	}
 
 	InitItems()
+	InitMonthlyItems()
 	InitTags()
 	InitCategories()
 	return DB
