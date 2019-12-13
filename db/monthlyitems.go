@@ -31,13 +31,12 @@ func CreateMonthlyItem(item MonthlyItem) {
 
 func GetMonthlyItems(expenses bool) []MonthlyItem {
 	var list []MonthlyItem
-	var itemtype int
+	var itemtype string
 	if expenses {
-		itemtype = 1
+		itemtype = "1"
 	} else {
-		itemtype = 0
+		itemtype = "0"
 	}
 	DB.Where("Expense = ?", itemtype).Find(&list)
-	DB.Find(&list)
 	return list
 }

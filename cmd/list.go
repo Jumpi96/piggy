@@ -47,7 +47,7 @@ var MonthYear string
 var Incomes bool
 
 func init() {
-	listCmd.Flags().StringVarP(&MonthYear, "monthyear", "m", time.Now().Format("2006-01-02")[0:7], "month and year of the expenses or incomes")
+	listCmd.Flags().StringVarP(&MonthYear, "monthYear", "m", time.Now().Format("2006-01-02")[0:7], "month and year of the expenses or incomes")
 	listCmd.Flags().BoolVarP(&Incomes, "incomes", "i", false, "do you want incomes?")
 
 	RootCmd.AddCommand(listCmd)

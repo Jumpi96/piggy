@@ -32,7 +32,7 @@ func CreateItem(item Item) {
 	DB.Create(&item)
 }
 
-func GetItemsFromMonth(monthyear string, expenses bool) []Item {
+func GetItemsFromMonth(monthYear string, expenses bool) []Item {
 	var list []Item
 	var itemtype string
 	if expenses {
@@ -40,7 +40,7 @@ func GetItemsFromMonth(monthyear string, expenses bool) []Item {
 	} else {
 		itemtype = "0"
 	}
-	query := fmt.Sprintf("Date BETWEEN '%s-01' AND '%s-31' AND Expense = %s", monthyear, monthyear, itemtype)
+	query := fmt.Sprintf("Date BETWEEN '%s-01' AND '%s-31' AND Expense = %s", monthYear, monthYear, itemtype)
 	DB.Where(query).Find(&list)
 	return list
 }
