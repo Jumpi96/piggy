@@ -1,10 +1,32 @@
-package services
+package db
 
 import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+
+	"github.com/jinzhu/gorm"
 )
+
+type Currency struct {
+	gorm.Model
+	Name    string
+	Value float32
+}
+
+// InitCurrencies schema
+func InitCurrencies() {
+	// Migrate the schema
+
+	DB.AutoMigrate(&Currency{})
+	DB.FirstOrCreate(&Currency{}, Currency{Name: "USD", Value: USDtoARS(1.0)})
+}
+
+func GetCurrencyByName(name string) Currency {
+	var currency Currency
+	DB.First(&currency, &Currency{Name: name})
+	return currency
+}
 
 type APICurrency struct {
 	Disclaimer string `json:"disclaimer"`

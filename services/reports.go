@@ -3,10 +3,12 @@ package services
 import (
 	"strconv"
 	"time"
+
+	db "../db"
 )
 
 func GetMonthStatus(monthYear string) map[string]float32 {
-	usdToArs := USDtoARS(1.0)
+	usdToArs := db.GetCurrencyByName("USD").Value
 	m := make(map[string]float32)
 	expTotal := float32(0.0)
 	incTotal := float32(0.0)
