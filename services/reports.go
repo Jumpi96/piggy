@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
@@ -41,19 +42,13 @@ func GetMonthStatus(monthYear string) map[string]float32 {
 
 func DaysUntilEndOfMonth(monthYear string) int {
 	daysInMonth := DaysInAMonth(monthYear)
-	if IsCurrentMonth(monthYear) {
-		year, err := strconv.Atoi(monthYear[0:4])
-		if err != nil {
-			panic("Failed to convert string to year")
-		}
-		month, err := strconv.Atoi(monthYear[5:7])
-		if err != nil {
-			panic("Failed to convert string to year")
-		}
-		t := time.Date(year, time.Month(month), 0, 0, 0, 0, 0, time.UTC)
+	if IsFutureMonth(monthYear) {
+		return daysInMonth
+	} else if IsCurrentMonth(monthYear) {
+		t := time.Now()
 		return daysInMonth - t.Day()
 	}
-	return daysInMonth
+	return 1
 }
 
 func DaysInAMonth(monthYear string) int {
@@ -67,4 +62,16 @@ func DaysInAMonth(monthYear string) int {
 	}
 	t := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC)
 	return t.Day()
+}
+
+func IsCurrentMonth(monthYear string) bool {
+	now := time.Now()
+	currentYear, currentMonth, _ := now.Date()
+	currentLocation := now.Location()
+	querydate, err := time.ParseInLocation("2006-01-02", monthYear+"-01", currentLocation)
+	if err != nil {
+		panic("Month couldn't be parsed!")
+	}
+	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
+	return querydate.Equal(firstOfMonth)
 }

@@ -10,7 +10,7 @@ import (
 func GetItemsFromMonth(monthYear string, expenses bool) []repo.Item {
 	items := repo.GetItemsFromMonth(monthYear, expenses)
 
-	if IsCurrentMonth(monthYear) {
+	if IsFutureMonth(monthYear) {
 		monthlyitems := repo.GetMonthlyItems(expenses)
 		for _, monthlyitem := range monthlyitems {
 			day := fmt.Sprintf("-%02d", monthlyitem.Day)
@@ -30,11 +30,14 @@ func GetItemsFromMonth(monthYear string, expenses bool) []repo.Item {
 	return items
 }
 
-func IsCurrentMonth(monthYear string) bool {
-	querydate, _ := time.Parse("2006-01-02", monthYear+"-01")
+func IsFutureMonth(monthYear string) bool {
 	now := time.Now()
 	currentYear, currentMonth, _ := now.Date()
 	currentLocation := now.Location()
+	querydate, err := time.ParseInLocation("2006-01-02", monthYear+"-01", currentLocation)
+	if err != nil {
+		panic("Month couldn't be parsed!")
+	}
 	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
-	return firstOfMonth.Before(querydate)
+	return querydate.After(firstOfMonth)
 }
