@@ -10,7 +10,7 @@ import (
 
 type Currency struct {
 	gorm.Model
-	Name    string
+	Name  string
 	Value float32
 }
 
@@ -19,7 +19,6 @@ func InitCurrencies() {
 	// Migrate the schema
 
 	DB.AutoMigrate(&Currency{})
-	DB.FirstOrCreate(&Currency{}, Currency{Name: "USD", Value: USDtoARS(1.0)})
 }
 
 func GetCurrencyByName(name string) Currency {
