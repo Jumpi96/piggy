@@ -8,9 +8,11 @@ import (
 )
 
 // GetMonthStatus to create status report based in month and year.
-func GetMonthStatus(monthYear string) (map[string]float64, map[int]float64) {
+func GetMonthStatus(monthYear string, amountPerDay float64) (map[string]float64, map[int]float64) {
 	usdToArs, _ := entries.GetParam("USD")
-	amountPerDay, _ := entries.GetParam("ApD")
+	if amountPerDay == 0.0 {
+		amountPerDay, _ = entries.GetParam("ApD")
+	}
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)

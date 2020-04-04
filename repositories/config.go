@@ -6,6 +6,7 @@ import (
 )
 
 type Config struct {
+	ToshlAPI   string
 	ToshlToken string
 }
 
