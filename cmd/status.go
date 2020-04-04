@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
-	items "../services"
+	entries "../services"
 	"github.com/spf13/cobra"
 )
 
@@ -13,19 +14,31 @@ var statusCmd = &cobra.Command{
 	Short: "Get expenses status in a month.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		result := items.GetMonthStatus(MonthYear)
-		fmt.Printf(" You got: $%0.2f", result["incomes"])
-		fmt.Printf("\n You have to give: $%0.2f", result["expenses"])
+		result, stairs := entries.GetMonthStatus(MonthYear)
+
+		fmt.Printf("\n PERIOD: %v", MonthYear)
 		fmt.Printf("\n YOUR CURRENT SITUATION: $%0.2f", result["diff"])
 		fmt.Printf("\n That means for each remaining day: $%0.2f", result["dayRemaining"])
-		fmt.Printf("\n USD-ARS: $%0.2f \n", result["usd"])
+		fmt.Printf("\n Comparing with what you expected to have: $%0.2f\n\n", result["dayRemainingDiff"])
 
+		var keys []int
+		for k := range stairs {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+
+		for _, k := range keys {
+			fmt.Printf(" %v ................. $%0.2f\n", k, stairs[k])
+		}
+
+		fmt.Printf("\n Your available cash should be: $%0.2f\n", result["cash"])
 	},
 }
 
+var MonthYear string
+
 func init() {
 	statusCmd.Flags().StringVarP(&MonthYear, "monthYear", "m", time.Now().Format("2006-01-02")[0:7], "month and year of the expenses or incomes")
-	statusCmd.Flags().BoolVarP(&Incomes, "incomes", "i", false, "do you want incomes?")
 
 	RootCmd.AddCommand(statusCmd)
 }
