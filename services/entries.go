@@ -7,13 +7,15 @@ import (
 	entries "../repositories"
 )
 
+// GetMonthStatus to create status report based in month and year.
 func GetMonthStatus(monthYear string) (map[string]float64, map[int]float64) {
 	usdToArs, _ := entries.GetParam("USD")
-	amountPerDay, _ := entries.GetParam("ApD") // Esta colgada la conexion a la BD anterior
+	amountPerDay, _ := entries.GetParam("ApD")
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
 	entries := entries.GetEntriesByMonth(monthYear)
+	remainingDays := float64(daysUntilEndOfMonth(monthYear))
 
 	year, month, day := time.Now().Date()
 	today := time.Date(year, month, day, 0, 0, 0, 0, time.Now().Location())
@@ -33,13 +35,15 @@ func GetMonthStatus(monthYear string) (map[string]float64, map[int]float64) {
 		}
 	}
 
-	remainingDays := float64(daysUntilEndOfMonth(monthYear))
-
 	totals["diff"] = total
 	totals["cash"] = cash
 	totals["dayRemaining"] = total / remainingDays
 	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
 
+	return totals, calcStairs(monthYear, total)
+}
+
+func calcStairs(monthYear string, total float64) map[int]float64 {
 	stairs := make(map[int]float64)
 
 	var dayStart int
@@ -53,7 +57,7 @@ func GetMonthStatus(monthYear string) (map[string]float64, map[int]float64) {
 		stairs[i] = total / float64(daysInAMonth(monthYear)-i+1)
 	}
 
-	return totals, stairs
+	return stairs
 }
 
 func daysUntilEndOfMonth(monthYear string) int {

@@ -16,3 +16,6 @@
 
 # Sqlite DB
 *.db
+
+# Personal information
+config.json

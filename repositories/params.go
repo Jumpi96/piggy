@@ -8,29 +8,31 @@ import (
 )
 
 var db *bolt.DB
-var err error
 
-// Init the database
-func Init() {
+// InitDB the database
+func InitDB() error {
+	var err error
 	db, err = bolt.Open("db.db", 0600, nil)
 	if err != nil {
-		fmt.Printf("could not open db, %v", err)
+		return fmt.Errorf("could not open db, %v", err)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("DB"))
 		if err != nil {
-			fmt.Printf("could not create root bucket: %v", err)
+			return fmt.Errorf("could not create root bucket: %v", err)
 		}
 		return nil
 	})
 	if err != nil {
-		fmt.Printf("could not set up buckets, %v", err)
+		return fmt.Errorf("could not set up buckets, %v", err)
 	}
+	return nil
 }
 
 func SetParam(key string, value float64) error {
+	var err error
 	valueStr := fmt.Sprintf("%.2f", value)
-	err := db.Update(func(tx *bolt.Tx) error {
+	err = db.Update(func(tx *bolt.Tx) error {
 		err = tx.Bucket([]byte("DB")).Put([]byte(key), []byte(valueStr))
 		if err != nil {
 			return fmt.Errorf("could not set param: %v", err)
@@ -41,6 +43,7 @@ func SetParam(key string, value float64) error {
 }
 
 func GetParam(key string) (float64, error) {
+	var err error
 	if err != nil {
 		return -1, fmt.Errorf("could not get param: %v", err)
 	}

@@ -5,11 +5,12 @@ import (
 	"os"
 
 	"./cmd"
-	params "./repositories"
+	repositories "./repositories"
 )
 
 func main() {
-	params.Init()
+	must(repositories.InitDB())
+	must(repositories.InitConfig())
 	must(cmd.RootCmd.Execute())
 }
 
