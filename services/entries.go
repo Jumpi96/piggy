@@ -1,11 +1,86 @@
 package services
 
 import (
+	"fmt"
 	"strconv"
 	"time"
 
 	entries "../repositories"
 )
+
+func ConfirmCreditPayment(monthYear string) {
+	usdToArs, _ := entries.GetParam("USD")
+	entries := entries.GetCreditEntriesByMonth(monthYear)
+
+	for _, entry := range entries {
+		payEntry(entry, usdToArs)
+	}
+}
+
+func payEntry(entry entries.Entry, usdToArs float64) {
+	minEntry := entries.MinimalEntry{
+		ID:        entry.ID,
+		Date:      entry.Date,
+		Account:   entry.Account,
+		Category:  entry.Category,
+		Modified:  entry.Modified,
+		Completed: true,
+	}
+	minEntry.Tags = []string{}
+	if len(entry.Tags) > 1 {
+		for _, tag := range entry.Tags {
+			if tag != "credit" {
+				minEntry.Tags = append(minEntry.Tags, tag)
+			}
+		}
+	} else {
+		minEntry.Tags = entry.Tags
+	}
+	if entry.Currency.Code == "ARS" {
+		minEntry.Currency = entry.Currency
+		minEntry.Amount = entry.Amount
+	} else {
+		minEntry.Currency = entries.Currency{
+			Code:     "ARS",
+			Rate:     1.0,
+			MainRate: 1.0,
+			Fixed:    false,
+		}
+		minEntry.Amount = entry.Amount * usdToArs
+	}
+	err := entries.PayCreditEntry(minEntry)
+	if err != nil {
+		fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
+	}
+
+}
+
+// GetCreditCardStatus to get credit status report based in month and year.
+func GetCreditCardStatus(monthYear string) (map[string]float64, []string) {
+	usdToArs, _ := entries.GetParam("USD")
+
+	totals := make(map[string]float64)
+	totalUSD := float64(0.0)
+	totalARS := float64(0.0)
+	itemsList := []string{}
+
+	entries := entries.GetCreditEntriesByMonth(monthYear)
+
+	for _, entry := range entries {
+		if entry.Currency.Code == "ARS" {
+			totalARS += entry.Amount
+		} else {
+			totalUSD += entry.Amount
+		}
+		itemsList = append(itemsList, fmt.Sprintf("%s %0.2f", entry.Currency.Code, -1*entry.Amount))
+	}
+
+	totals["amountUSD"] = -1 * totalUSD
+	totals["amountARS"] = -1 * totalARS
+	totals["total"] = -1 * (totalUSD*usdToArs + totalARS)
+
+	return totals, itemsList
+}
 
 // GetMonthStatus to create status report based in month and year.
 func GetMonthStatus(monthYear string, amountPerDay float64) (map[string]float64, map[int]float64) {

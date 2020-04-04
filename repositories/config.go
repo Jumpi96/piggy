@@ -8,6 +8,7 @@ import (
 type Config struct {
 	ToshlAPI   string
 	ToshlToken string
+	CreditTag  string
 }
 
 var config Config
