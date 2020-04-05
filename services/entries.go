@@ -8,16 +8,20 @@ import (
 	entries "../repositories"
 )
 
+// ConfirmCreditPayment confirms payment of item
 func ConfirmCreditPayment(monthYear string) {
 	usdToArs, _ := entries.GetParam("USD")
-	entries := entries.GetCreditEntriesByMonth(monthYear)
+	creditEntries := entries.GetCreditEntriesByMonth(monthYear)
 
-	for _, entry := range entries {
-		payEntry(entry, usdToArs)
+	for _, entry := range creditEntries {
+		err := entries.PayCreditEntry(payEntry(entry, usdToArs))
+		if err != nil {
+			fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
+		}
 	}
 }
 
-func payEntry(entry entries.Entry, usdToArs float64) {
+func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
 	minEntry := entries.MinimalEntry{
 		ID:        entry.ID,
 		Date:      entry.Date,
@@ -48,11 +52,7 @@ func payEntry(entry entries.Entry, usdToArs float64) {
 		}
 		minEntry.Amount = entry.Amount * usdToArs
 	}
-	err := entries.PayCreditEntry(minEntry)
-	if err != nil {
-		fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
-	}
-
+	return minEntry
 }
 
 // GetCreditCardStatus to get credit status report based in month and year.
