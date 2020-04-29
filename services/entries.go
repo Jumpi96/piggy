@@ -33,7 +33,7 @@ func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
 	minEntry.Tags = []string{}
 	if len(entry.Tags) > 1 {
 		for _, tag := range entry.Tags {
-			if tag != "credit" {
+			if tag != entries.Configs.CreditTag {
 				minEntry.Tags = append(minEntry.Tags, tag)
 			}
 		}

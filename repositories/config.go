@@ -11,7 +11,7 @@ type Config struct {
 	CreditTag  string
 }
 
-var config Config
+var Configs Config
 
 func InitConfig() error {
 	file, err := os.Open("config.json")
@@ -19,7 +19,7 @@ func InitConfig() error {
 		return err
 	}
 	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&config)
+	err = decoder.Decode(&Configs)
 	if err != nil {
 		return err
 	}
