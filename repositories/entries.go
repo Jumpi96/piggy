@@ -78,7 +78,10 @@ func GetCreditEntriesByMonth(monthYear string) []Entry {
 	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
 	path := fmt.Sprintf("entries?from=%s&to=%s&tags=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"), config.CreditTag)
 	var entries []Entry
-	body, _ := doToshlRequest("GET", path, nil)
+	body, err := doToshlRequest("GET", path, nil)
+	if err != nil {
+		panic(err)
+	}
 	json.Unmarshal([]byte(body), &entries)
 	return entries
 }
@@ -91,7 +94,10 @@ func GetEntriesByMonth(monthYear string) []Entry {
 	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
 	path := fmt.Sprintf("entries?from=%s&to=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"))
 	var entries []Entry
-	body, _ := doToshlRequest("GET", path, nil)
+	body, err := doToshlRequest("GET", path, nil)
+	if err != nil {
+		panic(err)
+	}
 	json.Unmarshal([]byte(body), &entries)
 	return entries
 }

@@ -13,6 +13,9 @@ var creditCmd = &cobra.Command{
 	Short: "Status of credit card before payment.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
+		if confirm {
+			entries.ConfirmCreditPayment(monthYear)
+		}
 		result, items := entries.GetCreditCardStatus(monthYear)
 		fmt.Printf("\nPAYING YOUR CREDIT CARD")
 		fmt.Printf("\n PERIOD: %v", monthYear)
