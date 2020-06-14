@@ -8,7 +8,7 @@ import (
 )
 
 func doToshlRequest(verb string, url string, payload io.Reader) ([]byte, error) {
-	query := fmt.Sprintf("%v%v", Configs.ToshlAPI, url)
+	query := fmt.Sprintf("%v%v", "https://api.toshl.com/", url)
 	request, err := http.NewRequest(verb, query, payload)
 	request.SetBasicAuth(Configs.ToshlToken, "")
 	request.Header.Add("Content-Type", "application/json")

@@ -1,27 +1,19 @@
 package repositories
 
 import (
-	"encoding/json"
 	"os"
 )
 
+// Config type to represent configuration values.
 type Config struct {
-	ToshlAPI   string
-	ToshlToken string
-	CreditTag  string
+	ToshlToken    string
+	CreditTag     string
+	TelegramToken string
 }
 
-var Configs Config
-
-func InitConfig() error {
-	file, err := os.Open("config.json")
-	if err != nil {
-		return err
-	}
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&Configs)
-	if err != nil {
-		return err
-	}
-	return nil
+// Configs represent a singleton with configuration values.
+var Configs Config = Config{
+	ToshlToken:    os.Getenv("TOSHL_TOKEN"),
+	TelegramToken: os.Getenv("TELEGRAM_TOKEN"),
+	CreditTag:     os.Getenv("CREDIT_TAG"),
 }

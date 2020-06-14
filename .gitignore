@@ -20,3 +20,6 @@ piggy
 
 # Personal information
 config.json
+
+# Lambda
+deployment.zip
