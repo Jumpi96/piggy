@@ -9,8 +9,7 @@ import (
 )
 
 // ConfirmCreditPayment confirms payment of item
-func ConfirmCreditPayment(monthYear string) {
-	usdToArs, _ := entries.GetParam("USD")
+func ConfirmCreditPayment(monthYear string, usdToArs float64) {
 	creditEntries := entries.GetCreditEntriesByMonth(monthYear)
 
 	for _, entry := range creditEntries {
@@ -56,8 +55,7 @@ func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
 }
 
 // GetCreditCardStatus to get credit status report based in month and year.
-func GetCreditCardStatus(monthYear string) (map[string]float64, []string) {
-	usdToArs, _ := entries.GetParam("USD")
+func GetCreditCardStatus(monthYear string, usdToArs float64) (map[string]float64, []string) {
 
 	totals := make(map[string]float64)
 	totalUSD := float64(0.0)

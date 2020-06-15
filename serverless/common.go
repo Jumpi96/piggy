@@ -71,7 +71,7 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	client := &http.Client{}
 	message, err := json.Marshal(TelegramMessage{
 		ChatID: u.Message.Chat.ID,
-		Text:   routeCommand(u.Message.Text),
+		Text:   routeCommand(u.Message.Text, u.Message.Chat.UserName),
 	})
 	must(err)
 
@@ -85,15 +85,21 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 
 var rStatus = regexp.MustCompile(`\/status.*`)
 var rCredit = regexp.MustCompile(`\/credit.*`)
+var rPayCredit = regexp.MustCompile(`\/pay.*`)
 
-func routeCommand(message string) string {
-	switch {
-	case rStatus.MatchString(message):
-		return handleStatus(message)
-	case rCredit.MatchString(message):
-		return "Credit WIP"
+func routeCommand(message string, username string) string {
+	if username == repositories.Configs.TelegramUser {
+		switch {
+		case rStatus.MatchString(message):
+			return handleStatus(message)
+		case rCredit.MatchString(message):
+			return handleCredit(message, false)
+		case rPayCredit.MatchString(message):
+			return handleCredit(message, true)
+		}
+		return "❓ Use one of the Piggy commands:\n /status\n /credit\n /pay"
 	}
-	return "I don't understand you!"
+	return "🤔Sir, who are you?"
 }
 
 func must(err error) {
