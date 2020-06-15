@@ -15,6 +15,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Install dependencies
-      run: go get github.com/aws/aws-lambda-go
+      run: go get ./..
     - name: Test
       run: go test ./...
