@@ -83,15 +83,15 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	return events.APIGatewayProxyResponse{StatusCode: 200}, nil
 }
 
-var rStatus = regexp.MustCompile(`/status .*`)
-var rCredit = regexp.MustCompile(`/credit .*`)
+var rStatus = regexp.MustCompile(`\/status.*`)
+var rCredit = regexp.MustCompile(`\/credit.*`)
 
 func routeCommand(message string) string {
 	switch {
 	case rStatus.MatchString(message):
 		return handleStatus(message)
 	case rCredit.MatchString(message):
-		return "WIP"
+		return "Credit WIP"
 	}
 	return "I don't understand you!"
 }
