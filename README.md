@@ -1,2 +1,2 @@
 # Piggy
-## A personal finances helper written in Go.
+## A personal finance helper written in Go.

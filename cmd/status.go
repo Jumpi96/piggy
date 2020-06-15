@@ -14,7 +14,7 @@ var statusCmd = &cobra.Command{
 	Short: "Get expenses status in a month.",
 	Args:  cobra.NoArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		result, stairs := entries.GetMonthStatus(monthYear, amountPerDay)
+		result, stairs := entries.GetMonthStatus(monthYear, amountPerDay, 0.0)
 
 		fmt.Printf("\n PERIOD: %v", monthYear)
 		fmt.Printf("\n YOUR CURRENT SITUATION: $%0.2f", result["diff"])
