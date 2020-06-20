@@ -56,7 +56,15 @@ type Entry struct {
 	Deleted   bool `json:"deleted"`
 }
 
-func PayCreditEntry(entry MinimalEntry) error {
+type EntriesRepo interface {
+	PayCreditEntry(MinimalEntry) error
+	GetCreditEntriesByMonth(string) []Entry
+	GetEntriesByMonth(string) []Entry
+}
+
+type ToshlEntriesRepo struct{}
+
+func (t *ToshlEntriesRepo) PayCreditEntry(entry MinimalEntry) error {
 	path := fmt.Sprintf("entries/%s?update=one&immediate_update=true", entry.ID)
 	e, err := json.Marshal(entry)
 	if err != nil {
@@ -70,7 +78,7 @@ func PayCreditEntry(entry MinimalEntry) error {
 	return nil
 }
 
-func GetCreditEntriesByMonth(monthYear string) []Entry {
+func (t *ToshlEntriesRepo) GetCreditEntriesByMonth(monthYear string) []Entry {
 	currentLocation := time.Now().Location()
 	currentYear, _ := strconv.Atoi(monthYear[:4])
 	currentMonth, _ := strconv.Atoi(monthYear[5:])
@@ -86,7 +94,7 @@ func GetCreditEntriesByMonth(monthYear string) []Entry {
 	return entries
 }
 
-func GetEntriesByMonth(monthYear string) []Entry {
+func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear string) []Entry {
 	currentLocation := time.Now().Location()
 	currentYear, _ := strconv.Atoi(monthYear[:4])
 	currentMonth, _ := strconv.Atoi(monthYear[5:])

@@ -9,15 +9,18 @@ import (
 )
 
 // ConfirmCreditPayment confirms payment of item
-func ConfirmCreditPayment(monthYear string, usdToArs float64) {
-	creditEntries := entries.GetCreditEntriesByMonth(monthYear)
+func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, usdToArs float64) error {
+	creditEntries := e.GetCreditEntriesByMonth(monthYear)
 
 	for _, entry := range creditEntries {
-		err := entries.PayCreditEntry(payEntry(entry, usdToArs))
+		err := e.PayCreditEntry(payEntry(entry, usdToArs))
 		if err != nil {
 			fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
+			return err
 		}
 	}
+
+	return nil
 }
 
 func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
@@ -55,14 +58,14 @@ func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
 }
 
 // GetCreditCardStatus to get credit status report based in month and year.
-func GetCreditCardStatus(monthYear string, usdToArs float64) (map[string]float64, []string) {
+func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float64) (map[string]float64, []string) {
 
 	totals := make(map[string]float64)
 	totalUSD := float64(0.0)
 	totalARS := float64(0.0)
 	itemsList := []string{}
 
-	entries := entries.GetCreditEntriesByMonth(monthYear)
+	entries := e.GetCreditEntriesByMonth(monthYear)
 
 	for _, entry := range entries {
 		if entry.Currency.Code == "ARS" {
@@ -81,11 +84,11 @@ func GetCreditCardStatus(monthYear string, usdToArs float64) (map[string]float64
 }
 
 // GetMonthStatus to create status report based in month and year.
-func GetMonthStatus(monthYear string, amountPerDay float64, usdToArs float64) (map[string]float64, map[int]float64) {
+func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float64, usdToArs float64) (map[string]float64, map[int]float64) {
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
-	entries := entries.GetEntriesByMonth(monthYear)
+	entries := e.GetEntriesByMonth(monthYear)
 	remainingDays := float64(daysUntilEndOfMonth(monthYear))
 
 	year, month, day := time.Now().Date()

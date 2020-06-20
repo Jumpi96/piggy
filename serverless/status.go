@@ -44,11 +44,11 @@ func handleStatus(message string) string {
 
 func generateReport(monthYear string, amountPerDay float64, usdToArs float64) string {
 	var response string
-	result, stairs := entries.GetMonthStatus(monthYear, amountPerDay, usdToArs)
-	response = fmt.Sprintf("\n 🐷PERIOD: %v", monthYear)
-	response += fmt.Sprintf("\n 💵YOUR CURRENT SITUATION: $%0.2f", result["diff"])
-	response += fmt.Sprintf("\n 💶That means for each remaining day: $%0.2f", result["dayRemaining"])
-	response += fmt.Sprintf("\n 💷Comparing with what you expected to have: $%0.2f\n\n", result["dayRemainingDiff"])
+	result, stairs := entries.GetMonthStatus(toshlRepository, monthYear, amountPerDay, usdToArs)
+	response = fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
+	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: $%0.2f", result["diff"])
+	response += fmt.Sprintf("\n💶That means for each remaining day: $%0.2f", result["dayRemaining"])
+	response += fmt.Sprintf("\n💷Comparing with what you expected to have: $%0.2f\n\n", result["dayRemainingDiff"])
 
 	var keys []int
 	for k := range stairs {

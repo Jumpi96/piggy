@@ -35,7 +35,7 @@ func handleCredit(message string, pay bool) string {
 		return "The /credit or /pay command should be like: \n /credit [<MonthYear>] <USDtoARS>. \n i.e. /credit 2020-06 90.00"
 	}
 	if pay {
-		entries.ConfirmCreditPayment(monthYear, usdToArs)
+		entries.ConfirmCreditPayment(toshlRepository, monthYear, usdToArs)
 	}
 
 	return generateCreditReport(monthYear, usdToArs)
@@ -43,13 +43,13 @@ func handleCredit(message string, pay bool) string {
 
 func generateCreditReport(monthYear string, usdToArs float64) string {
 	var response string
-	result, items := entries.GetCreditCardStatus(monthYear, usdToArs)
-	response += fmt.Sprintf("\n 💳PAYING YOUR CREDIT CARD")
-	response += fmt.Sprintf("\n 🐷PERIOD: %v", monthYear)
-	response += fmt.Sprintf("\n 💵Amount in USD: $%0.2f", result["amountUSD"])
-	response += fmt.Sprintf("\n 🇦🇷Amount in ARS: $%0.2f", result["amountARS"])
-	response += fmt.Sprintf("\n 💰TOTAL IN ARS: $%0.2f", result["total"])
-	response += fmt.Sprintf("\n Your credit items are: ")
+	result, items := entries.GetCreditCardStatus(toshlRepository, monthYear, usdToArs)
+	response += fmt.Sprintf("\n💳PAYING YOUR CREDIT CARD")
+	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
+	response += fmt.Sprintf("\n💵Amount in USD: $%0.2f", result["amountUSD"])
+	response += fmt.Sprintf("\n🇦🇷Amount in ARS: $%0.2f", result["amountARS"])
+	response += fmt.Sprintf("\n💰TOTAL IN ARS: $%0.2f", result["total"])
+	response += fmt.Sprintf("\nYour credit items are: ")
 
 	for _, item := range items {
 		response += fmt.Sprintf("\n ☑ %s", item)

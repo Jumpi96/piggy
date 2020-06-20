@@ -59,6 +59,9 @@ type TelegramMessage struct {
 	Text   string `json:"text"`
 }
 
+// --- DEPENDENCY INJECTION ---
+var toshlRepository = &repositories.ToshlEntriesRepo{}
+
 // Handler receives bot webhook and returns reports.
 func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	var u Update
