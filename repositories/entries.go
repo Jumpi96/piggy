@@ -78,7 +78,7 @@ func (t *ToshlEntriesRepo) PayCreditEntry(entry MinimalEntry) error {
 }
 
 func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear string, credit bool) []Entry {
-	currentLocation := time.Now().Location()
+	currentLocation, _ := time.LoadLocation(Configs.TimeZone)
 	currentYear, _ := strconv.Atoi(monthYear[:4])
 	currentMonth, _ := strconv.Atoi(monthYear[5:])
 	firstOfMonth := time.Date(currentYear, time.Month(currentMonth), 1, 0, 0, 0, 0, currentLocation)

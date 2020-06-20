@@ -88,13 +88,14 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
-	entries := e.GetEntriesByMonth(monthYear, false)
+	monthEntries := e.GetEntriesByMonth(monthYear, false)
 	remainingDays := float64(daysUntilEndOfMonth(monthYear))
 
 	year, month, day := time.Now().Date()
-	today := time.Date(year, month, day, 0, 0, 0, 0, time.Now().Location())
+	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
+	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
 
-	for _, entry := range entries {
+	for _, entry := range monthEntries {
 		entryDate, _ := time.Parse("2006-01-02", entry.Date)
 		if entry.Currency.Code == "ARS" {
 			total += entry.Amount
