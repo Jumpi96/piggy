@@ -58,8 +58,7 @@ type Entry struct {
 
 type EntriesRepo interface {
 	PayCreditEntry(MinimalEntry) error
-	GetCreditEntriesByMonth(string) []Entry
-	GetEntriesByMonth(string) []Entry
+	GetEntriesByMonth(string, bool) []Entry
 }
 
 type ToshlEntriesRepo struct{}
@@ -78,29 +77,20 @@ func (t *ToshlEntriesRepo) PayCreditEntry(entry MinimalEntry) error {
 	return nil
 }
 
-func (t *ToshlEntriesRepo) GetCreditEntriesByMonth(monthYear string) []Entry {
+func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear string, credit bool) []Entry {
 	currentLocation := time.Now().Location()
 	currentYear, _ := strconv.Atoi(monthYear[:4])
 	currentMonth, _ := strconv.Atoi(monthYear[5:])
 	firstOfMonth := time.Date(currentYear, time.Month(currentMonth), 1, 0, 0, 0, 0, currentLocation)
 	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
-	path := fmt.Sprintf("entries?from=%s&to=%s&tags=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"), Configs.CreditTag)
-	var entries []Entry
-	body, err := doToshlRequest("GET", path, nil)
-	if err != nil {
-		panic(err)
-	}
-	json.Unmarshal([]byte(body), &entries)
-	return entries
-}
 
-func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear string) []Entry {
-	currentLocation := time.Now().Location()
-	currentYear, _ := strconv.Atoi(monthYear[:4])
-	currentMonth, _ := strconv.Atoi(monthYear[5:])
-	firstOfMonth := time.Date(currentYear, time.Month(currentMonth), 1, 0, 0, 0, 0, currentLocation)
-	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
-	path := fmt.Sprintf("entries?from=%s&to=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"))
+	var path string
+	if credit {
+		path = fmt.Sprintf("entries?from=%s&to=%s&tags=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"), Configs.CreditTag)
+	} else {
+		path = fmt.Sprintf("entries?from=%s&to=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"))
+	}
+
 	var entries []Entry
 	body, err := doToshlRequest("GET", path, nil)
 	if err != nil {

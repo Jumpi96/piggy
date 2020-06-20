@@ -10,7 +10,7 @@ import (
 
 // ConfirmCreditPayment confirms payment of item
 func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, usdToArs float64) error {
-	creditEntries := e.GetCreditEntriesByMonth(monthYear)
+	creditEntries := e.GetEntriesByMonth(monthYear, true)
 
 	for _, entry := range creditEntries {
 		err := e.PayCreditEntry(payEntry(entry, usdToArs))
@@ -65,7 +65,7 @@ func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float
 	totalARS := float64(0.0)
 	itemsList := []string{}
 
-	entries := e.GetCreditEntriesByMonth(monthYear)
+	entries := e.GetEntriesByMonth(monthYear, true)
 
 	for _, entry := range entries {
 		if entry.Currency.Code == "ARS" {
@@ -88,7 +88,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
-	entries := e.GetEntriesByMonth(monthYear)
+	entries := e.GetEntriesByMonth(monthYear, false)
 	remainingDays := float64(daysUntilEndOfMonth(monthYear))
 
 	year, month, day := time.Now().Date()

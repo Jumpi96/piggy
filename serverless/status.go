@@ -60,6 +60,6 @@ func generateReport(monthYear string, amountPerDay float64, usdToArs float64) st
 		response += fmt.Sprintf(" %v ................. $%0.2f\n", k, stairs[k])
 	}
 
-	response += fmt.Sprintf("\n 💰Your available cash should be: $%0.2f\n", result["cash"])
+	response += fmt.Sprintf("\n💰Your available cash should be: $%0.2f\n", result["cash"])
 	return response
 }
