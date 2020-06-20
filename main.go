@@ -1,21 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"github.com/aws/aws-lambda-go/lambda"
 
-	"./cmd"
-	"./db"
+	serverless "./serverless"
 )
 
 func main() {
-	db.Init("db.db")
-	must(cmd.RootCmd.Execute())
-}
-
-func must(err error) {
-	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
-	}
+	lambda.Start(serverless.Handler)
 }

@@ -4,6 +4,7 @@
 *.dll
 *.so
 *.dylib
+piggy
 
 # Test binary, built with `go test -c`
 *.test
@@ -16,3 +17,9 @@
 
 # Sqlite DB
 *.db
+
+# Personal information
+config.json
+
+# Lambda
+deployment.zip
