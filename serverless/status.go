@@ -8,13 +8,20 @@ import (
 	"strings"
 	"time"
 
+	repositories "../repositories"
 	entries "../services"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
 var regAllParam = regexp.MustCompile(`\/status [0-9]{4}-[0-9]{2} ([0-9]*[.])?[0-9]+ ([0-9]*[.])?[0-9]+`)
+var regDateButMinimum = regexp.MustCompile(`\/status [0-9]{4}-[0-9]{2}`)
 var regButDate = regexp.MustCompile(`\/status ([0-9]*[.])?[0-9]+ ([0-9]*[.])?[0-9]+`)
+var regMinimum = regexp.MustCompile(`\/status`)
 
-func handleStatus(message string) string {
+var errorDontUnderstand = "❓ The /status command should be like: \n /status [<MonthYear>] <AmountPerDay> <USDtoARS>. \n i.e. /status 2020-06 1000.00 90.00"
+var errorNoParameters = "❓ I don't know the needed parameters. Please enter them the first time!"
+
+func handleStatus(client dynamodb.DynamoDB, message string) string {
 	var monthYear string
 	var amountPerDay float64
 	var usdToArs float64
@@ -35,8 +42,24 @@ func handleStatus(message string) string {
 		must(err)
 		usdToArs, err = strconv.ParseFloat(params[2], 64)
 		must(err)
+	} else if regMinimum.MatchString(message) {
+		var errOne, errTwo error
+		monthYear = time.Now().Format("2006-01-02")[0:7]
+		amountPerDay, errOne = repositories.GetParam(client, "ApD")
+		usdToArs, errTwo = repositories.GetParam(client, "USD2ARS")
+		if errOne != nil || errTwo != nil {
+			return errorNoParameters
+		}
+	} else if regDateButMinimum.MatchString(message) {
+		var errOne, errTwo error
+		monthYear = params[1]
+		amountPerDay, errOne = repositories.GetParam(client, "ApD")
+		usdToArs, errTwo = repositories.GetParam(client, "USD2ARS")
+		if errOne != nil || errTwo != nil {
+			return errorNoParameters
+		}
 	} else {
-		return "The /status command should be like: \n /status [<MonthYear>] <AmountPerDay> <USDtoARS>. \n i.e. /status 2020-06 1000.00 90.00"
+		return errorDontUnderstand
 	}
 
 	return generateReport(monthYear, amountPerDay, usdToArs)

@@ -96,7 +96,7 @@ func routeCommand(message string, username string) string {
 		repositories.InitParamsTable(client)
 		switch {
 		case rStatus.MatchString(message):
-			return handleStatus(message)
+			return handleStatus(client, message)
 		case rCredit.MatchString(message):
 			return handleCredit(message, false)
 		case rPayCredit.MatchString(message):

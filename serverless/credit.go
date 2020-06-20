@@ -12,6 +12,7 @@ import (
 
 var regCreditAllParam = regexp.MustCompile(`\/(credit|pay) [0-9]{4}-[0-9]{2} ([0-9]*[.])?[0-9]+`)
 var regCreditButDate = regexp.MustCompile(`\/(credit|pay) ([0-9]*[.])?[0-9]+`)
+var regCreditMinimum = regexp.MustCompile(`\/(credit|pay)`)
 
 func handleCredit(message string, pay bool) string {
 	var monthYear string

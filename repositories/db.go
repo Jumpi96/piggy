@@ -1,12 +1,20 @@
 package repositories
 
 import (
+	"fmt"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 )
 
 var tableName = "piggy"
+
+type parameter struct {
+	Parameter string
+	Value     float64
+}
 
 func StartDynamoClient() dynamodb.DynamoDB {
 	sess := session.Must(session.NewSessionWithOptions(session.Options{
@@ -22,6 +30,35 @@ func InitParamsTable(client dynamodb.DynamoDB) {
 			panic(err)
 		}
 	}
+}
+
+func GetParam(client dynamodb.DynamoDB, key string) (float64, error) {
+	result, err := client.GetItem(&dynamodb.GetItemInput{
+		TableName: aws.String(tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"Parameter": {
+				S: aws.String(key),
+			},
+		},
+	})
+
+	if err != nil {
+		fmt.Println(err.Error())
+		return 0, err
+	}
+
+	item := parameter{}
+
+	err = dynamodbattribute.UnmarshalMap(result.Item, &item)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to unmarshal Record, %v", err))
+	}
+
+	if item.Parameter == "" {
+		return 0, err
+	}
+
+	return item.Value, nil
 }
 
 func tableExists(client dynamodb.DynamoDB) bool {
@@ -54,19 +91,11 @@ func createTable(client dynamodb.DynamoDB) error {
 				AttributeName: aws.String("Parameter"),
 				AttributeType: aws.String("S"),
 			},
-			{
-				AttributeName: aws.String("Value"),
-				AttributeType: aws.String("N"),
-			},
 		},
 		KeySchema: []*dynamodb.KeySchemaElement{
 			{
 				AttributeName: aws.String("Parameter"),
 				KeyType:       aws.String("HASH"),
-			},
-			{
-				AttributeName: aws.String("Value"),
-				KeyType:       aws.String("RANGE"),
 			},
 		},
 		ProvisionedThroughput: &dynamodb.ProvisionedThroughput{
