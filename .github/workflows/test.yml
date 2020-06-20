@@ -18,6 +18,8 @@ jobs:
       run: go get -u github.com/aws/aws-lambda-go/lambda && go get -u github.com/aws/aws-lambda-go/events
     - name: Test
       run: go test ./... -coverprofile=coverage.txt -covermode=atomic
+      env:
+        CREDIT_TAG: 35538263
     - name: Upload coverage to Codecov  
       uses: codecov/codecov-action@v1
       with:
