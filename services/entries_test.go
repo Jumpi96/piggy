@@ -22,7 +22,7 @@ var sampleEntry = repository.Entry{
 	Desc:      "",
 	Account:   "2974789",
 	Category:  "59834974",
-	Tags:      []string{"35495917", "35538263"},
+	Tags:      []string{"35495917", "123456"},
 	Created:   time.Now(),
 	Modified:  "2020-04-01 21:19:08.222",
 	Completed: false,
@@ -61,8 +61,8 @@ func TestPayUSDEntry(t *testing.T) {
 	paidEntry := payEntry(entry, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
-	} else if contains(paidEntry.Tags, "35538263") {
-		t.Errorf("Tags were incorrect, got: %v, want without: %s.", paidEntry.Tags, "35538263")
+	} else if contains(paidEntry.Tags, "123456") {
+		t.Errorf("Tags were incorrect, got: %v, want without: %s.", paidEntry.Tags, "123456")
 	} else if !paidEntry.Completed {
 		t.Error("Entry not completed")
 	} else if paidEntry.Amount != usdToArs*entry.Amount {
@@ -76,8 +76,8 @@ func TestPayARSEntry(t *testing.T) {
 	paidEntry := payEntry(entry, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
-	} else if contains(paidEntry.Tags, "35538263") {
-		t.Errorf("Tags were incorrect, got: %v, want without: %s.", paidEntry.Tags, "35538263")
+	} else if contains(paidEntry.Tags, "123456") {
+		t.Errorf("Tags were incorrect, got: %v, want without: %s.", paidEntry.Tags, "123456")
 	} else if !paidEntry.Completed {
 		t.Error("Entry not completed")
 	} else if paidEntry.Amount != entry.Amount {
@@ -91,8 +91,8 @@ func TestPayCreditEntry(t *testing.T) {
 	paidEntry := payEntry(entry, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
-	} else if reflect.DeepEqual(paidEntry.Tags, []string{"35538263"}) {
-		t.Errorf("Tags were incorrect, got: %v, want: %s.", paidEntry.Tags, "35538263")
+	} else if reflect.DeepEqual(paidEntry.Tags, []string{"123456"}) {
+		t.Errorf("Tags were incorrect, got: %v, want: %s.", paidEntry.Tags, "123456")
 	} else if !paidEntry.Completed {
 		t.Error("Entry not completed")
 	} else if paidEntry.Amount != entry.Amount {
