@@ -15,7 +15,9 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Install dependencies
-      run: go get -u github.com/aws/aws-lambda-go && go get -u github.com/aws/aws-sdk-go
+      run: go get -u github.com/aws/aws-lambda-go/lambda && \
+        go get -u github.com/aws/aws-lambda-go/events && \
+        go get -u github.com/aws/aws-sdk-go
     - name: Test
       run: go test ./... -coverprofile=coverage.txt -covermode=atomic
     - name: Upload coverage to Codecov  
