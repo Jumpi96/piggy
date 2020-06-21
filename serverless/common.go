@@ -92,17 +92,19 @@ var rPayCredit = regexp.MustCompile(`\/pay.*`)
 
 func routeCommand(message string, username string) string {
 	if username == repositories.Configs.TelegramUser {
+		client := repositories.StartDynamoClient()
+		repositories.InitParamsTable(client)
 		switch {
 		case rStatus.MatchString(message):
-			return handleStatus(message)
+			return handleStatus(client, message)
 		case rCredit.MatchString(message):
-			return handleCredit(message, false)
+			return handleCredit(client, message, false)
 		case rPayCredit.MatchString(message):
-			return handleCredit(message, true)
+			return handleCredit(client, message, true)
 		}
 		return "❓ Use one of the Piggy commands:\n /status\n /credit\n /pay"
 	}
-	return "🤔Sir, who are you?"
+	return "Sir, who are you?🤔"
 }
 
 func must(err error) {

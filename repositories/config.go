@@ -17,7 +17,7 @@ type Config struct {
 var Configs Config = Config{
 	ToshlToken:    os.Getenv("TOSHL_TOKEN"),
 	TelegramToken: os.Getenv("TELEGRAM_TOKEN"),
-	CreditTag:     os.Getenv("CREDIT_TAG"),
+	CreditTag:     getEnv("CREDIT_TAG", "123456"),
 	TelegramUser:  os.Getenv("TELEGRAM_USER"),
 	TimeZone:      getEnv("TIME_ZONE", "America/Buenos_Aires"),
 }
