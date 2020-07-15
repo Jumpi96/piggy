@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -144,10 +145,17 @@ func TestGetCreditCardStatus(t *testing.T) {
 
 func TestGetMonthStatus(t *testing.T) {
 	repo := &mockEntriesRepo{}
-	response, days := GetMonthStatus(repo, "2020-06", 1180, 93.0)
+	year, month, day := time.Now().Date()
+	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
+	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
+	monthYear := fmt.Sprintf("%d-%02d", year, month)
 
-	if len(days) != daysUntilEndOfMonth("2020-06") {
-		t.Errorf("Found days until end of month: %v.", daysUntilEndOfMonth("2020-06"))
+	fmt.Println(monthYear)
+
+	response, days := GetMonthStatus(repo, monthYear, 1180, 93.0)
+
+	if len(days) != daysUntilEndOfMonth(monthYear, today) {
+		t.Errorf("Found days until end of month: %v.", daysUntilEndOfMonth(monthYear, today))
 	}
 
 	if response["diff"] != -498.34 {

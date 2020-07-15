@@ -89,11 +89,12 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	total := float64(0.0)
 	cash := float64(0.0)
 	monthEntries := e.GetEntriesByMonth(monthYear, false)
-	remainingDays := float64(daysUntilEndOfMonth(monthYear))
 
-	year, month, day := time.Now().Date()
 	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
+	year, month, day := time.Now().In(currentLocation).Date()
 	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
+
+	remainingDays := float64(daysUntilEndOfMonth(monthYear, today))
 
 	for _, entry := range monthEntries {
 		entryDate, _ := time.Parse("2006-01-02", entry.Date)
@@ -115,15 +116,15 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals["dayRemaining"] = total / remainingDays
 	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
 
-	return totals, calcStairs(monthYear, total)
+	return totals, calcStairs(monthYear, total, today)
 }
 
-func calcStairs(monthYear string, total float64) map[int]float64 {
+func calcStairs(monthYear string, total float64, today time.Time) map[int]float64 {
 	stairs := make(map[int]float64)
 
 	var dayStart int
-	if isCurrentMonth(monthYear) {
-		dayStart = time.Now().Day()
+	if isCurrentMonth(monthYear, today) {
+		dayStart = today.Day()
 	} else {
 		dayStart = 1
 	}
@@ -135,13 +136,12 @@ func calcStairs(monthYear string, total float64) map[int]float64 {
 	return stairs
 }
 
-func daysUntilEndOfMonth(monthYear string) int {
+func daysUntilEndOfMonth(monthYear string, today time.Time) int {
 	daysInMonth := daysInAMonth(monthYear)
-	if isFutureMonth(monthYear) {
+	if isFutureMonth(monthYear, today) {
 		return daysInMonth
-	} else if isCurrentMonth(monthYear) {
-		t := time.Now()
-		return daysInMonth - t.Day() + 1
+	} else if isCurrentMonth(monthYear, today) {
+		return daysInMonth - today.Day() + 1
 	}
 	return 1
 }
@@ -159,8 +159,7 @@ func daysInAMonth(monthYear string) int {
 	return t.Day()
 }
 
-func isCurrentMonth(monthYear string) bool {
-	now := time.Now()
+func isCurrentMonth(monthYear string, now time.Time) bool {
 	currentYear, currentMonth, _ := now.Date()
 	currentLocation := now.Location()
 	querydate, err := time.ParseInLocation("2006-01-02", monthYear+"-01", currentLocation)
@@ -171,8 +170,7 @@ func isCurrentMonth(monthYear string) bool {
 	return querydate.Equal(firstOfMonth)
 }
 
-func isFutureMonth(monthYear string) bool {
-	now := time.Now()
+func isFutureMonth(monthYear string, now time.Time) bool {
 	currentYear, currentMonth, _ := now.Date()
 	currentLocation := now.Location()
 	querydate, err := time.ParseInLocation("2006-01-02", monthYear+"-01", currentLocation)
