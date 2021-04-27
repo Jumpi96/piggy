@@ -152,18 +152,18 @@ func TestGetMonthStatus(t *testing.T) {
 
 	fmt.Println(monthYear)
 
-	response, days := GetMonthStatus(repo, monthYear, 1180, 93.0)
+	response, days := GetMonthStatus(repo, monthYear, 1180, 1.21, 93.0)
 
 	if len(days) != daysUntilEndOfMonth(monthYear, today) {
 		t.Errorf("Found days until end of month: %v.", daysUntilEndOfMonth(monthYear, today))
 	}
 
-	if response["diff"] != -498.34 {
-		t.Errorf("Should have found %v. Found: %v.", -498.34, response["diff"])
+	if response["diff"] != -56078.2002 {
+		t.Errorf("Should have found %v. Found: %v.", -56078.2002, response["diff"])
 	}
 
-	if response["cash"] != -498.34 {
-		t.Errorf("Should have found %v. Found: %v.", -498.34, response["cash"])
+	if response["cash"] != -56078.2002 {
+		t.Errorf("Should have found %v. Found: %v.", -56078.2002, response["cash"])
 	}
 }
 
