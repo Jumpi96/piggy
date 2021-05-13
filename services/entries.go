@@ -84,7 +84,7 @@ func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float
 }
 
 // GetMonthStatus to create status report based in month and year.
-func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float64, usdToArs float64) (map[string]float64, map[int]float64) {
+func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, map[int]float64) {
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
@@ -98,15 +98,20 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 
 	for _, entry := range monthEntries {
 		entryDate, _ := time.Parse("2006-01-02", entry.Date)
-		if entry.Currency.Code == "ARS" {
+		if entry.Currency.Code == "EUR" {
 			total += entry.Amount
 			if entryDate.Before(today) {
 				cash += entry.Amount
 			}
-		} else {
-			total += entry.Amount * usdToArs
+		} else if entry.Currency.Code == "ARS" {
+			total += entry.Amount / (usdToArs * eurToUsd)
 			if entryDate.Before(today) {
-				cash += entry.Amount * usdToArs
+				cash += entry.Amount / (usdToArs * eurToUsd)
+			}
+		} else {
+			total += entry.Amount / eurToUsd
+			if entryDate.Before(today) {
+				cash += entry.Amount / eurToUsd
 			}
 		}
 	}
