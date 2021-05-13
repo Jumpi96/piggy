@@ -104,9 +104,9 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 				cash += entry.Amount
 			}
 		} else if entry.Currency.Code == "ARS" {
-			total += entry.Amount * (usdToArs * eurToUsd)
+			total += entry.Amount / (usdToArs * eurToUsd)
 			if entryDate.Before(today) {
-				cash += entry.Amount * (usdToArs * eurToUsd)
+				cash += entry.Amount / (usdToArs * eurToUsd)
 			}
 		} else {
 			total += entry.Amount / eurToUsd
