@@ -30,11 +30,31 @@ var sampleEntry = repository.Entry{
 	Deleted:   false,
 }
 
+var sampleSalaryEntry = repository.Entry{
+	ID:     "1929518-5",
+	Amount: 200,
+	Currency: repository.Currency{
+		Code:     "EUR",
+		Rate:     1.0,
+		MainRate: 1.0,
+		Fixed:    true,
+	},
+	Date:      "2020-05-01",
+	Desc:      "",
+	Account:   "2974789",
+	Category:  "59834974",
+	Tags:      []string{},
+	Created:   time.Now(),
+	Modified:  "2020-04-01 21:19:08.222",
+	Completed: false,
+	Deleted:   false,
+}
+
 var sampleNonCreditEntry = repository.Entry{
 	ID:     "1929518-5",
-	Amount: -249.17,
+	Amount: -100,
 	Currency: repository.Currency{
-		Code:     "ARS",
+		Code:     "EUR",
 		Rate:     1.0,
 		MainRate: 1.0,
 		Fixed:    true,
@@ -111,7 +131,7 @@ func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, credit bool) []ent
 	if credit {
 		return []entries.Entry{sampleEntry}
 	} else {
-		return []entries.Entry{sampleNonCreditEntry, sampleEntry}
+		return []entries.Entry{sampleNonCreditEntry, sampleSalaryEntry}
 	}
 }
 func TestConfirmCreditPayment(t *testing.T) {
@@ -152,18 +172,18 @@ func TestGetMonthStatus(t *testing.T) {
 
 	fmt.Println(monthYear)
 
-	response, days := GetMonthStatus(repo, monthYear, 1180, 1.21, 93.0)
+	response, days := GetMonthStatus(repo, monthYear, 1180, 1.21, 100)
 
 	if len(days) != daysUntilEndOfMonth(monthYear, today) {
 		t.Errorf("Found days until end of month: %v.", daysUntilEndOfMonth(monthYear, today))
 	}
 
-	if response["diff"] != -56078.2002 {
-		t.Errorf("Should have found %v. Found: %v.", -56078.2002, response["diff"])
+	if response["diff"] != 100 {
+		t.Errorf("Should have found %v. Found: %v.", 100, response["diff"])
 	}
 
-	if response["cash"] != -56078.2002 {
-		t.Errorf("Should have found %v. Found: %v.", -56078.2002, response["cash"])
+	if response["cash"] != 100 {
+		t.Errorf("Should have found %v. Found: %v.", 100, response["cash"])
 	}
 }
 
