@@ -12,10 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 )
 
-var regCreditAllParam = regexp.MustCompile(`\/(credit|pay) [0-9]{4}-[0-9]{2} ([0-9]*[.])?[0-9]+`)
-var regCreditDateButMinimum = regexp.MustCompile(`\/(credit|pay) [0-9]{4}-[0-9]{2}`)
-var regCreditButDate = regexp.MustCompile(`\/(credit|pay) ([0-9]*[.])?[0-9]+`)
-var regCreditMinimum = regexp.MustCompile(`\/(credit|pay)`)
+var regCreditAllParam = regexp.MustCompile(`\/(credit|pay)(AR|NL) [0-9]{4}-[0-9]{2} ([0-9]*[.])?[0-9]+`)
+var regCreditDateButMinimum = regexp.MustCompile(`\/(credit|pay)(AR|NL) [0-9]{4}-[0-9]{2}`)
+var regCreditButDate = regexp.MustCompile(`\/(credit|pay)(AR|NL) ([0-9]*[.])?[0-9]+`)
+var regCreditMinimum = regexp.MustCompile(`\/(credit|pay)(AR|NL)`)
 
 func handleCredit(client dynamodb.DynamoDB, message string, pay bool) string {
 	var monthYear string
@@ -56,17 +56,37 @@ func handleCredit(client dynamodb.DynamoDB, message string, pay bool) string {
 		return "The /credit or /pay command should be like: \n /credit [<MonthYear>] <USDtoARS>. \n i.e. /credit 2020-06 90.00"
 	}
 
-	if pay {
-		entries.ConfirmCreditPayment(toshlRepository, monthYear, usdToArs)
+	if strings.Contains(message, "AR") {
+		if pay {
+			entries.ConfirmCreditPayment(toshlRepository, monthYear, repositories.Configs.CreditTag, usdToArs)
+		}
+		return generateCreditARReport(monthYear, usdToArs)
+	} else {
+		if pay {
+			entries.ConfirmCreditPayment(toshlRepository, monthYear, repositories.Configs.CreditNLTag, usdToArs)
+		}
+		return generateCreditNLReport(monthYear, usdToArs)
 	}
-
-	return generateCreditReport(monthYear, usdToArs)
 }
 
-func generateCreditReport(monthYear string, usdToArs float64) string {
+func generateCreditNLReport(monthYear string, usdToArs float64) string {
 	var response string
-	result, items := entries.GetCreditCardStatus(toshlRepository, monthYear, usdToArs)
-	response += fmt.Sprintf("\n💳PAYING YOUR CREDIT CARD")
+	result, items := entries.GetCreditCardStatus(toshlRepository, monthYear, usdToArs, repositories.Configs.CreditNLTag)
+	response += fmt.Sprintf("\n💳PAYING YOUR 🇳🇱CREDIT CARD🇳🇱")
+	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
+	response += fmt.Sprintf("\n💰TOTAL: €%0.2f", result["amountUSD"])
+	response += fmt.Sprintf("\nYour credit items are: ")
+
+	for _, item := range items {
+		response += fmt.Sprintf("\n ☑ %s", item)
+	}
+	return response
+}
+
+func generateCreditARReport(monthYear string, usdToArs float64) string {
+	var response string
+	result, items := entries.GetCreditCardStatus(toshlRepository, monthYear, usdToArs, repositories.Configs.CreditTag)
+	response += fmt.Sprintf("\n💳PAYING YOUR 🇦🇷CREDIT CARD🇦🇷")
 	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
 	response += fmt.Sprintf("\n💵Amount in USD: $%0.2f ($%0.2f per U$D)", result["amountUSD"], usdToArs)
 	response += fmt.Sprintf("\n🇦🇷Amount in ARS: $%0.2f", result["amountARS"])
