@@ -65,7 +65,7 @@ func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float
 	totalARS := float64(0.0)
 	itemsList := []string{}
 
-	entries := e.GetEntriesByMonth(monthYear, entries.Configs.CreditTag)
+	entries := e.GetEntriesByMonth(monthYear, tags)
 
 	for _, entry := range entries {
 		if entry.Currency.Code == "ARS" {
