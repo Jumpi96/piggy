@@ -9,11 +9,11 @@ import (
 )
 
 // ConfirmCreditPayment confirms payment of item
-func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, usdToArs float64) error {
-	creditEntries := e.GetEntriesByMonth(monthYear, true)
+func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, usdToArs float64) error {
+	creditEntries := e.GetEntriesByMonth(monthYear, tag)
 
 	for _, entry := range creditEntries {
-		err := e.PayCreditEntry(payEntry(entry, usdToArs))
+		err := e.PayCreditEntry(payEntry(entry, tag, usdToArs))
 		if err != nil {
 			fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
 			return err
@@ -23,7 +23,7 @@ func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, usdToArs floa
 	return nil
 }
 
-func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
+func payEntry(entry entries.Entry, creditTag string, usdToArs float64) entries.MinimalEntry {
 	minEntry := entries.MinimalEntry{
 		ID:        entry.ID,
 		Date:      entry.Date,
@@ -35,14 +35,14 @@ func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
 	minEntry.Tags = []string{}
 	if len(entry.Tags) > 1 {
 		for _, tag := range entry.Tags {
-			if tag != entries.Configs.CreditTag {
+			if tag != creditTag {
 				minEntry.Tags = append(minEntry.Tags, tag)
 			}
 		}
 	} else {
 		minEntry.Tags = entry.Tags
 	}
-	if entry.Currency.Code == "ARS" {
+	if entry.Currency.Code != "USD" {
 		minEntry.Currency = entry.Currency
 		minEntry.Amount = entry.Amount
 	} else {
@@ -58,14 +58,14 @@ func payEntry(entry entries.Entry, usdToArs float64) entries.MinimalEntry {
 }
 
 // GetCreditCardStatus to get credit status report based in month and year.
-func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float64) (map[string]float64, []string) {
+func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float64, tags string) (map[string]float64, []string) {
 
 	totals := make(map[string]float64)
 	totalUSD := float64(0.0)
 	totalARS := float64(0.0)
 	itemsList := []string{}
 
-	entries := e.GetEntriesByMonth(monthYear, true)
+	entries := e.GetEntriesByMonth(monthYear, tags)
 
 	for _, entry := range entries {
 		if entry.Currency.Code == "ARS" {
@@ -88,7 +88,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
-	monthEntries := e.GetEntriesByMonth(monthYear, false)
+	monthEntries := e.GetEntriesByMonth(monthYear, "")
 
 	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
 	year, month, day := time.Now().In(currentLocation).Date()

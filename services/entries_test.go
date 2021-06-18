@@ -79,7 +79,7 @@ func TestPayUSDEntry(t *testing.T) {
 		Fixed:    false,
 	}
 	usdToArs := 83.0
-	paidEntry := payEntry(entry, usdToArs)
+	paidEntry := payEntry(entry, entries.Configs.CreditTag, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
 	} else if contains(paidEntry.Tags, "123456") {
@@ -94,7 +94,7 @@ func TestPayUSDEntry(t *testing.T) {
 func TestPayARSEntry(t *testing.T) {
 	entry := sampleEntry
 	usdToArs := 83.0
-	paidEntry := payEntry(entry, usdToArs)
+	paidEntry := payEntry(entry, entries.Configs.CreditTag, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
 	} else if contains(paidEntry.Tags, "123456") {
@@ -109,7 +109,7 @@ func TestPayARSEntry(t *testing.T) {
 func TestPayCreditEntry(t *testing.T) {
 	entry := sampleEntry
 	usdToArs := 83.0
-	paidEntry := payEntry(entry, usdToArs)
+	paidEntry := payEntry(entry, entries.Configs.CreditTag, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
 	} else if reflect.DeepEqual(paidEntry.Tags, []string{"123456"}) {
@@ -127,8 +127,8 @@ func (m *mockEntriesRepo) PayCreditEntry(entry entries.MinimalEntry) error {
 	return nil
 }
 
-func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, credit bool) []entries.Entry {
-	if credit {
+func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []entries.Entry {
+	if tags != "" {
 		return []entries.Entry{sampleEntry}
 	} else {
 		return []entries.Entry{sampleNonCreditEntry, sampleSalaryEntry}
@@ -136,7 +136,7 @@ func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, credit bool) []ent
 }
 func TestConfirmCreditPayment(t *testing.T) {
 	repo := &mockEntriesRepo{}
-	err := ConfirmCreditPayment(repo, "2020-06", 93.0)
+	err := ConfirmCreditPayment(repo, "2020-06", entries.Configs.CreditTag, 93.0)
 	if err != nil {
 		t.Errorf("Error: %v.", err)
 	}
@@ -144,7 +144,7 @@ func TestConfirmCreditPayment(t *testing.T) {
 
 func TestGetCreditCardStatus(t *testing.T) {
 	repo := &mockEntriesRepo{}
-	response, items := GetCreditCardStatus(repo, "2020-06", 93.0)
+	response, items := GetCreditCardStatus(repo, "2020-06", 93.0, entries.Configs.CreditTag)
 
 	if len(items) != 1 {
 		t.Errorf("Should have found %v item. Found: %v.", 1, len(items))
