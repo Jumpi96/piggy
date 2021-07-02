@@ -21,7 +21,7 @@ var Configs Config = Config{
 	TelegramToken: os.Getenv("TELEGRAM_TOKEN"),
 	CreditTag:     getEnv("CREDIT_TAG", "123456"),
 	TelegramUser:  os.Getenv("TELEGRAM_USER"),
-	TimeZone:      getEnv("TIME_ZONE", "America/Buenos_Aires"),
+	TimeZone:      getEnv("TIME_ZONE", "Europe/Amsterdam"),
 }
 
 func getEnv(key, defaultValue string) string {

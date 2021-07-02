@@ -57,13 +57,13 @@ type Entry struct {
 }
 
 type EntriesRepo interface {
-	PayCreditEntry(MinimalEntry) error
+	PutEntry(MinimalEntry) error
 	GetEntriesByMonth(string, string) []Entry
 }
 
 type ToshlEntriesRepo struct{}
 
-func (t *ToshlEntriesRepo) PayCreditEntry(entry MinimalEntry) error {
+func (t *ToshlEntriesRepo) PutEntry(entry MinimalEntry) error {
 	path := fmt.Sprintf("entries/%s?update=one&immediate_update=true", entry.ID)
 	e, err := json.Marshal(entry)
 	if err != nil {

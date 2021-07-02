@@ -123,7 +123,7 @@ func TestPayCreditEntry(t *testing.T) {
 
 type mockEntriesRepo struct{}
 
-func (m *mockEntriesRepo) PayCreditEntry(entry entries.MinimalEntry) error {
+func (m *mockEntriesRepo) PutEntry(entry entries.MinimalEntry) error {
 	return nil
 }
 
@@ -175,7 +175,7 @@ func TestGetMonthStatus(t *testing.T) {
 	response, days := GetMonthStatus(repo, monthYear, 1180, 1.21, 100)
 
 	if len(days) != daysUntilEndOfMonth(monthYear, today) {
-		t.Errorf("Found days until end of month: %v.", daysUntilEndOfMonth(monthYear, today))
+		t.Errorf("Found days until end of month: %v %v.", len(days), daysUntilEndOfMonth(monthYear, today))
 	}
 
 	if response["diff"] != 100 {
