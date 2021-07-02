@@ -13,7 +13,7 @@ func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, u
 	creditEntries := e.GetEntriesByMonth(monthYear, tag)
 
 	for _, entry := range creditEntries {
-		err := e.PayCreditEntry(payEntry(entry, tag, usdToArs))
+		err := e.PutEntry(payEntry(entry, tag, usdToArs))
 		if err != nil {
 			fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
 			return err
@@ -21,6 +21,43 @@ func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, u
 	}
 
 	return nil
+}
+
+func SetCurrencies(e entries.EntriesRepo, monthYear string, usdToArs float64, eurToUsd float64) (int, error) {
+	entries := e.GetEntriesByMonth(monthYear, "")
+	var cont int
+
+	for _, entry := range entries {
+		if entry.Currency.Code == "ARS" {
+			err := e.PutEntry(setEntry(entry, usdToArs, eurToUsd))
+			if err != nil {
+				fmt.Printf("Error setting entry ID: %s. Error: %e", entry.ID, err)
+				return 0, err
+			}
+			cont++
+		}
+	}
+	return cont, nil
+}
+
+func setEntry(entry entries.Entry, usdToArs float64, eurToUsd float64) entries.MinimalEntry {
+	minEntry := entries.MinimalEntry{
+		ID:        entry.ID,
+		Date:      entry.Date,
+		Account:   entry.Account,
+		Category:  entry.Category,
+		Modified:  entry.Modified,
+		Amount:    entry.Amount,
+		Tags:      entry.Tags,
+		Completed: entry.Completed,
+	}
+	minEntry.Currency = entries.Currency{
+		Code:     entry.Currency.Code,
+		Rate:     usdToArs * eurToUsd,
+		MainRate: entry.Currency.MainRate,
+		Fixed:    true,
+	}
+	return minEntry
 }
 
 func payEntry(entry entries.Entry, creditTag string, usdToArs float64) entries.MinimalEntry {

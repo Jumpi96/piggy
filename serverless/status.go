@@ -88,7 +88,7 @@ func generateReport(monthYear string, amountPerDay float64, usdToArs float64, eu
 	var response string
 	result, stairs := entries.GetMonthStatus(toshlRepository, monthYear, amountPerDay, usdToArs, eurToUsd)
 	response = fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
-	response += fmt.Sprintf("\n💳Using €%0.2f per day, €%0.2f per and USD AR$%0.2f per U$D", amountPerDay, eurToUsd, usdToArs)
+	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", amountPerDay, eurToUsd, usdToArs)
 	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", result["diff"])
 	response += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", result["dayRemaining"])
 	response += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f\n\n", result["dayRemainingDiff"])

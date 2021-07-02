@@ -89,6 +89,7 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 var rStatus = regexp.MustCompile(`\/status.*`)
 var rCredit = regexp.MustCompile(`\/credit(AR|NL).*`)
 var rPayCredit = regexp.MustCompile(`\/pay(AR|NL).*`)
+var rSet = regexp.MustCompile(`\/set.*`)
 
 func routeCommand(message string, username string) string {
 	if username == repositories.Configs.TelegramUser {
@@ -101,6 +102,8 @@ func routeCommand(message string, username string) string {
 			return handleCredit(client, message, false)
 		case rPayCredit.MatchString(message):
 			return handleCredit(client, message, true)
+		case rSet.MatchString(message):
+			return handleSet(client, message)
 		}
 		return "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]"
 	}
