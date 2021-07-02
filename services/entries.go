@@ -9,11 +9,11 @@ import (
 )
 
 // ConfirmCreditPayment confirms payment of item
-func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, usdToArs float64) error {
+func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, changeDate bool, usdToArs float64) error {
 	creditEntries := e.GetEntriesByMonth(monthYear, tag)
 
 	for _, entry := range creditEntries {
-		err := e.PayCreditEntry(payEntry(entry, tag, usdToArs))
+		err := e.PayCreditEntry(payEntry(entry, tag, changeDate, usdToArs))
 		if err != nil {
 			fmt.Printf("Error paying entry ID: %s. Error: %e", entry.ID, err)
 			return err
@@ -23,14 +23,18 @@ func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, u
 	return nil
 }
 
-func payEntry(entry entries.Entry, creditTag string, usdToArs float64) entries.MinimalEntry {
+func payEntry(entry entries.Entry, creditTag string, changeDate bool, usdToArs float64) entries.MinimalEntry {
 	minEntry := entries.MinimalEntry{
 		ID:        entry.ID,
-		Date:      entry.Date,
 		Account:   entry.Account,
 		Category:  entry.Category,
 		Modified:  entry.Modified,
 		Completed: true,
+	}
+	if changeDate {
+		minEntry.Date = time.Now().Format("2006-01-02")
+	} else {
+		minEntry.Date = entry.Date
 	}
 	minEntry.Tags = []string{}
 	if len(entry.Tags) > 1 {

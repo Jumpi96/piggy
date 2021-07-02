@@ -58,12 +58,12 @@ func handleCredit(client dynamodb.DynamoDB, message string, pay bool) string {
 
 	if strings.Contains(message, "AR") {
 		if pay {
-			entries.ConfirmCreditPayment(toshlRepository, monthYear, repositories.Configs.CreditTag, usdToArs)
+			entries.ConfirmCreditPayment(toshlRepository, monthYear, repositories.Configs.CreditTag, false, usdToArs)
 		}
 		return generateCreditARReport(monthYear, usdToArs)
 	} else {
 		if pay {
-			entries.ConfirmCreditPayment(toshlRepository, monthYear, repositories.Configs.CreditNLTag, usdToArs)
+			entries.ConfirmCreditPayment(toshlRepository, monthYear, repositories.Configs.CreditNLTag, true, usdToArs)
 		}
 		return generateCreditNLReport(monthYear, usdToArs)
 	}

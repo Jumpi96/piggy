@@ -79,7 +79,7 @@ func TestPayUSDEntry(t *testing.T) {
 		Fixed:    false,
 	}
 	usdToArs := 83.0
-	paidEntry := payEntry(entry, entries.Configs.CreditTag, usdToArs)
+	paidEntry := payEntry(entry, entries.Configs.CreditTag, false, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
 	} else if contains(paidEntry.Tags, "123456") {
@@ -94,7 +94,7 @@ func TestPayUSDEntry(t *testing.T) {
 func TestPayARSEntry(t *testing.T) {
 	entry := sampleEntry
 	usdToArs := 83.0
-	paidEntry := payEntry(entry, entries.Configs.CreditTag, usdToArs)
+	paidEntry := payEntry(entry, entries.Configs.CreditTag, false, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
 	} else if contains(paidEntry.Tags, "123456") {
@@ -109,7 +109,7 @@ func TestPayARSEntry(t *testing.T) {
 func TestPayCreditEntry(t *testing.T) {
 	entry := sampleEntry
 	usdToArs := 83.0
-	paidEntry := payEntry(entry, entries.Configs.CreditTag, usdToArs)
+	paidEntry := payEntry(entry, entries.Configs.CreditTag, false, usdToArs)
 	if paidEntry.Currency.Code != "ARS" {
 		t.Errorf("Currency code was incorrect, got: %s, want: %s.", paidEntry.Currency.Code, "ARS")
 	} else if reflect.DeepEqual(paidEntry.Tags, []string{"123456"}) {
@@ -136,7 +136,7 @@ func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []ent
 }
 func TestConfirmCreditPayment(t *testing.T) {
 	repo := &mockEntriesRepo{}
-	err := ConfirmCreditPayment(repo, "2020-06", entries.Configs.CreditTag, 93.0)
+	err := ConfirmCreditPayment(repo, "2020-06", entries.Configs.CreditTag, true, 93.0)
 	if err != nil {
 		t.Errorf("Error: %v.", err)
 	}
