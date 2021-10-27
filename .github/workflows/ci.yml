@@ -1,0 +1,35 @@
+on:
+  push:
+    branches:
+      - main
+name: CI
+jobs:
+  test:
+    strategy:
+      matrix:
+        go-version: [1.14.x]
+        platform: [ubuntu-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Install dependencies
+      run: |
+        go get -u github.com/aws/aws-lambda-go/lambda
+        go get -u github.com/aws/aws-lambda-go/events
+        go get -u github.com/aws/aws-sdk-go
+    - name: Build
+      run: |
+        GOOS=linux go build -o main main.go
+        zip deployment.zip main
+    - name: Upload function
+      uses: docker://amazon/aws-cli:2.0.7
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      with:
+        args: lambda update-function-code --function-name Piggy --region us-west-2 --zip-file fileb://deployment.zip
