@@ -137,17 +137,17 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 		entryDate, _ := time.Parse("2006-01-02", entry.Date)
 		if entry.Currency.Code == "EUR" {
 			total += entry.Amount
-			if entryDate.Before(today) {
+			if entryDate.Before(today) || entryDate.Equal(today) {
 				cash += entry.Amount
 			}
 		} else if entry.Currency.Code == "ARS" {
 			total += entry.Amount / (usdToArs * eurToUsd)
-			if entryDate.Before(today) {
+			if entryDate.Before(today) || entryDate.Equal(today) {
 				cash += entry.Amount / (usdToArs * eurToUsd)
 			}
 		} else {
 			total += entry.Amount / eurToUsd
-			if entryDate.Before(today) {
+			if entryDate.Before(today) || entryDate.Equal(today) {
 				cash += entry.Amount / eurToUsd
 			}
 		}
