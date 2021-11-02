@@ -134,7 +134,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	remainingDays := float64(daysUntilEndOfMonth(monthYear, today))
 
 	for _, entry := range monthEntries {
-		entryDate, _ := time.Parse("2006-01-02", entry.Date)
+		entryDate, _ := time.ParseInLocation("2006-01-02", entry.Date, currentLocation)
 		if entry.Currency.Code == "EUR" {
 			total += entry.Amount
 			if entryDate.Before(today) || entryDate.Equal(today) {
