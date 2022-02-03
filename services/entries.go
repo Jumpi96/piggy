@@ -125,6 +125,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
+	balance := float64(0.0)
 	monthEntries := e.GetEntriesByMonth(monthYear, "")
 
 	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
@@ -140,21 +141,31 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 			if entryDate.Before(today) || entryDate.Equal(today) {
 				cash += entry.Amount
 			}
+			if contains(entry.Tags, entries.Configs.BalanceTag) {
+				balance += entry.Amount
+			}
 		} else if entry.Currency.Code == "ARS" {
 			total += entry.Amount / (usdToArs * eurToUsd)
 			if entryDate.Before(today) || entryDate.Equal(today) {
 				cash += entry.Amount / (usdToArs * eurToUsd)
+			}
+			if contains(entry.Tags, entries.Configs.BalanceTag) {
+				balance += entry.Amount / (usdToArs * eurToUsd)
 			}
 		} else {
 			total += entry.Amount / eurToUsd
 			if entryDate.Before(today) || entryDate.Equal(today) {
 				cash += entry.Amount / eurToUsd
 			}
+			if contains(entry.Tags, entries.Configs.BalanceTag) {
+				balance += entry.Amount / eurToUsd
+			}
 		}
 	}
 
 	totals["diff"] = total
 	totals["cash"] = cash
+	totals["balance"] = balance
 	totals["dayRemaining"] = total / remainingDays
 	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
 
@@ -221,4 +232,13 @@ func isFutureMonth(monthYear string, now time.Time) bool {
 	}
 	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
 	return querydate.After(firstOfMonth)
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }

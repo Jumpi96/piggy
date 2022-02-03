@@ -12,6 +12,7 @@ type Config struct {
 	TelegramToken string
 	TelegramUser  string
 	TimeZone      string
+	BalanceTag    string
 }
 
 // Configs represent a singleton with configuration values.
@@ -22,6 +23,7 @@ var Configs Config = Config{
 	CreditTag:     getEnv("CREDIT_TAG", "123456"),
 	TelegramUser:  os.Getenv("TELEGRAM_USER"),
 	TimeZone:      getEnv("TIME_ZONE", "Europe/Amsterdam"),
+	BalanceTag:    getEnv("BALANCE_TAG", "123456"),
 }
 
 func getEnv(key, defaultValue string) string {

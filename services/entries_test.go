@@ -186,12 +186,3 @@ func TestGetMonthStatus(t *testing.T) {
 		t.Errorf("Should have found %v. Found: %v.", 100, response["cash"])
 	}
 }
-
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
-}

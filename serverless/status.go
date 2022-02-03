@@ -92,6 +92,7 @@ func generateReport(monthYear string, amountPerDay float64, usdToArs float64, eu
 	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", result["diff"])
 	response += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", result["dayRemaining"])
 	response += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f\n\n", result["dayRemainingDiff"])
+	response += fmt.Sprintf("\n⚖️Money to balance: €%0.2f\n\n", result["balance"])
 
 	var keys []int
 	for k := range stairs {
