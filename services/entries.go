@@ -142,7 +142,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 				cash += entry.Amount
 			}
 			if contains(entry.Tags, entries.Configs.BalanceTag) {
-				balance += entry.Amount
+				balance -= entry.Amount
 			}
 		} else if entry.Currency.Code == "ARS" {
 			total += entry.Amount / (usdToArs * eurToUsd)
@@ -150,7 +150,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 				cash += entry.Amount / (usdToArs * eurToUsd)
 			}
 			if contains(entry.Tags, entries.Configs.BalanceTag) {
-				balance += entry.Amount / (usdToArs * eurToUsd)
+				balance -= entry.Amount / (usdToArs * eurToUsd)
 			}
 		} else {
 			total += entry.Amount / eurToUsd
@@ -158,7 +158,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 				cash += entry.Amount / eurToUsd
 			}
 			if contains(entry.Tags, entries.Configs.BalanceTag) {
-				balance += entry.Amount / eurToUsd
+				balance -= entry.Amount / eurToUsd
 			}
 		}
 	}
