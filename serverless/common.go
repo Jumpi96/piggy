@@ -87,6 +87,7 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 }
 
 var rStatus = regexp.MustCompile(`\/status.*`)
+var rBalance = regexp.MustCompile(`\/balance.*`)
 var rCredit = regexp.MustCompile(`\/credit(AR|NL).*`)
 var rPayCredit = regexp.MustCompile(`\/pay(AR|NL).*`)
 var rSet = regexp.MustCompile(`\/set.*`)
@@ -98,6 +99,8 @@ func routeCommand(message string, username string) string {
 		switch {
 		case rStatus.MatchString(message):
 			return handleStatus(client, message)
+		case rBalance.MatchString(message):
+			return handleBalanceStatus(client, message)
 		case rCredit.MatchString(message):
 			return handleCredit(client, message, false)
 		case rPayCredit.MatchString(message):
@@ -105,7 +108,7 @@ func routeCommand(message string, username string) string {
 		case rSet.MatchString(message):
 			return handleSet(client, message)
 		}
-		return "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]"
+		return "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]\n /set\n /balance"
 	}
 	return "Sir, who are you?🤔"
 }
