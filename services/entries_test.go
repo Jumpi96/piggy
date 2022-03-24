@@ -128,7 +128,7 @@ func (m *mockEntriesRepo) PutEntry(entry entries.MinimalEntry) error {
 }
 
 func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []entries.Entry {
-	return m.GetEntriesFromTo(time.Now(), time.Now(), "")
+	return m.GetEntriesFromTo(time.Now(), time.Now(), tags)
 }
 
 func (m *mockEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) []entries.Entry {
