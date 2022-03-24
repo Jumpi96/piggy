@@ -120,6 +120,31 @@ func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float
 	return totals, itemsList
 }
 
+func GetBalance(e entries.EntriesRepo, fromDate string, toDate string, amountPerDay float64, usdToArs float64, eurToUsd float64) map[string]float64 {
+	totals := make(map[string]float64)
+	total := float64(0.0)
+	from := formatDate(fromDate)
+	to := formatDate(toDate)
+	remainingDays := float64(int(to.Sub(from).Hours() / 24))
+
+	entries := e.GetEntriesFromTo(from, to, "")
+
+	for _, entry := range entries {
+		if entry.Currency.Code == "EUR" {
+			total += entry.Amount
+		} else if entry.Currency.Code == "ARS" {
+			total += entry.Amount / (usdToArs * eurToUsd)
+		} else {
+			total += entry.Amount / eurToUsd
+		}
+	}
+
+	totals["diff"] = total
+	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
+
+	return totals
+}
+
 // GetMonthStatus to create status report based in month and year.
 func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, map[int]float64) {
 	totals := make(map[string]float64)
@@ -170,6 +195,14 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
 
 	return totals, calcStairs(monthYear, total, today)
+}
+
+func formatDate(date string) time.Time {
+	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
+	year, _ := strconv.Atoi(date[:4])
+	month, _ := strconv.Atoi(date[5:7])
+	day, _ := strconv.Atoi(date[8:])
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, currentLocation)
 }
 
 func calcStairs(monthYear string, total float64, today time.Time) map[int]float64 {

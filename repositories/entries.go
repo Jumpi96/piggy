@@ -59,6 +59,7 @@ type Entry struct {
 type EntriesRepo interface {
 	PutEntry(MinimalEntry) error
 	GetEntriesByMonth(string, string) []Entry
+	GetEntriesFromTo(time.Time, time.Time, string) []Entry
 }
 
 type ToshlEntriesRepo struct{}
@@ -83,12 +84,15 @@ func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []En
 	currentMonth, _ := strconv.Atoi(monthYear[5:])
 	firstOfMonth := time.Date(currentYear, time.Month(currentMonth), 1, 0, 0, 0, 0, currentLocation)
 	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+	return t.GetEntriesFromTo(firstOfMonth, lastOfMonth, tags)
+}
 
+func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) []Entry {
 	var path string
 	if tags != "" {
-		path = fmt.Sprintf("entries?from=%s&to=%s&tags=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"), tags)
+		path = fmt.Sprintf("entries?from=%s&to=%s&tags=%s", from.Format("2006-01-02"), to.Format("2006-01-02"), tags)
 	} else {
-		path = fmt.Sprintf("entries?from=%s&to=%s", firstOfMonth.Format("2006-01-02"), lastOfMonth.Format("2006-01-02"))
+		path = fmt.Sprintf("entries?from=%s&to=%s", from.Format("2006-01-02"), to.Format("2006-01-02"))
 	}
 
 	var entries []Entry
