@@ -128,12 +128,17 @@ func (m *mockEntriesRepo) PutEntry(entry entries.MinimalEntry) error {
 }
 
 func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []entries.Entry {
+	return m.GetEntriesFromTo(time.Now(), time.Now(), tags)
+}
+
+func (m *mockEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) []entries.Entry {
 	if tags != "" {
 		return []entries.Entry{sampleEntry}
 	} else {
 		return []entries.Entry{sampleNonCreditEntry, sampleSalaryEntry}
 	}
 }
+
 func TestConfirmCreditPayment(t *testing.T) {
 	repo := &mockEntriesRepo{}
 	err := ConfirmCreditPayment(repo, "2020-06", entries.Configs.CreditTag, 93.0)
