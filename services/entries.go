@@ -256,10 +256,8 @@ func daysInAMonth(monthYear time.Time) int {
 }
 
 func isFutureMonth(monthYear time.Time, now time.Time) bool {
-	currentYear, currentMonth, _ := now.Date()
-	currentLocation := now.Location()
-	firstOfCurrentMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
-	return monthYear.After(firstOfCurrentMonth)
+	return monthYear.Year() > now.Year() ||
+		(monthYear.Year() == now.Year() && monthYear.Month() > now.Month())
 }
 
 func isCurrentMonth(monthYear time.Time, today time.Time) bool {
