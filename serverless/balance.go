@@ -33,7 +33,7 @@ func handleBalanceStatus(client dynamodb.DynamoDB, message string) string {
 		toDate = params[2]
 		err := validateDates(fromDate, toDate)
 		if err != nil {
-			log.Errorf("Dates are not valid for balance")
+			log.Errorf("dates are not valid for balance: %v", err)
 			return errorBalance
 		}
 		amountPerDay, errOne = repositories.GetParam(client, "ApD")
@@ -81,11 +81,11 @@ func validateDates(fromMonthYear, toMonthYear string) error {
 	currentLocation, _ := time.LoadLocation(repositories.Configs.TimeZone)
 	year, month, day := time.Now().In(currentLocation).Date()
 	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
-	from, err := time.ParseInLocation("2006-01-02", fromMonthYear+"-01", today.Location())
+	from, err := time.ParseInLocation("2006-01-02", fromMonthYear, today.Location())
 	if err != nil {
 		return errors.New("error parsing from date")
 	}
-	to, err := time.ParseInLocation("2006-01-02", toMonthYear+"-01", today.Location())
+	to, err := time.ParseInLocation("2006-01-02", toMonthYear, today.Location())
 	if err != nil {
 		return errors.New("error parsing to date")
 	}
