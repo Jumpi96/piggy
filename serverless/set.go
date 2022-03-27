@@ -14,7 +14,7 @@ import (
 )
 
 var regSetAllParam = regexp.MustCompile(`\/set [0-9]{4}-[0-9]{2} ([0-9]*[.])?[0-9]+ ([0-9]*[.])?[0-9]+`)
-var errorSet = "❓ The /status command should be like: \n /status <MonthYear> <EURtoUSD> <USDtoARS>. \n i.e. /set 2020-06 1.20 90.00"
+var errorSet = "❓ The /set command should be like: \n /set <MonthYear> <EURtoUSD> <USDtoARS>. \n i.e. /set 2020-06 1.20 90.00"
 
 func handleSet(client dynamodb.DynamoDB, message string) string {
 	var monthYear time.Time

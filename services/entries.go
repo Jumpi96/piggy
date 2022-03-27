@@ -251,7 +251,7 @@ func daysUntilEndOfMonth(monthYear time.Time, today time.Time) int {
 }
 
 func daysInAMonth(monthYear time.Time) int {
-	t := time.Date(monthYear.Year(), monthYear.Month(), 0, 0, 0, 0, 0, time.UTC)
+	t := time.Date(monthYear.Year(), monthYear.Month()+1, 0, 0, 0, 0, 0, time.UTC)
 	return t.Day()
 }
 

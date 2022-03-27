@@ -21,7 +21,7 @@ var regButDate = regexp.MustCompile(`\/status ([0-9]*[.])?[0-9]+ ([0-9]*[.])?[0-
 var regMinimum = regexp.MustCompile(`\/status`)
 
 var errorNoParameters = "❓ I don't know the needed parameters. Please enter them the first time!"
-var errorStatus = "❓ The /status command should be like: \n /status [<MonthYear>] <AmountPerDay> <EURtoUSD> <USDtoARS>. \n i.e. /status 2020-06 1000.00 1.20 90.00"
+var errorStatus = "❓ The /status command should be like: \n /status [<MonthYear>] [<AmountPerDay> <EURtoUSD> <USDtoARS>]. \n i.e. /status 2020-06 1000.00 1.20 90.00"
 
 func handleStatus(client dynamodb.DynamoDB, message string) string {
 	var monthYear time.Time
