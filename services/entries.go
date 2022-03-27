@@ -5,12 +5,15 @@ import (
 	"strconv"
 	"time"
 
-	entries "../repositories"
+	entries "piggy/repositories"
 )
 
 // ConfirmCreditPayment confirms payment of item
-func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, usdToArs float64) error {
-	creditEntries := e.GetEntriesByMonth(monthYear, tag)
+func ConfirmCreditPayment(e entries.EntriesRepo, monthYear time.Time, tag string, usdToArs float64) error {
+	creditEntries, err := e.GetEntriesByMonth(monthYear, tag)
+	if err != nil {
+		return err
+	}
 
 	for _, entry := range creditEntries {
 		err := e.PutEntry(payEntry(entry, tag, usdToArs))
@@ -23,8 +26,12 @@ func ConfirmCreditPayment(e entries.EntriesRepo, monthYear string, tag string, u
 	return nil
 }
 
-func SetCurrencies(e entries.EntriesRepo, monthYear string, usdToArs float64, eurToUsd float64) (int, error) {
-	entries := e.GetEntriesByMonth(monthYear, "")
+func SetCurrencies(e entries.EntriesRepo, monthYear time.Time, usdToArs float64, eurToUsd float64) (int, error) {
+	entries, err := e.GetEntriesByMonth(monthYear, "")
+	if err != nil {
+		return 0, err
+	}
+
 	var cont int
 
 	for _, entry := range entries {
@@ -95,14 +102,17 @@ func payEntry(entry entries.Entry, creditTag string, usdToArs float64) entries.M
 }
 
 // GetCreditCardStatus to get credit status report based in month and year.
-func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float64, tags string) (map[string]float64, []string) {
+func GetCreditCardStatus(e entries.EntriesRepo, monthYear time.Time, usdToArs float64, tags string) (map[string]float64, []string, error) {
 
 	totals := make(map[string]float64)
 	totalUSD := float64(0.0)
 	totalARS := float64(0.0)
 	itemsList := []string{}
 
-	entries := e.GetEntriesByMonth(monthYear, tags)
+	entries, err := e.GetEntriesByMonth(monthYear, tags)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	for _, entry := range entries {
 		if entry.Currency.Code == "ARS" {
@@ -117,17 +127,20 @@ func GetCreditCardStatus(e entries.EntriesRepo, monthYear string, usdToArs float
 	totals["amountARS"] = -1 * totalARS
 	totals["total"] = -1 * (totalUSD*usdToArs + totalARS)
 
-	return totals, itemsList
+	return totals, itemsList, nil
 }
 
-func GetBalance(e entries.EntriesRepo, fromDate string, toDate string, amountPerDay float64, usdToArs float64, eurToUsd float64) map[string]float64 {
+func GetBalance(e entries.EntriesRepo, fromDate string, toDate string, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, error) {
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	from := formatDate(fromDate)
 	to := formatDate(toDate)
 	remainingDays := float64(int(to.Sub(from).Hours() / 24))
 
-	entries := e.GetEntriesFromTo(from, to, "")
+	entries, err := e.GetEntriesFromTo(from, to, "")
+	if err != nil {
+		return nil, err
+	}
 
 	for _, entry := range entries {
 		if entry.Currency.Code == "EUR" {
@@ -142,16 +155,20 @@ func GetBalance(e entries.EntriesRepo, fromDate string, toDate string, amountPer
 	totals["diff"] = total
 	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
 
-	return totals
+	return totals, nil
 }
 
 // GetMonthStatus to create status report based in month and year.
-func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, map[int]float64) {
+func GetMonthStatus(e entries.EntriesRepo, monthYear time.Time, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, map[int]float64, error) {
 	totals := make(map[string]float64)
 	total := float64(0.0)
 	cash := float64(0.0)
 	balance := float64(0.0)
-	monthEntries := e.GetEntriesByMonth(monthYear, "")
+	monthEntries, err := e.GetEntriesByMonth(monthYear, "")
+
+	if err != nil {
+		return nil, nil, err
+	}
 
 	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
 	year, month, day := time.Now().In(currentLocation).Date()
@@ -194,7 +211,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear string, amountPerDay float6
 	totals["dayRemaining"] = total / remainingDays
 	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
 
-	return totals, calcStairs(monthYear, total, today)
+	return totals, calcStairs(monthYear, total, today), nil
 }
 
 func formatDate(date string) time.Time {
@@ -205,7 +222,7 @@ func formatDate(date string) time.Time {
 	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, currentLocation)
 }
 
-func calcStairs(monthYear string, total float64, today time.Time) map[int]float64 {
+func calcStairs(monthYear time.Time, total float64, today time.Time) map[int]float64 {
 	stairs := make(map[int]float64)
 
 	var dayStart int
@@ -222,8 +239,9 @@ func calcStairs(monthYear string, total float64, today time.Time) map[int]float6
 	return stairs
 }
 
-func daysUntilEndOfMonth(monthYear string, today time.Time) int {
+func daysUntilEndOfMonth(monthYear time.Time, today time.Time) int {
 	daysInMonth := daysInAMonth(monthYear)
+
 	if isFutureMonth(monthYear, today) {
 		return daysInMonth
 	} else if isCurrentMonth(monthYear, today) {
@@ -232,39 +250,20 @@ func daysUntilEndOfMonth(monthYear string, today time.Time) int {
 	return 1
 }
 
-func daysInAMonth(monthYear string) int {
-	year, err := strconv.Atoi(monthYear[0:4])
-	if err != nil {
-		panic("Failed to convert string to year")
-	}
-	month, err := strconv.Atoi(monthYear[5:7])
-	if err != nil {
-		panic("Failed to convert string to year")
-	}
-	t := time.Date(year, time.Month(month+1), 0, 0, 0, 0, 0, time.UTC)
+func daysInAMonth(monthYear time.Time) int {
+	t := time.Date(monthYear.Year(), monthYear.Month(), 0, 0, 0, 0, 0, time.UTC)
 	return t.Day()
 }
 
-func isCurrentMonth(monthYear string, now time.Time) bool {
+func isFutureMonth(monthYear time.Time, now time.Time) bool {
 	currentYear, currentMonth, _ := now.Date()
 	currentLocation := now.Location()
-	querydate, err := time.ParseInLocation("2006-01-02", monthYear+"-01", currentLocation)
-	if err != nil {
-		panic("Month couldn't be parsed!")
-	}
-	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
-	return querydate.Equal(firstOfMonth)
+	firstOfCurrentMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
+	return monthYear.After(firstOfCurrentMonth)
 }
 
-func isFutureMonth(monthYear string, now time.Time) bool {
-	currentYear, currentMonth, _ := now.Date()
-	currentLocation := now.Location()
-	querydate, err := time.ParseInLocation("2006-01-02", monthYear+"-01", currentLocation)
-	if err != nil {
-		panic("Month couldn't be parsed!")
-	}
-	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, currentLocation)
-	return querydate.After(firstOfMonth)
+func isCurrentMonth(monthYear time.Time, today time.Time) bool {
+	return monthYear.Month() == today.Month() && monthYear.Year() == today.Year()
 }
 
 func contains(s []string, e string) bool {

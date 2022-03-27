@@ -3,7 +3,6 @@ package repositories
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -58,8 +57,8 @@ type Entry struct {
 
 type EntriesRepo interface {
 	PutEntry(MinimalEntry) error
-	GetEntriesByMonth(string, string) []Entry
-	GetEntriesFromTo(time.Time, time.Time, string) []Entry
+	GetEntriesByMonth(time.Time, string) ([]Entry, error)
+	GetEntriesFromTo(time.Time, time.Time, string) ([]Entry, error)
 }
 
 type ToshlEntriesRepo struct{}
@@ -78,16 +77,14 @@ func (t *ToshlEntriesRepo) PutEntry(entry MinimalEntry) error {
 	return nil
 }
 
-func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []Entry {
+func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear time.Time, tags string) ([]Entry, error) {
 	currentLocation, _ := time.LoadLocation(Configs.TimeZone)
-	currentYear, _ := strconv.Atoi(monthYear[:4])
-	currentMonth, _ := strconv.Atoi(monthYear[5:])
-	firstOfMonth := time.Date(currentYear, time.Month(currentMonth), 1, 0, 0, 0, 0, currentLocation)
+	firstOfMonth := time.Date(monthYear.Year(), monthYear.Month(), 1, 0, 0, 0, 0, currentLocation)
 	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
 	return t.GetEntriesFromTo(firstOfMonth, lastOfMonth, tags)
 }
 
-func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) []Entry {
+func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) ([]Entry, error) {
 	var path string
 	if tags != "" {
 		path = fmt.Sprintf("entries?from=%s&to=%s&tags=%s", from.Format("2006-01-02"), to.Format("2006-01-02"), tags)
@@ -98,8 +95,8 @@ func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags s
 	var entries []Entry
 	body, err := doToshlRequest("GET", path, nil)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	json.Unmarshal([]byte(body), &entries)
-	return entries
+	return entries, nil
 }

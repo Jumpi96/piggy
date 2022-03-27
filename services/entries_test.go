@@ -1,13 +1,12 @@
 package services
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
-	entries "../repositories"
-	repository "../repositories"
+	entries "piggy/repositories"
+	repository "piggy/repositories"
 )
 
 var sampleEntry = repository.Entry{
@@ -127,21 +126,21 @@ func (m *mockEntriesRepo) PutEntry(entry entries.MinimalEntry) error {
 	return nil
 }
 
-func (m *mockEntriesRepo) GetEntriesByMonth(monthYear string, tags string) []entries.Entry {
+func (m *mockEntriesRepo) GetEntriesByMonth(monthYear time.Time, tags string) ([]entries.Entry, error) {
 	return m.GetEntriesFromTo(time.Now(), time.Now(), tags)
 }
 
-func (m *mockEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) []entries.Entry {
+func (m *mockEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) ([]entries.Entry, error) {
 	if tags != "" {
-		return []entries.Entry{sampleEntry}
+		return []entries.Entry{sampleEntry}, nil
 	} else {
-		return []entries.Entry{sampleNonCreditEntry, sampleSalaryEntry}
+		return []entries.Entry{sampleNonCreditEntry, sampleSalaryEntry}, nil
 	}
 }
 
 func TestConfirmCreditPayment(t *testing.T) {
 	repo := &mockEntriesRepo{}
-	err := ConfirmCreditPayment(repo, "2020-06", entries.Configs.CreditTag, 93.0)
+	err := ConfirmCreditPayment(repo, time.Now(), entries.Configs.CreditTag, 93.0)
 	if err != nil {
 		t.Errorf("Error: %v.", err)
 	}
@@ -149,7 +148,7 @@ func TestConfirmCreditPayment(t *testing.T) {
 
 func TestGetCreditCardStatus(t *testing.T) {
 	repo := &mockEntriesRepo{}
-	response, items := GetCreditCardStatus(repo, "2020-06", 93.0, entries.Configs.CreditTag)
+	response, items, _ := GetCreditCardStatus(repo, time.Now(), 93.0, entries.Configs.CreditTag)
 
 	if len(items) != 1 {
 		t.Errorf("Should have found %v item. Found: %v.", 1, len(items))
@@ -173,11 +172,9 @@ func TestGetMonthStatus(t *testing.T) {
 	year, month, day := time.Now().Date()
 	currentLocation, _ := time.LoadLocation(entries.Configs.TimeZone)
 	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
-	monthYear := fmt.Sprintf("%d-%02d", year, month)
+	monthYear := time.Date(year, month, 1, 0, 0, 0, 0, currentLocation)
 
-	fmt.Println(monthYear)
-
-	response, days := GetMonthStatus(repo, monthYear, 1180, 1.21, 100)
+	response, days, _ := GetMonthStatus(repo, today, 1180, 1.21, 100)
 
 	if len(days) != daysUntilEndOfMonth(monthYear, today) {
 		t.Errorf("Found days until end of month: %v %v.", len(days), daysUntilEndOfMonth(monthYear, today))
