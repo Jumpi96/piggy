@@ -80,6 +80,7 @@ func Handler(ctx context.Context, request events.APIGatewayProxyRequest) (events
 	must(err)
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(message))
+	must(err)
 	req.Header.Add("Content-Type", "application/json")
 	_, err = client.Do(req)
 	must(err)
