@@ -77,17 +77,20 @@ func generateBalanceReport(fromDate string, toDate string, amountPerDay float64,
 	return response, nil
 }
 
-func validateDates(aMonthYear, otherMonthYear string) error {
+func validateDates(fromMonthYear, toMonthYear string) error {
 	currentLocation, _ := time.LoadLocation(repositories.Configs.TimeZone)
 	year, month, day := time.Now().In(currentLocation).Date()
 	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
-	_, err := time.ParseInLocation("2006-01-02", aMonthYear+"-01", today.Location())
+	from, err := time.ParseInLocation("2006-01-02", fromMonthYear+"-01", today.Location())
 	if err != nil {
 		return errors.New("error parsing from date")
 	}
-	_, err = time.ParseInLocation("2006-01-02", otherMonthYear+"-01", today.Location())
+	to, err := time.ParseInLocation("2006-01-02", toMonthYear+"-01", today.Location())
 	if err != nil {
 		return errors.New("error parsing to date")
+	}
+	if from.After(to) {
+		return errors.New("to date is before after date")
 	}
 	return nil
 }
