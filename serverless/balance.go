@@ -48,7 +48,7 @@ func handleBalanceStatus(client dynamodb.DynamoDB, message string) string {
 		toDate = fmt.Sprintf("%s-12-31", time.Now().Format("2006-01-02")[0:4])
 		amountPerDay, errOne = repositories.GetParam(client, "ApD")
 		usdToArs, errTwo = repositories.GetParam(client, "USD2ARS")
-		eurToUsd, errTwo = repositories.GetParam(client, "EUR2USD")
+		eurToUsd, errThree = repositories.GetParam(client, "EUR2USD")
 		if errOne != nil || errTwo != nil || errThree != nil {
 			return errorNoParameters
 		}

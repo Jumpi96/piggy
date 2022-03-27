@@ -60,7 +60,7 @@ func setEntries(monthYear time.Time, amountPerDay float64, usdToArs float64, eur
 		return "", nil
 	}
 
-	response := fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
+	response := fmt.Sprintf("\n🐷PERIOD: %v", monthYear.Format("2006-01-02")[0:7])
 	response += fmt.Sprintf("\n💶💷💵%v entries processed.", entries)
 
 	return response, nil

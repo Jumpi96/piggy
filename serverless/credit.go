@@ -112,10 +112,10 @@ func generateCreditNLReport(monthYear time.Time, usdToArs float64) (string, erro
 	if err != nil {
 		return "", err
 	}
-	response += fmt.Sprintf("\n💳PAYING YOUR 🇳🇱CREDIT CARD🇳🇱")
-	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
+	response += "\n💳PAYING YOUR 🇳🇱CREDIT CARD🇳🇱"
+	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear.Format("2006-01-02")[0:7])
 	response += fmt.Sprintf("\n💰TOTAL: €%0.2f", result["amountUSD"])
-	response += fmt.Sprintf("\nYour credit items are: ")
+	response += "\nYour credit items are: "
 
 	for _, item := range items {
 		response += fmt.Sprintf("\n ☑ %s", item)
@@ -129,12 +129,12 @@ func generateCreditARReport(monthYear time.Time, usdToArs float64) (string, erro
 	if err != nil {
 		return "", err
 	}
-	response += fmt.Sprintf("\n💳PAYING YOUR 🇦🇷CREDIT CARD🇦🇷")
-	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear)
+	response += "\n💳PAYING YOUR 🇦🇷CREDIT CARD🇦🇷"
+	response += fmt.Sprintf("\n🐷PERIOD: %v", monthYear.Format("2006-01-02")[0:7])
 	response += fmt.Sprintf("\n💵Amount in USD: $%0.2f ($%0.2f per U$D)", result["amountUSD"], usdToArs)
 	response += fmt.Sprintf("\n🇦🇷Amount in ARS: $%0.2f", result["amountARS"])
 	response += fmt.Sprintf("\n💰TOTAL IN ARS: $%0.2f", result["total"])
-	response += fmt.Sprintf("\nYour credit items are: ")
+	response += "\nYour credit items are: "
 
 	for _, item := range items {
 		response += fmt.Sprintf("\n ☑ %s", item)
