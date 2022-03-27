@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"regexp"
 
-	repositories "../repositories"
+	repositories "piggy/repositories"
+
 	"github.com/aws/aws-lambda-go/events"
 )
 
