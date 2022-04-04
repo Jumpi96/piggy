@@ -209,7 +209,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear time.Time, amountPerDay flo
 	totals["cash"] = cash
 	totals["balance"] = balance
 	totals["dayRemaining"] = total / remainingDays
-	totals["dayRemainingDiff"] = total - amountPerDay*remainingDays
+	totals["dayRemainingDiff"] = total - amountPerDay*(remainingDays-1)
 
 	return totals, calcStairs(monthYear, total, today), nil
 }

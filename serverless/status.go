@@ -162,8 +162,8 @@ func generateReport(monthYear time.Time, amountPerDay float64, usdToArs float64,
 	response = fmt.Sprintf("\n🐷PERIOD: %v", monthYear.Format("2006-01-02")[0:7])
 	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", amountPerDay, eurToUsd, usdToArs)
 	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", result["diff"])
+	response += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: €%0.2f", result["dayRemainingDiff"])
 	response += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", result["dayRemaining"])
-	response += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f", result["dayRemainingDiff"])
 	response += fmt.Sprintf("\n⚖️Money to balance: €%0.2f\n\n", result["balance"])
 
 	var keys []int
