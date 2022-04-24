@@ -166,6 +166,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear time.Time, amountPerDay flo
 	cash := float64(0.0)
 	balance := float64(0.0)
 	monthEntries, err := e.GetEntriesByMonth(monthYear, "")
+	var daysModifier float64
 
 	if err != nil {
 		return nil, nil, err
@@ -176,6 +177,12 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear time.Time, amountPerDay flo
 	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
 
 	remainingDays := float64(daysUntilEndOfMonth(monthYear, today))
+
+	if isCurrentMonth(monthYear, today) {
+		daysModifier = 1.0
+	} else {
+		daysModifier = 0.0
+	}
 
 	for _, entry := range monthEntries {
 		entryDate, _ := time.ParseInLocation("2006-01-02", entry.Date, currentLocation)
@@ -210,7 +217,7 @@ func GetMonthStatus(e entries.EntriesRepo, monthYear time.Time, amountPerDay flo
 	totals["cash"] = cash
 	totals["balance"] = balance
 	totals["dayRemaining"] = total / remainingDays
-	totals["dayRemainingDiff"] = total - amountPerDay*(remainingDays-1)
+	totals["dayRemainingDiff"] = total - amountPerDay*(remainingDays-daysModifier)
 
 	return totals, calcStairs(monthYear, total, today), nil
 }
