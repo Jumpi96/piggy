@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	entries "piggy/repositories"
@@ -264,10 +265,13 @@ func isCurrentMonth(monthYear time.Time, today time.Time) bool {
 	return monthYear.Month() == today.Month() && monthYear.Year() == today.Year()
 }
 
-func contains(s []string, e string) bool {
+func contains(s []string, list string) bool {
+	tags := strings.Split(list, ",")
 	for _, a := range s {
-		if a == e {
-			return true
+		for _, e := range tags {
+			if a == e {
+				return true
+			}
 		}
 	}
 	return false
