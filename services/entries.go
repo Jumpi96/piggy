@@ -136,7 +136,7 @@ func GetBalance(e entries.EntriesRepo, fromDate string, toDate string, amountPer
 	total := float64(0.0)
 	from := formatDate(fromDate)
 	to := formatDate(toDate)
-	remainingDays := float64(int(to.Sub(from).Hours() / 24))
+	remainingDays := float64(int(to.Sub(from).Hours()/24) + 1)
 
 	entries, err := e.GetEntriesFromTo(from, to, "")
 	if err != nil {
