@@ -3,6 +3,7 @@ package repositories
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -70,7 +71,7 @@ func (t *ToshlEntriesRepo) PutEntry(entry MinimalEntry) error {
 		fmt.Printf("Failed to unmarshal entry.")
 	}
 	payload := strings.NewReader(string(e))
-	_, err = doToshlRequest("PUT", path, payload)
+	_, _, err = doToshlRequest("PUT", path, payload)
 	if err != nil {
 		return err
 	}
@@ -85,18 +86,58 @@ func (t *ToshlEntriesRepo) GetEntriesByMonth(monthYear time.Time, tags string) (
 }
 
 func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags string) ([]Entry, error) {
-	var path string
-	if tags != "" {
-		path = fmt.Sprintf("entries?from=%s&to=%s&tags=%s", from.Format("2006-01-02"), to.Format("2006-01-02"), tags)
-	} else {
-		path = fmt.Sprintf("entries?from=%s&to=%s", from.Format("2006-01-02"), to.Format("2006-01-02"))
-	}
-
 	var entries []Entry
-	body, err := doToshlRequest("GET", path, nil)
-	if err != nil {
-		return nil, err
+	var page = 0
+
+	for {
+		var path string
+		if tags != "" {
+			path = fmt.Sprintf("entries?from=%s&to=%s&tags=%s&page=%d", from.Format("2006-01-02"), to.Format("2006-01-02"), tags, page)
+		} else {
+			path = fmt.Sprintf("entries?from=%s&to=%s&page=%d", from.Format("2006-01-02"), to.Format("2006-01-02"), page)
+		}
+
+		body, header, err := doToshlRequest("GET", path, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse the entries from the response body
+		var pageEntries []Entry
+		err = json.Unmarshal([]byte(body), &pageEntries)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add the current page entries to the overall list
+		entries = append(entries, pageEntries...)
+
+		// Check if there are more pages to retrieve
+		linkHeader := getLinkHeaderFromResponseHeader(header)
+		nextURL, hasNext := linkHeader["next"]
+		if !hasNext {
+			break
+		}
+
+		// Update the page number to retrieve the next page
+		page++
+		path = strings.TrimPrefix(nextURL, "https://api.toshl.com/")
+
 	}
-	json.Unmarshal([]byte(body), &entries)
 	return entries, nil
+}
+
+func getLinkHeaderFromResponseHeader(header http.Header) map[string]string {
+	linkHeader := make(map[string]string)
+	if linkStr := header.Get("Link"); linkStr != "" {
+		for _, link := range strings.Split(linkStr, ",") {
+			parts := strings.Split(strings.TrimSpace(link), ";")
+			if len(parts) >= 2 {
+				url := strings.Trim(parts[0], "<>")
+				rel := strings.TrimPrefix(strings.TrimSpace(parts[1]), "rel=")
+				linkHeader[rel] = url
+			}
+		}
+	}
+	return linkHeader
 }

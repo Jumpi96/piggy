@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func doToshlRequest(verb string, url string, payload io.Reader) ([]byte, error) {
+func doToshlRequest(verb string, url string, payload io.Reader) ([]byte, http.Header, error) {
 	query := fmt.Sprintf("%v%v", "https://api.toshl.com/", url)
 	request, err := http.NewRequest(verb, query, payload)
 	request.SetBasicAuth(Configs.ToshlToken, "")
@@ -15,11 +15,11 @@ func doToshlRequest(verb string, url string, payload io.Reader) ([]byte, error) 
 	client := &http.Client{}
 	resp, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, resp.Header, err
 	}
 	bodyText, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return bodyText, nil
+	return bodyText, resp.Header, nil
 }
