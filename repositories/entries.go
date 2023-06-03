@@ -121,8 +121,6 @@ func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags s
 
 		// Update the page number to retrieve the next page
 		page++
-		path = strings.TrimPrefix(nextURL, "https://api.toshl.com/")
-
 	}
 	return entries, nil
 }
@@ -135,6 +133,7 @@ func getLinkHeaderFromResponseHeader(header http.Header) map[string]string {
 			if len(parts) >= 2 {
 				url := strings.Trim(parts[0], "<>")
 				rel := strings.TrimPrefix(strings.TrimSpace(parts[1]), "rel=")
+				rel = strings.Trim(rel, "\"")
 				linkHeader[rel] = url
 			}
 		}
