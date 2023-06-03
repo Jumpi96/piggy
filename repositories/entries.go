@@ -114,7 +114,7 @@ func (t *ToshlEntriesRepo) GetEntriesFromTo(from time.Time, to time.Time, tags s
 
 		// Check if there are more pages to retrieve
 		linkHeader := getLinkHeaderFromResponseHeader(header)
-		nextURL, hasNext := linkHeader["next"]
+		_, hasNext := linkHeader["next"]
 		if !hasNext {
 			break
 		}
