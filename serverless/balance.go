@@ -102,6 +102,13 @@ func generateBalanceReport(fromDate string, toDate string, amountPerDay float64,
 		balances[monthKey] = balance
 		currentDateTime = currentDateTime.AddDate(0, 1, 0)
 	}
+
+	keys := make([]string, 0, len(balances))
+	for key := range balances {
+		keys = append(keys, key)
+	}
+
+	sort.Strings(keys)
 	  
 	totalBalances := make(map[string]float64)
 	for _, balance := range balances {
@@ -112,8 +119,8 @@ func generateBalanceReport(fromDate string, toDate string, amountPerDay float64,
 	
 	response = fmt.Sprintf("\n🐷PERIOD: %v to %v", fromDate, toDate)
 	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", amountPerDay, eurToUsd, usdToArs)
-	for month, balances := range balances {
-		response += fmt.Sprintf(" %v ................. €%0.2f\n", month, balances["dayRemainingDiff"])
+	for month := range keys {
+		response += fmt.Sprintf(" %v ................. €%0.2f\n", month, balances[month]["dayRemainingDiff"])
 	}
 	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", totalBalances["diff"])
 	response += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f\n\n", totalBalances["dayRemainingDiff"])
