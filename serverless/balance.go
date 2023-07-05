@@ -66,14 +66,58 @@ func handleBalanceStatus(client dynamodb.DynamoDB, message string) string {
 
 func generateBalanceReport(fromDate string, toDate string, amountPerDay float64, usdToArs float64, eurToUsd float64) (string, error) {
 	var response string
-	result, err := entries.GetBalance(toshlRepository, fromDate, toDate, amountPerDay, usdToArs, eurToUsd)
+	var balance map[string]float64
+	balances := make(map[string]map[string]float64)
+
+	fromDateTime, err := time.Parse("2006-01-02", fromDate)
 	if err != nil {
 		return "", err
 	}
+
+	toDateTime, err := time.Parse("2006-01-02", toDate)
+	if err != nil {
+		return "", err
+	}
+
+	currentDateTime := fromDateTime
+	for currentDateTime.Before(toDateTime) || currentDateTime.Equal(toDateTime) {
+		year, month, _ := currentDateTime.Date()
+		monthKey := fmt.Sprintf("%d-%02d", year, month)
+
+		if currentDateTime.Year() == fromDateTime.Year() && currentDateTime.Month() == fromDateTime.Month() {
+			// Initial month: start from the original fromDate to the last day of the month
+			firstDayOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+			lastDayOfMonth := firstDayOfMonth.AddDate(0, 1, -1)
+			balance, err = entries.GetBalance(toshlRepository, fromDateTime, lastDayOfMonth, amountPerDay, usdToArs, eurToUsd)
+		} else if currentDateTime.Year() == toDateTime.Year() && currentDateTime.Month() == toDateTime.Month() {
+			// Final month: start from the first day of the month to the original toDateTime
+			firstDayOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+			balance, err = entries.GetBalance(toshlRepository, firstDayOfMonth, toDateTime, amountPerDay, usdToArs, eurToUsd)
+		} else {
+			// Month in the middle: start from the first day to the last day of the month
+			firstDayOfMonth := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+			lastDayOfMonth := firstDayOfMonth.AddDate(0, 1, -1)
+			balance, err = entries.GetBalance(toshlRepository, firstDayOfMonth, lastDayOfMonth, amountPerDay, usdToArs, eurToUsd)
+		}
+		balances[monthKey] = balance
+		currentDateTime = currentDateTime.AddDate(0, 1, 0)
+	}
+	  
+	totalBalances := make(map[string]float64)
+	for _, balance := range balances {
+		for _, key := range []string{"diff", "dayRemainingDiff"} {
+			totalBalances[key] += balance[key]
+		}
+	}
+
+	for month, balances := range balances {
+		response += fmt.Sprintf(" %v ................. €%0.2f\n", month, balances["diff"])
+	}
+	
 	response = fmt.Sprintf("\n🐷PERIOD: %v to %v", fromDate, toDate)
 	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", amountPerDay, eurToUsd, usdToArs)
-	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", result["diff"])
-	response += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f", result["dayRemainingDiff"])
+	response += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", totalBalances["diff"])
+	response += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f", totalBalances["dayRemainingDiff"])
 	return response, nil
 }
 
