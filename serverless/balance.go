@@ -119,7 +119,7 @@ func generateBalanceReport(fromDate string, toDate string, amountPerDay float64,
 	}
 	
 	response = fmt.Sprintf("\n🐷PERIOD: %v to %v", fromDate, toDate)
-	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D\n", amountPerDay, eurToUsd, usdToArs)
+	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D\n\n", amountPerDay, eurToUsd, usdToArs)
 	for _, month := range keys {
 		response += fmt.Sprintf(" %v ................. €%0.2f\n", month, balances[month]["dayRemainingDiff"])
 	}
