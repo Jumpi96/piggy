@@ -131,14 +131,12 @@ func GetCreditCardStatus(e entries.EntriesRepo, monthYear time.Time, usdToArs fl
 	return totals, itemsList, nil
 }
 
-func GetBalance(e entries.EntriesRepo, fromDate string, toDate string, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, error) {
+func GetBalance(e entries.EntriesRepo, fromDate time.Time, toDate time.Time, amountPerDay float64, usdToArs float64, eurToUsd float64) (map[string]float64, error) {
 	totals := make(map[string]float64)
 	total := float64(0.0)
-	from := formatDate(fromDate)
-	to := formatDate(toDate)
-	remainingDays := float64(int(to.Sub(from).Hours()/24) + 1)
+	remainingDays := float64(int(toDate.Sub(fromDate).Hours()/24) + 1)
 
-	entries, err := e.GetEntriesFromTo(from, to, "")
+	entries, err := e.GetEntriesFromTo(fromDate, toDate, "")
 	if err != nil {
 		return nil, err
 	}
