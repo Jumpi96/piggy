@@ -2,7 +2,6 @@ on:
   push:
     branches:
       - main
-      - 'julorenzo/**'
 name: CI
 jobs:
   test:

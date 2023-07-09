@@ -3,8 +3,8 @@ package serverless
 import (
 	"errors"
 	"fmt"
-	"sort"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -45,7 +45,7 @@ func handleBalanceStatus(client dynamodb.DynamoDB, message string) string {
 		}
 	} else if regBalanceMinimum.MatchString(message) {
 		var errOne, errTwo, errThree error
-		fromDate = time.Now().Format("2006-01-02")[0:10]
+		fromDate = time.Now().AddDate(0, 1, 0).Format("2006-01-02")[0:8] + "01"
 		toDate = fmt.Sprintf("%s-12-31", time.Now().Format("2006-01-02")[0:4])
 		amountPerDay, errOne = repositories.GetParam(client, "ApD")
 		usdToArs, errTwo = repositories.GetParam(client, "USD2ARS")
@@ -110,14 +110,14 @@ func generateBalanceReport(fromDate string, toDate string, amountPerDay float64,
 	}
 
 	sort.Strings(keys)
-	  
+
 	totalBalances := make(map[string]float64)
 	for _, balance := range balances {
 		for _, key := range []string{"diff", "dayRemainingDiff"} {
 			totalBalances[key] += balance[key]
 		}
 	}
-	
+
 	response = fmt.Sprintf("\n🐷PERIOD: %v to %v", fromDate, toDate)
 	response += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D\n\n", amountPerDay, eurToUsd, usdToArs)
 	for _, month := range keys {
