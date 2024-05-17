@@ -14,9 +14,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var regCreditAllParam = regexp.MustCompile(`\/(credit|pay)(AR|NL) [0-9]{4}-[0-9]{2} ([0-9]*[.])?[0-9]+`)
+var regCreditAllParam = regexp.MustCompile(`\/(credit|pay)(AR|NL) [0-9]{4}-[0-9]{2} \d+(\.\d{1,2})?`)
 var regCreditDateButMinimum = regexp.MustCompile(`\/(credit|pay)(AR|NL) [0-9]{4}-[0-9]{2}`)
-var regCreditButDate = regexp.MustCompile(`\/(credit|pay)(AR|NL) ([0-9]*[.])?[0-9]+`)
+var regCreditButDate = regexp.MustCompile(`\/(credit|pay)(AR|NL) \d+(\.\d{1,2})?`)
 var regCreditMinimum = regexp.MustCompile(`\/(credit|pay)(AR|NL)`)
 var errCreditPay = "The /credit or /pay command should be like: \n /credit [<MonthYear>] <USDtoARS>. \n i.e. /credit 2020-06 90.00"
 
