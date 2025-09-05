@@ -107,6 +107,7 @@ The bot supports separate symbols for display while keeping currency logic simpl
 - **Currency codes** (e.g., `"ARS"`, `"USD"`, `"EUR"`) are used for all conversion logic
 - **Display symbols** (e.g., `"AR$"`, `"$"`, `"€"`) are stored separately in the `symbols` object
 - **Conversion rates** use simple keys like `"USD2ARS"`, `"EUR2USD"`
+- **Bidirectional lookup**: If `"ARS2EUR"` is missing, the bot automatically tries `"EUR2ARS"` and uses the inverse rate
 
 #### Setting Symbols via Telegram
 ```bash
@@ -116,6 +117,17 @@ The bot supports separate symbols for display while keeping currency logic simpl
 ```
 
 When no symbol is defined, the currency code is used for display.
+
+#### Conversion Rate Examples
+With EUR as base currency, you only need to set rates FROM EUR:
+```bash
+/set EUR2ARS 1450    # 1 EUR = 1450 ARS  
+/set EUR2USD 1.18    # 1 EUR = 1.18 USD
+```
+
+The bot automatically handles conversions in both directions:
+- Converting ARS→EUR: uses `EUR2ARS` rate with division (ARS_amount / 1450)
+- Converting EUR→ARS: uses `EUR2ARS` rate with multiplication (EUR_amount * 1450)
 
 ### Local Development
 ```bash

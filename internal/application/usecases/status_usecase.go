@@ -114,14 +114,26 @@ func (s *StatusUseCase) convertToBase(amount float64, code, base string, usedRat
         return amount, nil
     }
     
-    rateKey := fmt.Sprintf("%s2%s", code, base)
-    p, err := s.parameterRepo.Get(rateKey)
-    if err != nil {
-        return 0, fmt.Errorf("missing rate %s. Use /set %s <value>", rateKey, rateKey)
+    // First try direct rate: CODE2BASE
+    directRateKey := fmt.Sprintf("%s2%s", code, base)
+    p, err := s.parameterRepo.Get(directRateKey)
+    if err == nil {
+        // Found direct rate, use it: amount * rate
+        usedRates[directRateKey] = p.Value
+        return amount * p.Value, nil
     }
     
-    usedRates[rateKey] = p.Value
-    return amount * p.Value, nil
+    // Try inverse rate: BASE2CODE
+    inverseRateKey := fmt.Sprintf("%s2%s", base, code)
+    p, err = s.parameterRepo.Get(inverseRateKey)
+    if err == nil {
+        // Found inverse rate, use 1/rate: amount / rate
+        usedRates[inverseRateKey] = p.Value
+        return amount / p.Value, nil
+    }
+    
+    // Neither rate found
+    return 0, fmt.Errorf("missing rate %s or %s. Use /set %s <value>", directRateKey, inverseRateKey, directRateKey)
 }
 
 // entryHasBalanceTags checks if entry has any of the balance tags

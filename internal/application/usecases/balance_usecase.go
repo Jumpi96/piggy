@@ -137,20 +137,32 @@ func (b *BalanceUseCase) daysInclusive(from, to time.Time) int {
     return int(to.Sub(from).Hours()/24) + 1
 }
 
-// convertToBase converts an amount in given code to configured base using stored rate CODE2BASE
+// convertToBase converts an amount in given code to configured base using stored rate
 func (b *BalanceUseCase) convertToBase(amount float64, code, base string, usedRates map[string]float64) (float64, error) {
     if code == base {
         return amount, nil
     }
     
-    rateKey := fmt.Sprintf("%s2%s", code, base)
-    p, err := b.parameterRepo.Get(rateKey)
-    if err != nil {
-        return 0, fmt.Errorf("missing rate %s. Use /set %s <value>", rateKey, rateKey)
+    // First try direct rate: CODE2BASE
+    directRateKey := fmt.Sprintf("%s2%s", code, base)
+    p, err := b.parameterRepo.Get(directRateKey)
+    if err == nil {
+        // Found direct rate, use it: amount * rate
+        usedRates[directRateKey] = p.Value
+        return amount * p.Value, nil
     }
     
-    usedRates[rateKey] = p.Value
-    return amount * p.Value, nil
+    // Try inverse rate: BASE2CODE
+    inverseRateKey := fmt.Sprintf("%s2%s", base, code)
+    p, err = b.parameterRepo.Get(inverseRateKey)
+    if err == nil {
+        // Found inverse rate, use 1/rate: amount / rate
+        usedRates[inverseRateKey] = p.Value
+        return amount / p.Value, nil
+    }
+    
+    // Neither rate found
+    return 0, fmt.Errorf("missing rate %s or %s. Use /set %s <value>", directRateKey, inverseRateKey, directRateKey)
 }
 
 // convertToEUR converts an amount to EUR based on currency
