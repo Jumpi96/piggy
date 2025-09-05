@@ -93,23 +93,6 @@ zip deployment.zip main
 aws lambda update-function-code --function-name Piggy --zip-file fileb://deployment.zip
 ```
 
-## Project Structure
-```
-├── main.go                 # Lambda entry point
-├── serverless/            # Bot handlers and routing
-│   ├── common.go          # Telegram webhook handler
-│   ├── credit.go          # Credit card commands
-│   ├── balance.go         # Balance tracking
-│   ├── status.go          # Monthly status reports
-│   └── set.go            # Configuration commands
-├── services/              # Business logic
-│   └── entries.go        # Financial calculations
-└── repositories/         # Data access layer
-    ├── entries.go        # Toshl API client
-    ├── db.go            # DynamoDB operations
-    └── config.go        # Environment configuration
-```
-
 ## Usage Example
 ```
 /status 2023-10

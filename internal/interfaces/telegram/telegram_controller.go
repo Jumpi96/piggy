@@ -181,12 +181,12 @@ func (c *TelegramController) handleStatusCommand(message string) string {
 		UsdToArs:     usdToArs,
 	}
 
-	response, err := c.statusUseCase.GetMonthlyStatus(request)
-	if err != nil {
-		return fmt.Sprintf("❌ Error getting status: %v", err)
-	}
+    response, err := c.statusUseCase.GetMonthlyStatus(request)
+    if err != nil {
+        return fmt.Sprintf("❌ Error getting status: %v", err)
+    }
 
-	return c.formatStatusResponse(response)
+    return c.formatStatusResponse(response, request)
 }
 
 // handleBalanceCommand handles the /balance command  
@@ -327,14 +327,42 @@ func (c *TelegramController) parseBalanceCommand(message string) (time.Time, tim
 	return fromDate, toDate, amountPerDay.Value, eurToUsd.Value, usdToArs.Value, nil
 }
 
-func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse) string {
-	result := fmt.Sprintf("\n🐷PERIOD: %v", response.Period)
-	result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
-	result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: €%0.2f", response.DayRemainingDiff)
-	result += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", response.DayRemaining)
-	result += fmt.Sprintf("\n⚖️Money to balance: €%0.2f", response.Balance)
-	result += fmt.Sprintf("\n💰Your available cash should be: €%0.2f", response.Cash)
-	return result
+func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse, request appdto.StatusRequest) string {
+    result := fmt.Sprintf("\n🐷PERIOD: %v", response.Period)
+    // Include parameters used in the calculation
+    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", request.AmountPerDay, request.EurToUsd, request.UsdToArs)
+    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
+    result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: €%0.2f", response.DayRemainingDiff)
+    result += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", response.DayRemaining)
+    result += fmt.Sprintf("\n⚖️Money to balance: €%0.2f", response.Balance)
+
+    // Daily breakdown (sorted by day)
+    if len(response.DailyBreakdown) > 0 {
+        // Sort the days to ensure stable output
+        days := make([]int, 0, len(response.DailyBreakdown))
+        for d := range response.DailyBreakdown {
+            days = append(days, d)
+        }
+        // simple insertion sort as list is small (month days)
+        for i := 1; i < len(days); i++ {
+            j := i
+            for j > 0 && days[j-1] > days[j] {
+                days[j-1], days[j] = days[j], days[j-1]
+                j--
+            }
+        }
+
+        result += "\n"
+        for _, d := range days {
+            amount := response.DailyBreakdown[d]
+            result += fmt.Sprintf("\n %d ................. €%0.2f", d, amount)
+        }
+        result += "\n"
+    }
+
+    // Cash at the end, after the breakdown
+    result += fmt.Sprintf("\n💰Your available cash should be: €%0.2f", response.Cash)
+    return result
 }
 
 func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse) string {
