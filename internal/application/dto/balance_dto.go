@@ -13,8 +13,9 @@ type BalanceRequest struct {
 
 // BalanceResponse represents the response from balance operations
 type BalanceResponse struct {
-	FromDate         string  `json:"from_date"`
-	ToDate           string  `json:"to_date"`
-	Difference       float64 `json:"difference"`
-	DayRemainingDiff float64 `json:"day_remaining_diff"`
+    FromDate         string  `json:"from_date"`
+    ToDate           string  `json:"to_date"`
+    Difference       float64 `json:"difference"`
+    DayRemainingDiff float64 `json:"day_remaining_diff"`
+    MonthlyBreakdown map[string]float64 `json:"monthly_breakdown"`
 }

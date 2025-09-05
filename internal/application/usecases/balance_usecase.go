@@ -1,11 +1,12 @@
 package usecases
 
 import (
-	"fmt"
+    "fmt"
+    "time"
 
-	"piggy/internal/application/dto"
-	"piggy/internal/domain/repositories"
-	"piggy/internal/domain/services"
+    "piggy/internal/application/dto"
+    "piggy/internal/domain/repositories"
+    "piggy/internal/domain/services"
 )
 
 // BalanceUseCase handles balance operations
@@ -26,28 +27,38 @@ func NewBalanceUseCase(entryRepo repositories.EntryRepository, parameterRepo rep
 
 // GetBalanceReport generates a balance report for a date range
 func (b *BalanceUseCase) GetBalanceReport(request dto.BalanceRequest) (*dto.BalanceResponse, error) {
-	entries, err := b.entryRepo.GetFromTo(request.FromDate, request.ToDate, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve entries: %w", err)
-	}
+    entries, err := b.entryRepo.GetFromTo(request.FromDate, request.ToDate, "")
+    if err != nil {
+        return nil, fmt.Errorf("failed to retrieve entries: %w", err)
+    }
 
-	var total float64
-	remainingDays := float64(int(request.ToDate.Sub(request.FromDate).Hours()/24) + 1)
+    var total float64
+    monthly := make(map[string]float64)
+    remainingDays := float64(int(request.ToDate.Sub(request.FromDate).Hours()/24) + 1)
 
-	// Process all entries and convert to EUR
-	for _, entry := range entries {
-		entryValue := b.convertToEUR(entry.Amount, entry.Currency.Code, request.UsdToArs, request.EurToUsd)
-		total += entryValue
-	}
+    // Process all entries and convert to EUR
+    for _, entry := range entries {
+        entryValue := b.convertToEUR(entry.Amount, entry.Currency.Code, request.UsdToArs, request.EurToUsd)
+        total += entryValue
 
-	response := &dto.BalanceResponse{
-		FromDate:         request.FromDate.Format("2006-01-02"),
-		ToDate:           request.ToDate.Format("2006-01-02"),
-		Difference:       total,
-		DayRemainingDiff: total - request.AmountPerDay*remainingDays,
-	}
+        // Group by month YYYY-MM
+        if entry.Date != "" {
+            if t, err := time.Parse("2006-01-02", entry.Date); err == nil {
+                key := t.Format("2006-01")
+                monthly[key] += entryValue
+            }
+        }
+    }
 
-	return response, nil
+    response := &dto.BalanceResponse{
+        FromDate:         request.FromDate.Format("2006-01-02"),
+        ToDate:           request.ToDate.Format("2006-01-02"),
+        Difference:       total,
+        DayRemainingDiff: total - request.AmountPerDay*remainingDays,
+        MonthlyBreakdown: monthly,
+    }
+
+    return response, nil
 }
 
 // convertToEUR converts an amount to EUR based on currency

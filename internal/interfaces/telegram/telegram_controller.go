@@ -205,12 +205,12 @@ func (c *TelegramController) handleBalanceCommand(message string) string {
 		EurToUsd:     eurToUsd,
 	}
 
-	response, err := c.balanceUseCase.GetBalanceReport(request)
-	if err != nil {
-		return fmt.Sprintf("❌ Error getting balance: %v", err)
-	}
+    response, err := c.balanceUseCase.GetBalanceReport(request)
+    if err != nil {
+        return fmt.Sprintf("❌ Error getting balance: %v", err)
+    }
 
-	return c.formatBalanceResponse(response)
+    return c.formatBalanceResponse(response, request)
 }
 
 // handleCreditCommand handles /credit and /pay commands
@@ -388,12 +388,39 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
     return result
 }
 
-func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse) string {
-	result := fmt.Sprintf("\n📊BALANCE REPORT")
-	result += fmt.Sprintf("\n🗓️From: %s to %s", response.FromDate, response.ToDate)
-	result += fmt.Sprintf("\n💰Difference: €%0.2f", response.Difference)
-	result += fmt.Sprintf("\n📈Daily remaining diff: €%0.2f", response.DayRemainingDiff)
-	return result
+func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse, request appdto.BalanceRequest) string {
+    // Header period and parameters used
+    result := fmt.Sprintf("\n🐷PERIOD: %s to %s", response.FromDate, response.ToDate)
+    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", request.AmountPerDay, request.EurToUsd, request.UsdToArs)
+
+    // Monthly breakdown if available
+    if len(response.MonthlyBreakdown) > 0 {
+        // Sort months (YYYY-MM lexicographic is chronological)
+        months := make([]string, 0, len(response.MonthlyBreakdown))
+        for m := range response.MonthlyBreakdown {
+            months = append(months, m)
+        }
+        // insertion sort
+        for i := 1; i < len(months); i++ {
+            j := i
+            for j > 0 && months[j-1] > months[j] {
+                months[j-1], months[j] = months[j], months[j-1]
+                j--
+            }
+        }
+
+        result += "\n"
+        for _, m := range months {
+            amount := response.MonthlyBreakdown[m]
+            result += fmt.Sprintf("\n %s ................. €%0.2f", m, amount)
+        }
+        result += "\n"
+    }
+
+    // Summary lines
+    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
+    result += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f", response.DayRemainingDiff)
+    return result
 }
 
 func (c *TelegramController) formatCreditResponse(response *appdto.CreditResponse, isPay bool) string {
