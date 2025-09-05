@@ -1,13 +1,13 @@
 package usecases
 
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "strings"
 
-	"piggy/internal/application/dto"
-	"piggy/internal/domain/entities"
-	"piggy/internal/domain/repositories"
-	"piggy/internal/domain/services"
+    "piggy/internal/application/dto"
+    "piggy/internal/domain/entities"
+    "piggy/internal/domain/repositories"
+    "piggy/internal/domain/services"
 )
 
 // CreditUseCase handles credit card related operations
@@ -39,41 +39,47 @@ func (c *CreditUseCase) GetCreditStatus(request dto.CreditRequest) (*dto.CreditR
 	}
 
 	// Calculate totals and prepare response
-	response := &dto.CreditResponse{
-		Period: request.MonthYear.Format("2006-01"),
-		Items:  make([]dto.CreditItem, 0),
-	}
+    response := &dto.CreditResponse{
+        Period: request.MonthYear.Format("2006-01"),
+        Items:  make([]dto.CreditItem, 0),
+    }
 
-	var totalUSD, totalARS float64
+    var totalEUR float64
+    eurToUsd := request.EurToUsd
+    if eurToUsd == 0 {
+        eurToUsd = 1.0
+    }
+    usdToArs := request.UsdToArs
+    if usdToArs == 0 {
+        usdToArs = 1.0
+    }
 
-	for _, entry := range entries {
-		// Convert amounts based on currency
-		var displayAmount float64
-		switch entry.Currency.Code {
-		case "USD":
-			totalUSD += entry.Amount
-			displayAmount = entry.Amount
-		case "ARS":
-			totalARS += entry.Amount
-			displayAmount = entry.Amount
-		case "EUR":
-			// Convert EUR to USD for consistency
-			totalUSD += entry.Amount * request.UsdToArs
-			displayAmount = entry.Amount
-		}
+    for _, entry := range entries {
+        // Convert all to EUR, then flip sign so expenses display positive
+        var eur float64
+        switch entry.Currency.Code {
+        case "EUR":
+            eur = entry.Amount
+        case "USD":
+            eur = entry.Amount / eurToUsd
+        case "ARS":
+            eur = entry.Amount / (usdToArs * eurToUsd)
+        default:
+            eur = entry.Amount / eurToUsd
+        }
 
-		response.Items = append(response.Items, dto.CreditItem{
-			Description: fmt.Sprintf("%s %s", entry.Category, entry.Desc),
-			Amount:      -displayAmount, // Negative because expenses
-			Currency:    entry.Currency.Code,
-		})
-	}
+        displayAmount := -eur
+        totalEUR += displayAmount
 
-	response.TotalUSD = -totalUSD
-	response.TotalARS = -totalARS
-	response.Total = -(totalUSD*request.UsdToArs + totalARS)
+        response.Items = append(response.Items, dto.CreditItem{
+            Description: fmt.Sprintf("%s %s", entry.Category, entry.Desc),
+            Amount:      displayAmount,
+            Currency:    "EUR",
+        })
+    }
 
-	return response, nil
+    response.Total = totalEUR
+    return response, nil
 }
 
 // PayCredit marks credit entries as paid

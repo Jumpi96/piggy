@@ -230,6 +230,10 @@ func (c *TelegramController) handleCreditCommand(message string, isPay bool) str
     if err != nil {
         return "❓ USD to ARS rate not configured. Use /set USD2ARS <rate>"
     }
+    eurToUsd, err := c.parameterUseCase.GetParameter("EUR2USD")
+    if err != nil {
+        return "❓ EUR to USD rate not configured. Use /set EUR2USD <rate>"
+    }
 
     // Parse optional month parameter (YYYY-MM)
     monthYear := time.Now()
@@ -240,18 +244,19 @@ func (c *TelegramController) handleCreditCommand(message string, isPay bool) str
             monthYear = t
         }
     }
-	request := appdto.CreditRequest{
-		MonthYear:   monthYear,
-		UsdToArs:    usdToArs.Value,
-		CountryCode: countryCode,
-	}
+    request := appdto.CreditRequest{
+        MonthYear:   monthYear,
+        UsdToArs:    usdToArs.Value,
+        EurToUsd:    eurToUsd.Value,
+        CountryCode: countryCode,
+    }
 
 	response, err := c.creditUseCase.GetCreditStatus(request)
 	if err != nil {
 		return fmt.Sprintf("❌ Error getting credit status: %v", err)
 	}
 
-	return c.formatCreditResponse(response, isPay)
+    return c.formatCreditResponse(response, isPay, request)
 }
 
 // handleSetCommand handles the /set command
@@ -431,24 +436,29 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
     return result
 }
 
-func (c *TelegramController) formatCreditResponse(response *appdto.CreditResponse, isPay bool) string {
-	action := "Credit"
-	if isPay {
-		action = "Payment"
-	}
-	
-	result := fmt.Sprintf("\n💳%s REPORT", strings.ToUpper(action))
-	result += fmt.Sprintf("\n🗓️Period: %s", response.Period)
-	result += fmt.Sprintf("\n💵Total USD: $%0.2f", response.TotalUSD)
-	result += fmt.Sprintf("\n💴Total ARS: $%0.2f", response.TotalARS)
-	result += fmt.Sprintf("\n💰Total: €%0.2f", response.Total)
-	
-	if len(response.Items) > 0 {
-		result += "\n📋Items:"
-		for _, item := range response.Items {
-			result += fmt.Sprintf("\n  - %s: %s %0.2f", item.Description, item.Currency, item.Amount)
-		}
-	}
-	
-	return result
+func (c *TelegramController) formatCreditResponse(response *appdto.CreditResponse, isPay bool, request appdto.CreditRequest) string {
+    flag := "🇦🇷"
+    if request.CountryCode == "NL" {
+        flag = "🇳🇱"
+    }
+
+    var header string
+    if isPay {
+        header = fmt.Sprintf("\n💳PAYING YOUR %sCREDIT CARD%s", flag, flag)
+    } else {
+        header = "\n💳CREDIT REPORT"
+    }
+
+    result := header
+    result += fmt.Sprintf("\n🐷PERIOD: %s", response.Period)
+    result += fmt.Sprintf("\n💰TOTAL: €%0.2f", response.Total)
+
+    if len(response.Items) > 0 {
+        result += "\nYour credit items are: "
+        for _, item := range response.Items {
+            result += fmt.Sprintf("\n ☑ %s %0.2f", item.Currency, item.Amount)
+        }
+    }
+
+    return result
 }
