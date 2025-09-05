@@ -225,13 +225,21 @@ func (c *TelegramController) handleCreditCommand(message string, isPay bool) str
 		return "❓ Please specify country code (AR or NL)"
 	}
 
-	// Get parameters from storage
-	usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
-	if err != nil {
-		return "❓ USD to ARS rate not configured. Use /set USD2ARS <rate>"
-	}
+    // Get parameters from storage
+    usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
+    if err != nil {
+        return "❓ USD to ARS rate not configured. Use /set USD2ARS <rate>"
+    }
 
-	monthYear := time.Now()
+    // Parse optional month parameter (YYYY-MM)
+    monthYear := time.Now()
+    parts := strings.Fields(message)
+    if len(parts) > 1 {
+        loc, _ := time.LoadLocation(c.configService.GetTimeZone())
+        if t, err := time.ParseInLocation("2006-01-02", parts[1]+"-01", loc); err == nil {
+            monthYear = t
+        }
+    }
 	request := appdto.CreditRequest{
 		MonthYear:   monthYear,
 		UsdToArs:    usdToArs.Value,
