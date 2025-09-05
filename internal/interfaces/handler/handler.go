@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/ssm"
 )
 
 // Handler handles AWS Lambda requests
@@ -24,11 +24,11 @@ type Handler struct {
 
 // NewHandler creates a new Lambda handler with all dependencies injected
 func NewHandler() *Handler {
-	// Initialize AWS session and DynamoDB client
+	// Initialize AWS session and SSM client
 	awsSession := session.Must(session.NewSession(&aws.Config{
 		Region: aws.String(getEnv("AWS_REGION", "us-west-2")),
 	}))
-	dynamoClient := dynamodb.New(awsSession)
+	ssmClient := ssm.New(awsSession)
 
 	// Initialize external clients
 	toshlToken := getEnv("TOSHL_TOKEN", "")
@@ -38,8 +38,9 @@ func NewHandler() *Handler {
 	timeZone := getEnv("TIME_ZONE", "Europe/Amsterdam")
 	entryRepo := repositories.NewToshlEntryRepository(toshlClient, timeZone)
 
-	parameterTableName := getEnv("PARAMETER_TABLE_NAME", "piggy")
-	parameterRepo := repositories.NewDynamoDBParameterRepository(dynamoClient, parameterTableName)
+	parameterName := getEnv("PARAMETER_NAME", "/piggy/config")
+	parameterStore := config.NewParameterStoreService(ssmClient, parameterName)
+	parameterRepo := repositories.NewParameterStoreParameterRepository(parameterStore)
 
 	// Initialize config service
 	var configService services.ConfigService = config.NewConfigService()

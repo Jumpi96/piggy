@@ -15,7 +15,7 @@ A personal finance Telegram bot written in Go that helps you track expenses, cre
 - **Telegram Bot API** - Interactive command interface
 - **Toshl API** - Financial data synchronization
 - **AWS Lambda** - Serverless deployment
-- **DynamoDB** - Configuration storage
+- **AWS Parameter Store** - Configuration storage
 
 ## Architecture
 
@@ -53,7 +53,7 @@ Built with Clean Architecture principles for maintainability and testability:
 │  ┌─────────────────┐    ┌─────────────────────────────────┐ │
 │  │ Repositories    │    │ External Services               │ │
 │  │ • ToshlRepo     │    │ • Toshl API                     │ │
-│  │ • DynamoDBRepo  │    │ • DynamoDB                      │ │
+│  │ • ParameterRepo │    │ • AWS Parameter Store           │ │
 │  │ • ConfigService │    │ • Environment Variables         │ │
 │  └─────────────────┘    └─────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
@@ -63,7 +63,7 @@ Built with Clean Architecture principles for maintainability and testability:
 
 ### Prerequisites
 - Go 1.21+
-- AWS Account with Lambda and DynamoDB access
+- AWS Account with Lambda and Parameter Store access
 - Telegram Bot Token
 - Toshl API Token
 
@@ -76,6 +76,23 @@ CREDIT_NL_TAGS=1234,2345  # Comma-separated tags for NL
 CREDIT_AR_TAGS=9876,8765 # Comma-separated tags for AR  
 BALANCE_TAGS=balance,income             # Comma-separated balance tags
 TIME_ZONE=Europe/Amsterdam
+PARAMETER_NAME=/piggy/config            # Parameter Store parameter name
+```
+
+### Parameter Store Configuration
+Create a SecureString parameter in AWS Parameter Store with the following JSON structure:
+```json
+{
+  "currency": "ARS",
+  "conversions": {
+    "ARS2USD": 0.001,
+    "ARS2EUR": 0.0009,
+    "USD2EUR": 0.85
+  },
+  "budgeting": {
+    "amountPerDay": 100.0
+  }
+}
 ```
 
 ### Local Development
