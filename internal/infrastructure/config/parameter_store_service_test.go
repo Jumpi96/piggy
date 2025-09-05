@@ -236,28 +236,31 @@ func TestParameterStoreService_GetCurrencySymbol(t *testing.T) {
 		expectedSymbol   string
 	}{
 		{
-			name: "Currency without symbol",
+			name: "Currency without symbol defined",
 			configJSON: `{
 				"currency": "USD",
 				"conversions": {},
+				"symbols": {},
 				"budgeting": {"amountPerDay": 100.0}
 			}`,
 			expectedSymbol: "USD",
 		},
 		{
-			name: "Currency with symbol",
+			name: "Currency with symbol defined",
 			configJSON: `{
-				"currency": "ARS/AR$",
+				"currency": "ARS",
 				"conversions": {},
+				"symbols": {"ARS": "AR$"},
 				"budgeting": {"amountPerDay": 100.0}
 			}`,
 			expectedSymbol: "AR$",
 		},
 		{
-			name: "USD with $ symbol",
+			name: "USD with $ symbol defined",
 			configJSON: `{
-				"currency": "USD/$",
+				"currency": "USD",
 				"conversions": {},
+				"symbols": {"USD": "$"},
 				"budgeting": {"amountPerDay": 100.0}
 			}`,
 			expectedSymbol: "$",
@@ -286,59 +289,3 @@ func TestParameterStoreService_GetCurrencySymbol(t *testing.T) {
 	}
 }
 
-func TestParameterStoreService_GetCurrencyCode(t *testing.T) {
-	tests := []struct {
-		name           string
-		configJSON     string
-		expectedCode   string
-	}{
-		{
-			name: "Currency without symbol",
-			configJSON: `{
-				"currency": "USD",
-				"conversions": {},
-				"budgeting": {"amountPerDay": 100.0}
-			}`,
-			expectedCode: "USD",
-		},
-		{
-			name: "Currency with symbol",
-			configJSON: `{
-				"currency": "ARS/AR$",
-				"conversions": {},
-				"budgeting": {"amountPerDay": 100.0}
-			}`,
-			expectedCode: "ARS",
-		},
-		{
-			name: "USD with $ symbol",
-			configJSON: `{
-				"currency": "USD/$",
-				"conversions": {},
-				"budgeting": {"amountPerDay": 100.0}
-			}`,
-			expectedCode: "USD",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			mockClient := &mockSSMClient{
-				parameters: map[string]string{
-					"/piggy/config": test.configJSON,
-				},
-			}
-
-			service := NewParameterStoreServiceWithInterface(mockClient, "/piggy/config")
-
-			code, err := service.GetCurrencyCode()
-			if err != nil {
-				t.Fatalf("Expected no error, got %v", err)
-			}
-
-			if code != test.expectedCode {
-				t.Errorf("Expected code %s, got %s", test.expectedCode, code)
-			}
-		})
-	}
-}

@@ -85,7 +85,12 @@ func (p *ParameterUseCase) GetCurrencySymbol() (string, error) {
     return p.parameterRepo.GetCurrencySymbol()
 }
 
-// GetCurrencyCode gets the currency code (without symbol)
-func (p *ParameterUseCase) GetCurrencyCode() (string, error) {
-    return p.parameterRepo.GetCurrencyCode()
+// SetCurrencySymbol sets the display symbol for a currency
+func (p *ParameterUseCase) SetCurrencySymbol(currency, symbol string) error {
+    return p.parameterRepo.SetCurrencySymbol(currency, symbol)
+}
+
+// GetSymbol gets the display symbol for any currency code
+func (p *ParameterUseCase) GetSymbol(currency string) (string, error) {
+    return p.parameterRepo.GetSymbol(currency)
 }

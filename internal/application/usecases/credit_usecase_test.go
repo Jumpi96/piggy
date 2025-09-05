@@ -70,11 +70,19 @@ func (m *mockParameterRepository) GetCurrencySymbol() (string, error) {
 	return "EUR", nil // default fallback for tests
 }
 
-func (m *mockParameterRepository) GetCurrencyCode() (string, error) {
+func (m *mockParameterRepository) SetCurrencySymbol(currency, symbol string) error {
 	if m.err != nil {
-		return "", m.err
+		return m.err
 	}
-	return "EUR", nil // default fallback for tests
+	return nil // success for tests
+}
+
+func (m *mockParameterRepository) GetSymbol(currency string) (string, error) {
+	if m.err != nil {
+		return currency, m.err
+	}
+	// Simple mock: return currency code as symbol
+	return currency, nil
 }
 
 type mockConfigService struct {

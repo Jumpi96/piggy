@@ -101,11 +101,19 @@ func (m *mockParameterUseCase) GetCurrencySymbol() (string, error) {
 	return "EUR", nil // default fallback for tests
 }
 
-func (m *mockParameterUseCase) GetCurrencyCode() (string, error) {
+func (m *mockParameterUseCase) SetCurrencySymbol(currency, symbol string) error {
 	if m.err != nil {
-		return "", m.err
+		return m.err
 	}
-	return "EUR", nil // default fallback for tests
+	return nil // success for tests
+}
+
+func (m *mockParameterUseCase) GetSymbol(currency string) (string, error) {
+	if m.err != nil {
+		return currency, m.err
+	}
+	// Simple mock: return currency code as symbol
+	return currency, nil
 }
 
 type mockConfigService struct {

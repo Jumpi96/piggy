@@ -45,8 +45,7 @@ func (b *BalanceUseCase) GetBalanceReport(request dto.BalanceRequest) (*dto.Bala
     if err != nil || pBase.StringValue == "" {
         return nil, fmt.Errorf("base currency not configured. Use /set CURRENCY <CODE>")
     }
-    // Extract just the currency code, not the symbol for conversions
-    base := services.GetCurrencyCode(pBase.StringValue)
+    base := pBase.StringValue
 
     // Compute totals and monthly sums in base
     usedRates := make(map[string]float64)
@@ -138,16 +137,18 @@ func (b *BalanceUseCase) daysInclusive(from, to time.Time) int {
     return int(to.Sub(from).Hours()/24) + 1
 }
 
-// convertToBase converts an amount in given code to configured base using stored rate BASE2CODE
+// convertToBase converts an amount in given code to configured base using stored rate CODE2BASE
 func (b *BalanceUseCase) convertToBase(amount float64, code, base string, usedRates map[string]float64) (float64, error) {
     if code == base {
         return amount, nil
     }
-    rateKey := fmt.Sprintf("%s2%s", base, code)
+    
+    rateKey := fmt.Sprintf("%s2%s", code, base)
     p, err := b.parameterRepo.Get(rateKey)
     if err != nil {
         return 0, fmt.Errorf("missing rate %s. Use /set %s <value>", rateKey, rateKey)
     }
+    
     usedRates[rateKey] = p.Value
     return amount * p.Value, nil
 }

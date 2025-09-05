@@ -39,7 +39,8 @@ type ParameterUseCaseInterface interface {
     GetParameter(key string) (*entities.Parameter, error)
     SetCurrencies(monthYear time.Time, usdToArs, eurToUsd float64) (int, error)
     GetCurrencySymbol() (string, error)
-    GetCurrencyCode() (string, error)
+    SetCurrencySymbol(currency, symbol string) error
+    GetSymbol(currency string) (string, error)
 }
 
 // TelegramController handles Telegram webhook requests
@@ -269,12 +270,26 @@ func (c *TelegramController) handleSetCommand(message string) string {
 	// Parse parameter and value from message
 	parts := strings.Fields(message)
 	if len(parts) < 3 {
-		return "❓ Usage: /set <parameter> <value>"
+		return "❓ Usage: /set <parameter> <value> or /set SYMBOL <currency> <symbol>"
 	}
 
     parameter := parts[1]
-    valueStr := parts[2]
+    
+    // Handle symbol setting: /set SYMBOL ARS AR$
+    if parameter == "SYMBOL" {
+        if len(parts) < 4 {
+            return "❓ Usage: /set SYMBOL <currency> <symbol>"
+        }
+        currency := parts[2]
+        symbol := parts[3]
+        err := c.parameterUseCase.SetCurrencySymbol(currency, symbol)
+        if err != nil {
+            return fmt.Sprintf("❌ Error setting symbol: %v", err)
+        }
+        return fmt.Sprintf("✅ Symbol for %s set to %s", currency, symbol)
+    }
 
+    valueStr := parts[2]
     var err error
     if parameter == "CURRENCY" {
         // Accept string values for CURRENCY
@@ -306,9 +321,12 @@ func (c *TelegramController) getCurrencySymbol() string {
 
 // getCurrencySymbolFromCode gets the display symbol for any currency code
 func (c *TelegramController) getCurrencySymbolFromCode(currencyCode string) string {
-	// For credit card currencies, we might not have them configured as the main currency
-	// So we use the utility to parse the currency format if it contains symbols
-	return services.GetDisplaySymbol(currencyCode)
+	// Look up symbol from parameter store
+	symbol, err := c.parameterUseCase.GetSymbol(currencyCode)
+	if err != nil {
+		return currencyCode // fallback to currency code
+	}
+	return symbol
 }
 
 func (c *TelegramController) parseStatusCommand(message string) (time.Time, error) {

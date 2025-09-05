@@ -49,7 +49,12 @@ func (r *ParameterStoreParameterRepository) GetCurrencySymbol() (string, error) 
 	return r.parameterStore.GetCurrencySymbol()
 }
 
-// GetCurrencyCode gets the currency code (without symbol)  
-func (r *ParameterStoreParameterRepository) GetCurrencyCode() (string, error) {
-	return r.parameterStore.GetCurrencyCode()
+// SetCurrencySymbol sets the display symbol for a currency
+func (r *ParameterStoreParameterRepository) SetCurrencySymbol(currency, symbol string) error {
+	return r.parameterStore.SetCurrencySymbol(currency, symbol)
+}
+
+// GetSymbol gets the display symbol for any currency code  
+func (r *ParameterStoreParameterRepository) GetSymbol(currency string) (string, error) {
+	return r.parameterStore.GetSymbol(currency)
 }

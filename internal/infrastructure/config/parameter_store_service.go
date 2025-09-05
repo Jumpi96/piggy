@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"piggy/internal/domain/services"
-
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ssm"
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
@@ -15,6 +13,7 @@ import (
 type ParameterStoreConfig struct {
 	Currency    string             `json:"currency"`
 	Conversions map[string]float64 `json:"conversions"`
+	Symbols     map[string]string  `json:"symbols"`
 	Budgeting   struct {
 		AmountPerDay float64 `json:"amountPerDay"`
 	} `json:"budgeting"`
@@ -142,16 +141,49 @@ func (p *ParameterStoreService) GetCurrencySymbol() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return services.GetDisplaySymbol(config.Currency), nil
+	
+	// First check if there's a symbol defined for the currency
+	if symbol, exists := config.Symbols[config.Currency]; exists && symbol != "" {
+		return symbol, nil
+	}
+	
+	// Fallback to currency code
+	return config.Currency, nil
 }
 
-// GetCurrencyCode gets the currency code (without symbol)
-func (p *ParameterStoreService) GetCurrencyCode() (string, error) {
+// SetCurrencySymbol sets the display symbol for a currency
+func (p *ParameterStoreService) SetCurrencySymbol(currency, symbol string) error {
 	config, err := p.GetConfig()
 	if err != nil {
-		return "", err
+		// If parameter doesn't exist, create default config
+		config = &ParameterStoreConfig{
+			Currency:    "EUR",
+			Conversions: make(map[string]float64),
+			Symbols:     make(map[string]string),
+		}
+		config.Budgeting.AmountPerDay = 100.0
 	}
-	return services.GetCurrencyCode(config.Currency), nil
+	
+	if config.Symbols == nil {
+		config.Symbols = make(map[string]string)
+	}
+	
+	config.Symbols[currency] = symbol
+	return p.UpdateConfig(config)
+}
+
+// GetSymbol gets the display symbol for any currency code
+func (p *ParameterStoreService) GetSymbol(currency string) (string, error) {
+	config, err := p.GetConfig()
+	if err != nil {
+		return currency, nil // fallback to currency code
+	}
+	
+	if symbol, exists := config.Symbols[currency]; exists && symbol != "" {
+		return symbol, nil
+	}
+	
+	return currency, nil // fallback to currency code
 }
 
 // SetFloatValue sets a float value in the configuration

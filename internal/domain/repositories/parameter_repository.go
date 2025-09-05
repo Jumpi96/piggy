@@ -13,6 +13,9 @@ type ParameterRepository interface {
 	// GetCurrencySymbol gets the display symbol for the currency
 	GetCurrencySymbol() (string, error)
 
-	// GetCurrencyCode gets the currency code (without symbol)
-	GetCurrencyCode() (string, error)
+	// SetCurrencySymbol sets the display symbol for a currency
+	SetCurrencySymbol(currency, symbol string) error
+
+	// GetSymbol gets the display symbol for any currency code
+	GetSymbol(currency string) (string, error)
 }

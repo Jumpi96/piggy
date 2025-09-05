@@ -83,11 +83,17 @@ PARAMETER_NAME=/piggy/config            # Parameter Store parameter name
 Create a SecureString parameter in AWS Parameter Store with the following JSON structure:
 ```json
 {
-  "currency": "ARS/AR$",
+  "currency": "ARS",
   "conversions": {
+    "USD2ARS": 1000,
+    "EUR2ARS": 1100,
     "ARS2USD": 0.001,
-    "ARS2EUR": 0.0009,
     "USD2EUR": 0.85
+  },
+  "symbols": {
+    "ARS": "AR$",
+    "USD": "$",
+    "EUR": "€"
   },
   "budgeting": {
     "amountPerDay": 100.0
@@ -95,14 +101,21 @@ Create a SecureString parameter in AWS Parameter Store with the following JSON s
 }
 ```
 
-#### Currency Symbol Support
-The `currency` field supports optional display symbols using the format `CODE/SYMBOL`:
-- `"ARS"` - displays as "ARS" 
-- `"ARS/AR$"` - displays as "AR$" in Telegram responses
-- `"USD/$"` - displays as "$" in Telegram responses
-- `"EUR/€"` - displays as "€" in Telegram responses
+#### Currency Symbol Management
+The bot supports separate symbols for display while keeping currency logic simple:
 
-When no symbol is specified, the currency code is used for display.
+- **Currency codes** (e.g., `"ARS"`, `"USD"`, `"EUR"`) are used for all conversion logic
+- **Display symbols** (e.g., `"AR$"`, `"$"`, `"€"`) are stored separately in the `symbols` object
+- **Conversion rates** use simple keys like `"USD2ARS"`, `"EUR2USD"`
+
+#### Setting Symbols via Telegram
+```bash
+/set SYMBOL ARS AR$
+/set SYMBOL USD $  
+/set SYMBOL EUR €
+```
+
+When no symbol is defined, the currency code is used for display.
 
 ### Local Development
 ```bash
@@ -121,8 +134,17 @@ aws lambda update-function-code --function-name Piggy --zip-file fileb://deploym
 
 ## Usage Example
 ```
+/set CURRENCY ARS
+# ✅ Parameter CURRENCY set to ARS
+
+/set SYMBOL ARS AR$
+# ✅ Symbol for ARS set to AR$
+
+/set USD2ARS 1000
+# ✅ Parameter USD2ARS set to 1000
+
 /status 2023-10
-# Returns monthly spending breakdown with budget tracking using currency symbols
+# Returns monthly spending breakdown with currency symbols
 # 🐷PERIOD: 2023-10
 # 💳Base: AR$; ApD: AR$ 100.00.
 # 💵YOUR CURRENT SITUATION: AR$ -50.25
@@ -131,13 +153,6 @@ aws lambda update-function-code --function-name Piggy --zip-file fileb://deploym
 # Shows Netherlands credit card expenses
 # 💳CREDIT REPORT
 # 💰TOTAL: € 125.50
-
-/payNL
-# Marks current month's NL credit entries as paid
-
-/set CURRENCY ARS/AR$
-# Sets currency with custom display symbol
-# ✅ Parameter CURRENCY set to ARS/AR$
 ```
 
 ## Testing
