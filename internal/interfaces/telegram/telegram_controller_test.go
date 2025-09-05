@@ -51,8 +51,8 @@ func (m *mockBalanceUseCase) GetBalanceReport(request appdto.BalanceRequest) (*a
 }
 
 type mockParameterUseCase struct {
-	parameters map[string]*entities.Parameter
-	err        error
+    parameters map[string]*entities.Parameter
+    err        error
 }
 
 func (m *mockParameterUseCase) SetParameter(key string, value float64) error {
@@ -64,6 +64,17 @@ func (m *mockParameterUseCase) SetParameter(key string, value float64) error {
 	}
 	m.parameters[key] = entities.NewParameter(key, value)
 	return nil
+}
+
+func (m *mockParameterUseCase) SetStringParameter(key string, value string) error {
+    if m.err != nil {
+        return m.err
+    }
+    if m.parameters == nil {
+        m.parameters = make(map[string]*entities.Parameter)
+    }
+    m.parameters[key] = &entities.Parameter{Key: key, StringValue: value}
+    return nil
 }
 
 func (m *mockParameterUseCase) GetParameter(key string) (*entities.Parameter, error) {

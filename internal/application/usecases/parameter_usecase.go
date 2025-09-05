@@ -11,9 +11,9 @@ import (
 
 // ParameterUseCase handles parameter operations
 type ParameterUseCase struct {
-	entryRepo     repositories.EntryRepository
-	parameterRepo repositories.ParameterRepository
-	configService services.ConfigService
+    entryRepo     repositories.EntryRepository
+    parameterRepo repositories.ParameterRepository
+    configService services.ConfigService
 }
 
 // NewParameterUseCase creates a new parameter use case
@@ -65,11 +65,17 @@ func (p *ParameterUseCase) SetCurrencies(monthYear time.Time, usdToArs, eurToUsd
 
 // SetParameter stores a parameter value
 func (p *ParameterUseCase) SetParameter(key string, value float64) error {
-	parameter := entities.NewParameter(key, value)
-	return p.parameterRepo.Set(parameter)
+    parameter := entities.NewParameter(key, value)
+    return p.parameterRepo.Set(parameter)
+}
+
+// SetStringParameter stores a string parameter (e.g., CURRENCY)
+func (p *ParameterUseCase) SetStringParameter(key string, value string) error {
+    parameter := entities.NewStringParameter(key, value)
+    return p.parameterRepo.Set(parameter)
 }
 
 // GetParameter retrieves a parameter value
 func (p *ParameterUseCase) GetParameter(key string) (*entities.Parameter, error) {
-	return p.parameterRepo.Get(key)
+    return p.parameterRepo.Get(key)
 }

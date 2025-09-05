@@ -99,23 +99,23 @@ func TestDynamoDBParameterRepository_Get(t *testing.T) {
 			expectedError: true,
 			expectedValue: 0.0,
 		},
-		{
-			name: "zero value parameter",
-			key:  "ZERO_PARAM",
-			mockOutput: &dynamodb.GetItemOutput{
-				Item: map[string]*dynamodb.AttributeValue{
-					"Parameter": {
-						S: aws.String("ZERO_PARAM"),
-					},
-					"ParameterValue": {
-						N: aws.String("0.0"),
-					},
-				},
-			},
-			mockError:     nil,
-			expectedError: true, // Zero values are considered invalid per the implementation
-			expectedValue: 0.0,
-		},
+        {
+            name: "zero value parameter",
+            key:  "ZERO_PARAM",
+            mockOutput: &dynamodb.GetItemOutput{
+                Item: map[string]*dynamodb.AttributeValue{
+                    "Parameter": {
+                        S: aws.String("ZERO_PARAM"),
+                    },
+                    "ParameterValue": {
+                        N: aws.String("0.0"),
+                    },
+                },
+            },
+            mockError:     nil,
+            expectedError: false, // Zero is allowed now; absence is the error
+            expectedValue: 0.0,
+        },
 	}
 
 	for _, tc := range testCases {

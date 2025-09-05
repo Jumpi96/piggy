@@ -34,9 +34,10 @@ type BalanceUseCaseInterface interface {
 }
 
 type ParameterUseCaseInterface interface {
-	SetParameter(key string, value float64) error
-	GetParameter(key string) (*entities.Parameter, error)
-	SetCurrencies(monthYear time.Time, usdToArs, eurToUsd float64) (int, error)
+    SetParameter(key string, value float64) error
+    SetStringParameter(key string, value string) error
+    GetParameter(key string) (*entities.Parameter, error)
+    SetCurrencies(monthYear time.Time, usdToArs, eurToUsd float64) (int, error)
 }
 
 // TelegramController handles Telegram webhook requests
@@ -269,20 +270,25 @@ func (c *TelegramController) handleSetCommand(message string) string {
 		return "❓ Usage: /set <parameter> <value>"
 	}
 
-	parameter := parts[1]
-	valueStr := parts[2]
+    parameter := parts[1]
+    valueStr := parts[2]
 
-	value, err := strconv.ParseFloat(valueStr, 64)
-	if err != nil {
-		return "❓ Invalid value. Please provide a numeric value."
-	}
-
-	err = c.parameterUseCase.SetParameter(parameter, value)
+    var err error
+    if parameter == "CURRENCY" {
+        // Accept string values for CURRENCY
+        err = c.parameterUseCase.SetStringParameter(parameter, valueStr)
+    } else {
+        value, convErr := strconv.ParseFloat(valueStr, 64)
+        if convErr != nil {
+            return "❓ Invalid value. Please provide a numeric value."
+        }
+        err = c.parameterUseCase.SetParameter(parameter, value)
+    }
 	if err != nil {
 		return fmt.Sprintf("❌ Error setting parameter: %v", err)
 	}
 
-	return fmt.Sprintf("✅ Parameter %s set to %v", parameter, value)
+    return fmt.Sprintf("✅ Parameter %s set to %v", parameter, valueStr)
 }
 
 // Helper methods for parsing commands and formatting responses
@@ -336,8 +342,25 @@ func (c *TelegramController) parseBalanceCommand(message string) (time.Time, tim
 
 func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse) string {
     result := fmt.Sprintf("\n🐷PERIOD: %v", response.Period)
-    // Include parameters used in the calculation
-    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", response.UsedAmountPerDay, response.UsedEurToUsd, response.UsedUsdToArs)
+    // Base and rates
+    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f", response.UsedBase, response.UsedBase, response.UsedAmountPerDay)
+    if len(response.UsedRates) > 0 {
+        // Build sorted list of rates
+        keys := make([]string, 0, len(response.UsedRates))
+        for k := range response.UsedRates { keys = append(keys, k) }
+        for i := 1; i < len(keys); i++ { j:=i; for j>0 && keys[j-1] > keys[j] { keys[j-1], keys[j] = keys[j], keys[j-1]; j-- } }
+        result += "\n🔁Rates:"
+        for _, k := range keys {
+            // k format: BASE2CODE
+            parts := strings.Split(k, "2")
+            if len(parts) == 2 {
+                result += fmt.Sprintf(" %s per %s=%0.2f,", parts[0], parts[1], response.UsedRates[k])
+            } else {
+                result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
+            }
+        }
+        // trim trailing comma by just letting it be (telegram ok)
+    }
     result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
     result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: €%0.2f", response.DayRemainingDiff)
     result += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", response.DayRemaining)
@@ -375,7 +398,21 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
 func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse) string {
     // Header period and parameters used
     result := fmt.Sprintf("\n🐷PERIOD: %s to %s", response.FromDate, response.ToDate)
-    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", response.UsedAmountPerDay, response.UsedEurToUsd, response.UsedUsdToArs)
+    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f", response.UsedBase, response.UsedBase, response.UsedAmountPerDay)
+    if len(response.UsedRates) > 0 {
+        keys := make([]string, 0, len(response.UsedRates))
+        for k := range response.UsedRates { keys = append(keys, k) }
+        for i := 1; i < len(keys); i++ { j:=i; for j>0 && keys[j-1] > keys[j] { keys[j-1], keys[j] = keys[j], keys[j-1]; j-- } }
+        result += "\n🔁Rates:"
+        for _, k := range keys {
+            parts := strings.Split(k, "2")
+            if len(parts) == 2 {
+                result += fmt.Sprintf(" %s per %s=%0.2f,", parts[0], parts[1], response.UsedRates[k])
+            } else {
+                result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
+            }
+        }
+    }
 
     // Monthly breakdown if available
     if len(response.MonthlyBreakdown) > 0 {

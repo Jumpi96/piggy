@@ -1,15 +1,15 @@
 package repositories
 
 import (
-	"fmt"
+    "fmt"
 
-	"piggy/internal/domain/entities"
-	"piggy/internal/domain/repositories"
+    "piggy/internal/domain/entities"
+    "piggy/internal/domain/repositories"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
+    "github.com/aws/aws-sdk-go/aws"
+    "github.com/aws/aws-sdk-go/service/dynamodb"
+    "github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+    "github.com/aws/aws-sdk-go/service/dynamodb/dynamodbiface"
 )
 
 // DynamoDBParameterRepository implements ParameterRepository using DynamoDB
@@ -36,40 +36,40 @@ func NewDynamoDBParameterRepositoryWithInterface(client dynamodbiface.DynamoDBAP
 
 // Get retrieves a parameter by key
 func (r *DynamoDBParameterRepository) Get(key string) (*entities.Parameter, error) {
-	result, err := r.client.GetItem(&dynamodb.GetItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]*dynamodb.AttributeValue{
-			"Parameter": {
-				S: aws.String(key),
-			},
-		},
-	})
+    result, err := r.client.GetItem(&dynamodb.GetItemInput{
+        TableName: aws.String(r.tableName),
+        Key: map[string]*dynamodb.AttributeValue{
+            "Parameter": {
+                S: aws.String(key),
+            },
+        },
+    })
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get parameter: %w", err)
 	}
 
-	if result.Item == nil {
-		return nil, fmt.Errorf("parameter not found: %s", key)
-	}
+    if result.Item == nil {
+        return nil, fmt.Errorf("parameter not found: %s", key)
+    }
 
-	// DynamoDB stores with different field names, so we need to map manually
-	type dbParameter struct {
-		Parameter      string  `json:"Parameter"`
-		ParameterValue float64 `json:"ParameterValue"`
-	}
+    // Prefer StringValue if present
+    if sv, ok := result.Item["StringValue"]; ok && sv.S != nil {
+        return &entities.Parameter{Key: key, StringValue: aws.StringValue(sv.S)}, nil
+    }
 
-	var dbParam dbParameter
-	err = dynamodbattribute.UnmarshalMap(result.Item, &dbParam)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal parameter: %w", err)
-	}
+    // Fallback to numeric ParameterValue
+    type dbParameter struct {
+        Parameter      string  `json:"Parameter"`
+        ParameterValue float64 `json:"ParameterValue"`
+    }
+    var dbParam dbParameter
+    err = dynamodbattribute.UnmarshalMap(result.Item, &dbParam)
+    if err != nil {
+        return nil, fmt.Errorf("failed to unmarshal parameter: %w", err)
+    }
 
-	if dbParam.ParameterValue == 0.0 {
-		return nil, fmt.Errorf("parameter has zero value: %s", key)
-	}
-
-	return entities.NewParameter(dbParam.Parameter, dbParam.ParameterValue), nil
+    return entities.NewParameter(dbParam.Parameter, dbParam.ParameterValue), nil
 }
 
 // Set stores or updates a parameter
@@ -88,50 +88,50 @@ func (r *DynamoDBParameterRepository) Set(parameter *entities.Parameter) error {
 
 // createParameter creates a new parameter
 func (r *DynamoDBParameterRepository) createParameter(parameter *entities.Parameter) error {
-	// Map to DynamoDB field names
-	type dbParameter struct {
-		Parameter      string  `json:"Parameter"`
-		ParameterValue float64 `json:"ParameterValue"`
-	}
+    item := map[string]*dynamodb.AttributeValue{
+        "Parameter": {S: aws.String(parameter.Key)},
+    }
+    if parameter.StringValue != "" {
+        item["StringValue"] = &dynamodb.AttributeValue{S: aws.String(parameter.StringValue)}
+    } else {
+        item["ParameterValue"] = &dynamodb.AttributeValue{N: aws.String(fmt.Sprintf("%f", parameter.Value))}
+    }
 
-	dbParam := dbParameter{
-		Parameter:      parameter.Key,
-		ParameterValue: parameter.Value,
-	}
-
-	av, err := dynamodbattribute.MarshalMap(dbParam)
-	if err != nil {
-		return fmt.Errorf("failed to marshal parameter: %w", err)
-	}
-
-	input := &dynamodb.PutItemInput{
-		Item:      av,
-		TableName: aws.String(r.tableName),
-	}
-
-	_, err = r.client.PutItem(input)
-	return err
+    _, err := r.client.PutItem(&dynamodb.PutItemInput{
+        TableName: aws.String(r.tableName),
+        Item:      item,
+    })
+    return err
 }
 
 // updateParameter updates an existing parameter
 func (r *DynamoDBParameterRepository) updateParameter(parameter *entities.Parameter) error {
-	input := &dynamodb.UpdateItemInput{
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":v": {
-				N: aws.String(fmt.Sprintf("%.2f", parameter.Value)),
-			},
-		},
-		TableName: aws.String(r.tableName),
-		Key: map[string]*dynamodb.AttributeValue{
-			"Parameter": {
-				S: aws.String(parameter.Key),
-			},
-		},
-		UpdateExpression: aws.String("set ParameterValue = :v"),
-	}
-
-	_, err := r.client.UpdateItem(input)
-	return err
+    // Choose attribute based on value presence
+    key := map[string]*dynamodb.AttributeValue{
+        "Parameter": {S: aws.String(parameter.Key)},
+    }
+    if parameter.StringValue != "" {
+        input := &dynamodb.UpdateItemInput{
+            ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+                ":v": {S: aws.String(parameter.StringValue)},
+            },
+            TableName:        aws.String(r.tableName),
+            Key:              key,
+            UpdateExpression: aws.String("set StringValue = :v"),
+        }
+        _, err := r.client.UpdateItem(input)
+        return err
+    }
+    input := &dynamodb.UpdateItemInput{
+        ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+            ":v": {N: aws.String(fmt.Sprintf("%f", parameter.Value))},
+        },
+        TableName:        aws.String(r.tableName),
+        Key:              key,
+        UpdateExpression: aws.String("set ParameterValue = :v"),
+    }
+    _, err := r.client.UpdateItem(input)
+    return err
 }
 
 // tableExists checks if the DynamoDB table exists

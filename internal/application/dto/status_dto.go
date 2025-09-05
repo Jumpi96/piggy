@@ -20,6 +20,6 @@ type StatusResponse struct {
     DayRemainingDiff  float64            `json:"day_remaining_diff"`
     DailyBreakdown    map[int]float64    `json:"daily_breakdown"`
     UsedAmountPerDay  float64            `json:"used_amount_per_day"`
-    UsedEurToUsd      float64            `json:"used_eur_to_usd"`
-    UsedUsdToArs      float64            `json:"used_usd_to_ars"`
+    UsedBase          string             `json:"used_base"`
+    UsedRates         map[string]float64 `json:"used_rates"`
 }

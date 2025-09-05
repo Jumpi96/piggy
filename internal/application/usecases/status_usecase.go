@@ -12,23 +12,23 @@ import (
 
 // StatusUseCase handles monthly status operations
 type StatusUseCase struct {
-	entryRepo     repositories.EntryRepository
-	parameterRepo repositories.ParameterRepository
-	configService services.ConfigService
+    entryRepo     repositories.EntryRepository
+    parameterRepo repositories.ParameterRepository
+    configService services.ConfigService
 }
 
 // NewStatusUseCase creates a new status use case
 func NewStatusUseCase(entryRepo repositories.EntryRepository, parameterRepo repositories.ParameterRepository, configService services.ConfigService) *StatusUseCase {
-	return &StatusUseCase{
-		entryRepo:     entryRepo,
-		parameterRepo: parameterRepo,
-		configService: configService,
-	}
+    return &StatusUseCase{
+        entryRepo:     entryRepo,
+        parameterRepo: parameterRepo,
+        configService: configService,
+    }
 }
 
 // GetMonthlyStatus generates a comprehensive monthly status report
 func (s *StatusUseCase) GetMonthlyStatus(request dto.StatusRequest) (*dto.StatusResponse, error) {
-    amountPerDay, eurToUsd, usdToArs, err := s.resolveStatusParameters(request)
+    amountPerDay, err := s.resolveAmountPerDay(request)
     if err != nil {
         return nil, err
     }
@@ -43,7 +43,19 @@ func (s *StatusUseCase) GetMonthlyStatus(request dto.StatusRequest) (*dto.Status
     year, month, day := time.Now().In(loc).Date()
     today := time.Date(year, month, day, 0, 0, 0, 0, loc)
 
-    total, cash, balance := s.accumulateMonthly(entries, balanceTags, today, loc, usdToArs, eurToUsd)
+    // Determine base currency
+    pBase, err := s.parameterRepo.Get("CURRENCY")
+    if err != nil || pBase.StringValue == "" {
+        return nil, fmt.Errorf("base currency not configured. Use /set CURRENCY <CODE>")
+    }
+    base := pBase.StringValue
+
+    // Convert and aggregate
+    usedRates := make(map[string]float64)
+    total, cash, balance, err := s.accumulateMonthlyBase(entries, balanceTags, today, loc, base, usedRates)
+    if err != nil {
+        return nil, err
+    }
 
     remainingDays := s.calculateRemainingDays(request.MonthYear, today)
     daysModifier := s.getDaysModifier(request.MonthYear, today)
@@ -57,62 +69,57 @@ func (s *StatusUseCase) GetMonthlyStatus(request dto.StatusRequest) (*dto.Status
         DayRemainingDiff: total - amountPerDay*(remainingDays-daysModifier),
         DailyBreakdown:   s.calculateDailyBreakdown(request.MonthYear, total, today),
         UsedAmountPerDay: amountPerDay,
-        UsedEurToUsd:     eurToUsd,
-        UsedUsdToArs:     usdToArs,
+        UsedBase:         base,
+        UsedRates:        usedRates,
     }
 
     return resp, nil
 }
 
-// resolveStatusParameters returns the effective parameters for status calculations
-func (s *StatusUseCase) resolveStatusParameters(request dto.StatusRequest) (amountPerDay, eurToUsd, usdToArs float64, err error) {
-    amountPerDay = request.AmountPerDay
-    eurToUsd = request.EurToUsd
-    usdToArs = request.UsdToArs
-
+// resolveAmountPerDay returns ApD, fetching when not provided
+func (s *StatusUseCase) resolveAmountPerDay(request dto.StatusRequest) (float64, error) {
+    amountPerDay := request.AmountPerDay
     if amountPerDay == 0 {
-        var p *entities.Parameter
-        p, err = s.parameterRepo.Get("ApD")
+        p, err := s.parameterRepo.Get("ApD")
         if err != nil {
-            return 0, 0, 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
+            return 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
         }
         amountPerDay = p.Value
     }
-    if eurToUsd == 0 {
-        var p *entities.Parameter
-        p, err = s.parameterRepo.Get("EUR2USD")
-        if err != nil {
-            return 0, 0, 0, fmt.Errorf("EUR to USD rate not configured. Use /set EUR2USD <rate>")
-        }
-        eurToUsd = p.Value
-    }
-    if usdToArs == 0 {
-        var p *entities.Parameter
-        p, err = s.parameterRepo.Get("USD2ARS")
-        if err != nil {
-            return 0, 0, 0, fmt.Errorf("USD to ARS rate not configured. Use /set USD2ARS <rate>")
-        }
-        usdToArs = p.Value
-    }
-    return amountPerDay, eurToUsd, usdToArs, nil
+    return amountPerDay, nil
 }
 
 // accumulateMonthly converts and aggregates totals, cash and balance
-func (s *StatusUseCase) accumulateMonthly(entries []entities.Entry, balanceTags []string, today time.Time, loc *time.Location, usdToArs, eurToUsd float64) (total, cash, balance float64) {
+func (s *StatusUseCase) accumulateMonthlyBase(entries []entities.Entry, balanceTags []string, today time.Time, loc *time.Location, base string, usedRates map[string]float64) (total, cash, balance float64, err error) {
     for _, entry := range entries {
         entryDate, _ := time.ParseInLocation("2006-01-02", entry.Date, loc)
-        entryValue := s.convertToEUR(entry.Amount, entry.Currency.Code, usdToArs, eurToUsd)
+        amountInBase, errConv := s.convertToBase(entry.Amount, entry.Currency.Code, base, usedRates)
+        if errConv != nil {
+            return 0, 0, 0, errConv
+        }
 
-        total += entryValue
-
+        total += amountInBase
         if entryDate.Before(today) || entryDate.Equal(today) {
-            cash += entryValue
+            cash += amountInBase
         }
         if s.entryHasBalanceTags(entry.Tags, balanceTags) {
-            balance -= entryValue
+            balance -= amountInBase
         }
     }
-    return
+    return total, cash, balance, nil
+}
+
+func (s *StatusUseCase) convertToBase(amount float64, code, base string, usedRates map[string]float64) (float64, error) {
+    if code == base {
+        return amount, nil
+    }
+    rateKey := fmt.Sprintf("%s2%s", base, code)
+    p, err := s.parameterRepo.Get(rateKey)
+    if err != nil {
+        return 0, fmt.Errorf("missing rate %s. Use /set %s <value>", rateKey, rateKey)
+    }
+    usedRates[rateKey] = p.Value
+    return amount * p.Value, nil
 }
 
 // entryHasBalanceTags checks if entry has any of the balance tags
@@ -127,19 +134,7 @@ func (s *StatusUseCase) entryHasBalanceTags(entryTags, balanceTags []string) boo
 	return false
 }
 
-// convertToEUR converts an amount to EUR based on currency
-func (s *StatusUseCase) convertToEUR(amount float64, currency string, usdToArs, eurToUsd float64) float64 {
-	switch currency {
-	case "EUR":
-		return amount
-	case "ARS":
-		return amount / (usdToArs * eurToUsd)
-	case "USD":
-		return amount / eurToUsd
-	default:
-		return amount / eurToUsd
-	}
-}
+// (old convertToEUR removed; using base-agnostic conversion now)
 
 // calculateRemainingDays calculates remaining days in the month
 func (s *StatusUseCase) calculateRemainingDays(monthYear, today time.Time) float64 {
