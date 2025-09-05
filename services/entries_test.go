@@ -188,3 +188,167 @@ func TestGetMonthStatus(t *testing.T) {
 		t.Errorf("Should have found %v. Found: %v.", 100, response["cash"])
 	}
 }
+
+type mockEntriesRepoForSetCurrencies struct{}
+
+func (m *mockEntriesRepoForSetCurrencies) PutEntry(entry entries.MinimalEntry) error {
+	return nil
+}
+
+func (m *mockEntriesRepoForSetCurrencies) GetEntriesByMonth(monthYear time.Time, tags string) ([]entries.Entry, error) {
+	arsEntry := repository.Entry{
+		ID:     "ars-entry",
+		Amount: -100.0,
+		Currency: repository.Currency{
+			Code:     "ARS",
+			Rate:     1.0,
+			MainRate: 1.0,
+			Fixed:    false,
+		},
+		Date:      "2020-05-01",
+		Account:   "test-account",
+		Category:  "test-category",
+		Tags:      []string{},
+		Created:   time.Now(),
+		Modified:  "2020-04-01 21:19:08.222",
+		Completed: false,
+		Deleted:   false,
+	}
+
+	eurEntry := repository.Entry{
+		ID:     "eur-entry",
+		Amount: -50.0,
+		Currency: repository.Currency{
+			Code:     "EUR",
+			Rate:     1.0,
+			MainRate: 1.0,
+			Fixed:    false,
+		},
+		Date:      "2020-05-01",
+		Account:   "test-account",
+		Category:  "test-category",
+		Tags:      []string{},
+		Created:   time.Now(),
+		Modified:  "2020-04-01 21:19:08.222",
+		Completed: false,
+		Deleted:   false,
+	}
+
+	return []entries.Entry{arsEntry, eurEntry}, nil
+}
+
+func (m *mockEntriesRepoForSetCurrencies) GetEntriesFromTo(from time.Time, to time.Time, tags string) ([]entries.Entry, error) {
+	return m.GetEntriesByMonth(from, tags)
+}
+
+func TestSetCurrencies(t *testing.T) {
+	repo := &mockEntriesRepoForSetCurrencies{}
+	count, err := SetCurrencies(repo, time.Now(), 100.0, 1.2)
+	
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+	
+	if count != 1 {
+		t.Errorf("Expected 1 ARS entry to be updated, got: %d", count)
+	}
+}
+
+type mockEntriesRepoForGetBalance struct{}
+
+func (m *mockEntriesRepoForGetBalance) PutEntry(entry entries.MinimalEntry) error {
+	return nil
+}
+
+func (m *mockEntriesRepoForGetBalance) GetEntriesByMonth(monthYear time.Time, tags string) ([]entries.Entry, error) {
+	return nil, nil
+}
+
+func (m *mockEntriesRepoForGetBalance) GetEntriesFromTo(from time.Time, to time.Time, tags string) ([]entries.Entry, error) {
+	eurEntry := repository.Entry{
+		ID:     "eur-entry",
+		Amount: -100.0,
+		Currency: repository.Currency{Code: "EUR"},
+		Date:      "2020-05-01",
+	}
+
+	arsEntry := repository.Entry{
+		ID:     "ars-entry", 
+		Amount: -120.0,
+		Currency: repository.Currency{Code: "ARS"},
+		Date:      "2020-05-01",
+	}
+
+	usdEntry := repository.Entry{
+		ID:     "usd-entry",
+		Amount: -50.0, 
+		Currency: repository.Currency{Code: "USD"},
+		Date:      "2020-05-01",
+	}
+
+	return []entries.Entry{eurEntry, arsEntry, usdEntry}, nil
+}
+
+func TestGetBalance(t *testing.T) {
+	repo := &mockEntriesRepoForGetBalance{}
+	fromDate := time.Date(2020, 5, 1, 0, 0, 0, 0, time.UTC)
+	toDate := time.Date(2020, 5, 31, 0, 0, 0, 0, time.UTC)
+	amountPerDay := 10.0
+	usdToArs := 100.0
+	eurToUsd := 1.2
+
+	result, err := GetBalance(repo, fromDate, toDate, amountPerDay, usdToArs, eurToUsd)
+	
+	if err != nil {
+		t.Errorf("Unexpected error: %v", err)
+	}
+
+	// EUR: -100, ARS: -120/(100*1.2) = -1, USD: -50/1.2 = -41.67
+	// Total: -100 + (-1) + (-41.67) = -142.67
+	expectedDiff := -100.0 + (-120.0/(usdToArs*eurToUsd)) + (-50.0/eurToUsd)
+	if result["diff"] < expectedDiff-0.1 || result["diff"] > expectedDiff+0.1 {
+		t.Errorf("Expected diff around %v, got: %v", expectedDiff, result["diff"])
+	}
+
+	// 31 days * 10 per day = 310, so dayRemainingDiff = expectedDiff - 310
+	expectedDayRemaining := expectedDiff - (31 * amountPerDay)
+	if result["dayRemainingDiff"] < expectedDayRemaining-0.1 || result["dayRemainingDiff"] > expectedDayRemaining+0.1 {
+		t.Errorf("Expected dayRemainingDiff around %v, got: %v", expectedDayRemaining, result["dayRemainingDiff"])
+	}
+}
+
+func TestSetEntry(t *testing.T) {
+	entry := sampleEntry
+	usdToArs := 100.0
+	eurToUsd := 1.2
+
+	result := setEntry(entry, usdToArs, eurToUsd)
+
+	expectedRate := usdToArs * eurToUsd // 100 * 1.2 = 120
+	if result.Currency.Rate != expectedRate {
+		t.Errorf("Expected currency rate %v, got: %v", expectedRate, result.Currency.Rate)
+	}
+
+	if !result.Currency.Fixed {
+		t.Error("Expected currency to be fixed")
+	}
+
+	if result.Currency.Code != entry.Currency.Code {
+		t.Errorf("Expected currency code %v, got: %v", entry.Currency.Code, result.Currency.Code)
+	}
+
+	if result.Amount != entry.Amount {
+		t.Errorf("Expected amount %v, got: %v", entry.Amount, result.Amount)
+	}
+}
+
+func TestFormatDate(t *testing.T) {
+	dateStr := "2020-05-15"
+	result := formatDate(dateStr)
+
+	expected := time.Date(2020, 5, 15, 0, 0, 0, 0, time.UTC)
+	// Need to account for timezone difference
+	if result.Year() != expected.Year() || result.Month() != expected.Month() || result.Day() != expected.Day() {
+		t.Errorf("Expected date %v, got: %v", expected, result)
+	}
+}
