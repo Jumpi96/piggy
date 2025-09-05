@@ -354,10 +354,11 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
             // k format: BASE2CODE
             parts := strings.Split(k, "2")
             if len(parts) == 2 {
-                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[0], response.UsedRates[k], parts[1])
+                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[1], response.UsedRates[k], parts[0])
             } else {
                 result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
             }
+            result = result[:len(result)-1]
         }
         // trim trailing comma by just letting it be (telegram ok)
     }
@@ -407,11 +408,12 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
         for _, k := range keys {
             parts := strings.Split(k, "2")
             if len(parts) == 2 {
-                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[0], response.UsedRates[k], parts[1])
+                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[1], response.UsedRates[k], parts[0])
             } else {
                 result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
             }
         }
+        result = result[:len(result)-1]
     }
 
     // Monthly breakdown if available
