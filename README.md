@@ -28,7 +28,7 @@ Telegram Bot Webhook → AWS Lambda → Toshl API
 ## Setup
 
 ### Prerequisites
-- Go 1.17+
+- Go 1.25+
 - AWS Account with Lambda and DynamoDB access
 - Telegram Bot Token
 - Toshl API Token
