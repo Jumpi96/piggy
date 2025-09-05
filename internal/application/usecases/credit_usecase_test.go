@@ -63,10 +63,6 @@ func (m *mockParameterRepository) Set(parameter *entities.Parameter) error {
 	return nil
 }
 
-func (m *mockParameterRepository) InitializeStorage() error {
-	return m.err
-}
-
 type mockConfigService struct {
 	creditTags  map[string][]string
 	balanceTags []string

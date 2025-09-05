@@ -77,10 +77,10 @@ func TestDynamoDBParameterRepository_Get(t *testing.T) {
 			key:  "USD2ARS",
 			mockOutput: &dynamodb.GetItemOutput{
 				Item: map[string]*dynamodb.AttributeValue{
-					"parameter": {
+					"Parameter": {
 						S: aws.String("USD2ARS"),
 					},
-					"parameter_value": {
+					"ParameterValue": {
 						N: aws.String("350.75"),
 					},
 				},
@@ -104,10 +104,10 @@ func TestDynamoDBParameterRepository_Get(t *testing.T) {
 			key:  "ZERO_PARAM",
 			mockOutput: &dynamodb.GetItemOutput{
 				Item: map[string]*dynamodb.AttributeValue{
-					"parameter": {
+					"Parameter": {
 						S: aws.String("ZERO_PARAM"),
 					},
-					"parameter_value": {
+					"ParameterValue": {
 						N: aws.String("0.0"),
 					},
 				},
@@ -199,10 +199,10 @@ func TestDynamoDBParameterRepository_Set_ExistingParameter(t *testing.T) {
 	mockClient := &mockDynamoDBClient{
 		getItemOutput: &dynamodb.GetItemOutput{
 			Item: map[string]*dynamodb.AttributeValue{
-				"parameter": {
+				"Parameter": {
 					S: aws.String("EXISTING_PARAM"),
 				},
-				"parameter_value": {
+				"ParameterValue": {
 					N: aws.String("100.0"),
 				},
 			},
@@ -224,115 +224,6 @@ func TestDynamoDBParameterRepository_Set_ExistingParameter(t *testing.T) {
 	expectedCalls := []string{"GetItem", "UpdateItem"}
 	if len(mockClient.callLog) != len(expectedCalls) {
 		t.Errorf("Expected calls %v, got %v", expectedCalls, mockClient.callLog)
-	}
-}
-
-func TestDynamoDBParameterRepository_InitializeStorage_TableExists(t *testing.T) {
-	// Mock client that returns table in ListTables
-	mockClient := &mockDynamoDBClient{
-		listTablesOutput: &dynamodb.ListTablesOutput{
-			TableNames: []*string{
-				aws.String("other-table"),
-				aws.String("test-table"),
-				aws.String("another-table"),
-			},
-		},
-		listTablesError: nil,
-	}
-
-	repo := NewDynamoDBParameterRepositoryWithInterface(mockClient, "test-table")
-
-	err := repo.InitializeStorage()
-
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Should only call ListTables, not CreateTable
-	expectedCalls := []string{"ListTables"}
-	if len(mockClient.callLog) != len(expectedCalls) {
-		t.Errorf("Expected calls %v, got %v", expectedCalls, mockClient.callLog)
-	}
-}
-
-func TestDynamoDBParameterRepository_InitializeStorage_TableDoesNotExist(t *testing.T) {
-	// Mock client that returns empty table list, then allows CreateTable
-	mockClient := &mockDynamoDBClient{
-		listTablesOutput: &dynamodb.ListTablesOutput{
-			TableNames: []*string{
-				aws.String("other-table"),
-			},
-		},
-		listTablesError:  nil,
-		createTableError: nil,
-	}
-
-	repo := NewDynamoDBParameterRepositoryWithInterface(mockClient, "test-table")
-
-	err := repo.InitializeStorage()
-
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Should call ListTables, then CreateTable
-	expectedCalls := []string{"ListTables", "CreateTable"}
-	if len(mockClient.callLog) != len(expectedCalls) {
-		t.Errorf("Expected calls %v, got %v", expectedCalls, mockClient.callLog)
-	}
-}
-
-func TestDynamoDBParameterRepository_tableExists(t *testing.T) {
-	testCases := []struct {
-		name           string
-		tableName      string
-		existingTables []*string
-		expected       bool
-	}{
-		{
-			name:      "table exists",
-			tableName: "test-table",
-			existingTables: []*string{
-				aws.String("other-table"),
-				aws.String("test-table"),
-				aws.String("another-table"),
-			},
-			expected: true,
-		},
-		{
-			name:      "table does not exist",
-			tableName: "missing-table",
-			existingTables: []*string{
-				aws.String("other-table"),
-				aws.String("another-table"),
-			},
-			expected: false,
-		},
-		{
-			name:           "no tables exist",
-			tableName:      "test-table",
-			existingTables: []*string{},
-			expected:       false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			mockClient := &mockDynamoDBClient{
-				listTablesOutput: &dynamodb.ListTablesOutput{
-					TableNames: tc.existingTables,
-				},
-				listTablesError: nil,
-			}
-
-			repo := NewDynamoDBParameterRepositoryWithInterface(mockClient, tc.tableName).(*DynamoDBParameterRepository)
-
-			result := repo.tableExists()
-
-			if result != tc.expected {
-				t.Errorf("Expected tableExists() to return %v, got %v", tc.expected, result)
-			}
-		})
 	}
 }
 

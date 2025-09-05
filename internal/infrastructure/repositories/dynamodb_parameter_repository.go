@@ -39,7 +39,7 @@ func (r *DynamoDBParameterRepository) Get(key string) (*entities.Parameter, erro
 	result, err := r.client.GetItem(&dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]*dynamodb.AttributeValue{
-			"parameter": {
+			"Parameter": {
 				S: aws.String(key),
 			},
 		},
@@ -55,8 +55,8 @@ func (r *DynamoDBParameterRepository) Get(key string) (*entities.Parameter, erro
 
 	// DynamoDB stores with different field names, so we need to map manually
 	type dbParameter struct {
-		Parameter      string  `json:"parameter"`
-		ParameterValue float64 `json:"parameter_value"`
+		Parameter      string  `json:"Parameter"`
+		ParameterValue float64 `json:"ParameterValue"`
 	}
 
 	var dbParam dbParameter
@@ -90,8 +90,8 @@ func (r *DynamoDBParameterRepository) Set(parameter *entities.Parameter) error {
 func (r *DynamoDBParameterRepository) createParameter(parameter *entities.Parameter) error {
 	// Map to DynamoDB field names
 	type dbParameter struct {
-		Parameter      string  `json:"parameter"`
-		ParameterValue float64 `json:"parameter_value"`
+		Parameter      string  `json:"Parameter"`
+		ParameterValue float64 `json:"ParameterValue"`
 	}
 
 	dbParam := dbParameter{
@@ -123,24 +123,15 @@ func (r *DynamoDBParameterRepository) updateParameter(parameter *entities.Parame
 		},
 		TableName: aws.String(r.tableName),
 		Key: map[string]*dynamodb.AttributeValue{
-			"parameter": {
+			"Parameter": {
 				S: aws.String(parameter.Key),
 			},
 		},
-		UpdateExpression: aws.String("set parameter_value = :v"),
+		UpdateExpression: aws.String("set ParameterValue = :v"),
 	}
 
 	_, err := r.client.UpdateItem(input)
 	return err
-}
-
-// InitializeStorage initializes the parameter storage
-func (r *DynamoDBParameterRepository) InitializeStorage() error {
-	// Check if table exists
-	if !r.tableExists() {
-		return r.createTable()
-	}
-	return nil
 }
 
 // tableExists checks if the DynamoDB table exists
@@ -179,13 +170,13 @@ func (r *DynamoDBParameterRepository) createTable() error {
 	input := &dynamodb.CreateTableInput{
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{
-				AttributeName: aws.String("parameter"),
+				AttributeName: aws.String("Parameter"),
 				AttributeType: aws.String("S"),
 			},
 		},
 		KeySchema: []*dynamodb.KeySchemaElement{
 			{
-				AttributeName: aws.String("parameter"),
+				AttributeName: aws.String("Parameter"),
 				KeyType:       aws.String("HASH"),
 			},
 		},

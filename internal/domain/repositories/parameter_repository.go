@@ -9,7 +9,4 @@ type ParameterRepository interface {
 	
 	// Set stores or updates a parameter
 	Set(parameter *entities.Parameter) error
-	
-	// InitializeStorage initializes the parameter storage
-	InitializeStorage() error
 }

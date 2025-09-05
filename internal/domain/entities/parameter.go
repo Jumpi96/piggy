@@ -2,8 +2,8 @@ package entities
 
 // Parameter represents a configuration parameter with a value
 type Parameter struct {
-	Key   string  `json:"parameter"`
-	Value float64 `json:"parameter_value"`
+	Key   string  `json:"Parameter"`
+	Value float64 `json:"ParameterValue"`
 }
 
 // NewParameter creates a new parameter
