@@ -169,48 +169,50 @@ func (c *TelegramController) sendTelegramMessage(chatID int, text string) error 
 // handleStatusCommand handles the /status command
 func (c *TelegramController) handleStatusCommand(message string) string {
 	// Parse message to get parameters
-	monthYear, amountPerDay, eurToUsd, usdToArs, err := c.parseStatusCommand(message)
-	if err != nil {
-		return fmt.Sprintf("❓ %v", err)
-	}
+    monthYear, err := c.parseStatusCommand(message)
+    if err != nil {
+        return fmt.Sprintf("❓ %v", err)
+    }
 
-	request := appdto.StatusRequest{
-		MonthYear:    monthYear,
-		AmountPerDay: amountPerDay,
-		EurToUsd:     eurToUsd,
-		UsdToArs:     usdToArs,
-	}
+    request := appdto.StatusRequest{
+        MonthYear:    monthYear,
+        // Leave numeric fields zero to let use case pull defaults
+        AmountPerDay: 0,
+        EurToUsd:     0,
+        UsdToArs:     0,
+    }
 
     response, err := c.statusUseCase.GetMonthlyStatus(request)
     if err != nil {
         return fmt.Sprintf("❌ Error getting status: %v", err)
     }
 
-    return c.formatStatusResponse(response, request)
+    return c.formatStatusResponse(response)
 }
 
 // handleBalanceCommand handles the /balance command  
 func (c *TelegramController) handleBalanceCommand(message string) string {
 	// Parse message to get parameters
-	fromDate, toDate, amountPerDay, eurToUsd, usdToArs, err := c.parseBalanceCommand(message)
-	if err != nil {
-		return fmt.Sprintf("❓ %v", err)
-	}
+    fromDate, toDate, err := c.parseBalanceCommand(message)
+    if err != nil {
+        return fmt.Sprintf("❓ %v", err)
+    }
 
 	request := appdto.BalanceRequest{
 		FromDate:     fromDate,
 		ToDate:       toDate,
-		AmountPerDay: amountPerDay,
-		UsdToArs:     usdToArs,
-		EurToUsd:     eurToUsd,
-	}
+        // Leave numeric fields zero to let use case pull defaults
+        AmountPerDay: 0,
+        UsdToArs:     0,
+        EurToUsd:     0,
+    }
 
     response, err := c.balanceUseCase.GetBalanceReport(request)
     if err != nil {
         return fmt.Sprintf("❌ Error getting balance: %v", err)
     }
 
-    return c.formatBalanceResponse(response, request)
+    return c.formatBalanceResponse(response)
 }
 
 // handleCreditCommand handles /credit and /pay commands
@@ -285,38 +287,24 @@ func (c *TelegramController) handleSetCommand(message string) string {
 
 // Helper methods for parsing commands and formatting responses
 
-func (c *TelegramController) parseStatusCommand(message string) (time.Time, float64, float64, float64, error) {
-	parts := strings.Fields(message)
-	monthYear := time.Now()
-	
-	// Default parameters from storage
-	amountPerDay, err := c.parameterUseCase.GetParameter("ApD")
-	if err != nil {
-		return monthYear, 0, 0, 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
-	}
-	
-	eurToUsd, err := c.parameterUseCase.GetParameter("EUR2USD")
-	if err != nil {
-		return monthYear, 0, 0, 0, fmt.Errorf("EUR to USD rate not configured. Use /set EUR2USD <rate>")
-	}
-	
-	usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
-	if err != nil {
-		return monthYear, 0, 0, 0, fmt.Errorf("USD to ARS rate not configured. Use /set USD2ARS <rate>")
-	}
+func (c *TelegramController) parseStatusCommand(message string) (time.Time, error) {
+    parts := strings.Fields(message)
+    monthYear := time.Now()
 
 	// Parse optional month parameter
 	if len(parts) > 1 {
-		monthYear, err = time.ParseInLocation("2006-01-02", parts[1]+"-01", time.Local)
-		if err != nil {
-			return monthYear, 0, 0, 0, fmt.Errorf("invalid month format. Use YYYY-MM")
-		}
-	}
+        loc, _ := time.LoadLocation(c.configService.GetTimeZone())
+        var err error
+        monthYear, err = time.ParseInLocation("2006-01-02", parts[1]+"-01", loc)
+        if err != nil {
+            return monthYear, fmt.Errorf("invalid month format. Use YYYY-MM")
+        }
+    }
 
-	return monthYear, amountPerDay.Value, eurToUsd.Value, usdToArs.Value, nil
+    return monthYear, nil
 }
 
-func (c *TelegramController) parseBalanceCommand(message string) (time.Time, time.Time, float64, float64, float64, error) {
+func (c *TelegramController) parseBalanceCommand(message string) (time.Time, time.Time, error) {
     // Use configured timezone consistently
     loc, _ := time.LoadLocation(c.configService.GetTimeZone())
     now := time.Now().In(loc)
@@ -329,11 +317,11 @@ func (c *TelegramController) parseBalanceCommand(message string) (time.Time, tim
         var err error
         fromDate, err = time.ParseInLocation("2006-01-02", parts[1], loc)
         if err != nil {
-            return fromDate, toDate, 0, 0, 0, fmt.Errorf("invalid 'from' date. Use YYYY-MM-DD")
+            return fromDate, toDate, fmt.Errorf("invalid 'from' date. Use YYYY-MM-DD")
         }
         toDate, err = time.ParseInLocation("2006-01-02", parts[2], loc)
         if err != nil {
-            return fromDate, toDate, 0, 0, 0, fmt.Errorf("invalid 'to' date. Use YYYY-MM-DD")
+            return fromDate, toDate, fmt.Errorf("invalid 'to' date. Use YYYY-MM-DD")
         }
         if toDate.Before(fromDate) {
             // Swap to keep a valid range
@@ -341,32 +329,15 @@ func (c *TelegramController) parseBalanceCommand(message string) (time.Time, tim
         }
     } else if len(parts) == 2 {
         // If a single date is provided, require both for clarity
-        return fromDate, toDate, 0, 0, 0, fmt.Errorf("usage: /balance <from YYYY-MM-DD> <to YYYY-MM-DD>")
+        return fromDate, toDate, fmt.Errorf("usage: /balance <from YYYY-MM-DD> <to YYYY-MM-DD>")
     }
-
-    // Get parameters from storage
-    amountPerDay, err := c.parameterUseCase.GetParameter("ApD")
-    if err != nil {
-        return fromDate, toDate, 0, 0, 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
-    }
-
-    eurToUsd, err := c.parameterUseCase.GetParameter("EUR2USD")
-    if err != nil {
-        return fromDate, toDate, 0, 0, 0, fmt.Errorf("EUR to USD rate not configured. Use /set EUR2USD <rate>")
-    }
-
-    usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
-    if err != nil {
-        return fromDate, toDate, 0, 0, 0, fmt.Errorf("USD to ARS rate not configured. Use /set USD2ARS <rate>")
-    }
-
-    return fromDate, toDate, amountPerDay.Value, eurToUsd.Value, usdToArs.Value, nil
+    return fromDate, toDate, nil
 }
 
-func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse, request appdto.StatusRequest) string {
+func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse) string {
     result := fmt.Sprintf("\n🐷PERIOD: %v", response.Period)
     // Include parameters used in the calculation
-    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", request.AmountPerDay, request.EurToUsd, request.UsdToArs)
+    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", response.UsedAmountPerDay, response.UsedEurToUsd, response.UsedUsdToArs)
     result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
     result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: €%0.2f", response.DayRemainingDiff)
     result += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", response.DayRemaining)
@@ -401,10 +372,10 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
     return result
 }
 
-func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse, request appdto.BalanceRequest) string {
+func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse) string {
     // Header period and parameters used
     result := fmt.Sprintf("\n🐷PERIOD: %s to %s", response.FromDate, response.ToDate)
-    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", request.AmountPerDay, request.EurToUsd, request.UsdToArs)
+    result += fmt.Sprintf("\n💳Using €%0.2f per day, $%0.2f per €UR and AR$%0.2f per U$D", response.UsedAmountPerDay, response.UsedEurToUsd, response.UsedUsdToArs)
 
     // Monthly breakdown if available
     if len(response.MonthlyBreakdown) > 0 {

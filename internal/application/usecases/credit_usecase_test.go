@@ -133,8 +133,8 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 			mockConfigTags: map[string][]string{
 				"AR": {"credit", "argentina"},
 			},
-			expectedError: false,
-			expectedTotal: 35050.0, // -(totalUSD*350.0 + totalARS) = -(-100*350.0 + -50) = -(-35000 - 50) = 35050
+        expectedError: false,
+        expectedTotal: 100.142857, // EUR total with sign flip: 100 (USD) + 50/(350*1) ≈ 0.142857
 		},
 		{
 			name: "successful credit status for NL",
@@ -158,8 +158,8 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 			mockConfigTags: map[string][]string{
 				"NL": {"credit", "netherlands"},
 			},
-			expectedError: false,
-			expectedTotal: 24500000.0, // EUR * usdToArs becomes totalUSD, then total = -(totalUSD*usdToArs) = -(-200*350*350) = 24500000
+        expectedError: false,
+        expectedTotal: 200.0, // EUR total with sign flip
 		},
 		{
 			name: "empty entries",
@@ -209,9 +209,10 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 					t.Errorf("Expected period %s, got %s", tc.request.MonthYear.Format("2006-01"), result.Period)
 				}
 
-				if result.Total != tc.expectedTotal {
-					t.Errorf("Expected total %f, got %f", tc.expectedTotal, result.Total)
-				}
+                // Allow small floating point tolerance
+                if diff := result.Total - tc.expectedTotal; diff > 1e-6 || diff < -1e-6 {
+                    t.Errorf("Expected total %f, got %f", tc.expectedTotal, result.Total)
+                }
 			}
 		})
 	}

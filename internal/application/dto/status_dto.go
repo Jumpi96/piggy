@@ -12,11 +12,14 @@ type StatusRequest struct {
 
 // StatusResponse represents the response from status operations
 type StatusResponse struct {
-	Period            string             `json:"period"`
-	Difference        float64            `json:"difference"`
-	Cash              float64            `json:"cash"`
-	Balance           float64            `json:"balance"`
-	DayRemaining      float64            `json:"day_remaining"`
-	DayRemainingDiff  float64            `json:"day_remaining_diff"`
-	DailyBreakdown    map[int]float64    `json:"daily_breakdown"`
+    Period            string             `json:"period"`
+    Difference        float64            `json:"difference"`
+    Cash              float64            `json:"cash"`
+    Balance           float64            `json:"balance"`
+    DayRemaining      float64            `json:"day_remaining"`
+    DayRemainingDiff  float64            `json:"day_remaining_diff"`
+    DailyBreakdown    map[int]float64    `json:"daily_breakdown"`
+    UsedAmountPerDay  float64            `json:"used_amount_per_day"`
+    UsedEurToUsd      float64            `json:"used_eur_to_usd"`
+    UsedUsdToArs      float64            `json:"used_usd_to_ars"`
 }

@@ -297,17 +297,14 @@ func TestTelegramController_handleStatusCommand(t *testing.T) {
 			},
 			expectError: false,
 		},
-		{
-			name:    "missing parameter",
-			message: "/status",
-			mockParameters: map[string]*entities.Parameter{
-				// Missing ApD parameter
-				"EUR2USD": entities.NewParameter("EUR2USD", 1.18),
-				"USD2ARS": entities.NewParameter("USD2ARS", 350.0),
-			},
-			expectedContains: []string{"❓", "amount per day not configured"},
-			expectError: false,
-		},
+        {
+            name:    "missing parameter",
+            message: "/status",
+            mockParameters: map[string]*entities.Parameter{}, // Controller no longer reads params
+            mockError: fmt.Errorf("amount per day not configured. Use /set ApD <amount>"),
+            expectedContains: []string{"❌", "Error getting status", "amount per day not configured"},
+            expectError: true,
+        },
 	}
 
 	for _, tc := range testCases {
@@ -360,28 +357,26 @@ func TestTelegramController_handleCreditCommand(t *testing.T) {
 		expectedContains   []string
 		expectError        bool
 	}{
-		{
-			name:    "successful credit AR command",
-			message: "/creditAR",
-			isPay:   false,
-			mockParameters: map[string]*entities.Parameter{
-				"USD2ARS": entities.NewParameter("USD2ARS", 350.0),
-			},
-			mockCreditResponse: &appdto.CreditResponse{
-				Period:   "2023-01",
-				TotalUSD: 100.0,
-				TotalARS: 5000.0,
-				Total:    200.0,
-				Items:    []appdto.CreditItem{},
-			},
-			expectedContains: []string{
-				"💳CREDIT REPORT",
-				"🗓️Period: 2023-01",
-				"💵Total USD: $100.00",
-				"💰Total: €200.00",
-			},
-			expectError: false,
-		},
+        {
+            name:    "successful credit AR command",
+            message: "/creditAR",
+            isPay:   false,
+            mockParameters: map[string]*entities.Parameter{
+                "USD2ARS": entities.NewParameter("USD2ARS", 350.0),
+                "EUR2USD": entities.NewParameter("EUR2USD", 1.18),
+            },
+            mockCreditResponse: &appdto.CreditResponse{
+                Period:   "2023-01",
+                Total:    200.0,
+                Items:    []appdto.CreditItem{},
+            },
+            expectedContains: []string{
+                "💳CREDIT REPORT",
+                "🐷PERIOD: 2023-01",
+                "💰TOTAL: €200.00",
+            },
+            expectError: false,
+        },
 		{
 			name:             "missing country code",
 			message:          "/credit",

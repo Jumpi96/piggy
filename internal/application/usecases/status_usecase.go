@@ -1,12 +1,13 @@
 package usecases
 
 import (
-	"fmt"
-	"time"
+    "fmt"
+    "time"
 
-	"piggy/internal/application/dto"
-	"piggy/internal/domain/repositories"
-	"piggy/internal/domain/services"
+    "piggy/internal/application/dto"
+    "piggy/internal/domain/entities"
+    "piggy/internal/domain/repositories"
+    "piggy/internal/domain/services"
 )
 
 // StatusUseCase handles monthly status operations
@@ -27,53 +28,91 @@ func NewStatusUseCase(entryRepo repositories.EntryRepository, parameterRepo repo
 
 // GetMonthlyStatus generates a comprehensive monthly status report
 func (s *StatusUseCase) GetMonthlyStatus(request dto.StatusRequest) (*dto.StatusResponse, error) {
-	entries, err := s.entryRepo.GetByMonth(request.MonthYear, "")
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve entries: %w", err)
-	}
+    amountPerDay, eurToUsd, usdToArs, err := s.resolveStatusParameters(request)
+    if err != nil {
+        return nil, err
+    }
 
-	// Get balance tags from config
-	balanceTags := s.configService.GetBalanceTags()
+    entries, err := s.entryRepo.GetByMonth(request.MonthYear, "")
+    if err != nil {
+        return nil, fmt.Errorf("failed to retrieve entries: %w", err)
+    }
 
-	// Calculate current date and remaining days
-	currentLocation, _ := time.LoadLocation(s.configService.GetTimeZone())
-	year, month, day := time.Now().In(currentLocation).Date()
-	today := time.Date(year, month, day, 0, 0, 0, 0, currentLocation)
-	
-	remainingDays := s.calculateRemainingDays(request.MonthYear, today)
-	daysModifier := s.getDaysModifier(request.MonthYear, today)
+    balanceTags := s.configService.GetBalanceTags()
+    loc, _ := time.LoadLocation(s.configService.GetTimeZone())
+    year, month, day := time.Now().In(loc).Date()
+    today := time.Date(year, month, day, 0, 0, 0, 0, loc)
 
-	var total, cash, balance float64
+    total, cash, balance := s.accumulateMonthly(entries, balanceTags, today, loc, usdToArs, eurToUsd)
 
-	// Process all entries
-	for _, entry := range entries {
-		entryDate, _ := time.ParseInLocation("2006-01-02", entry.Date, currentLocation)
-		entryValue := s.convertToEUR(entry.Amount, entry.Currency.Code, request.UsdToArs, request.EurToUsd)
+    remainingDays := s.calculateRemainingDays(request.MonthYear, today)
+    daysModifier := s.getDaysModifier(request.MonthYear, today)
 
-		total += entryValue
+    resp := &dto.StatusResponse{
+        Period:           request.MonthYear.Format("2006-01"),
+        Difference:       total,
+        Cash:             cash,
+        Balance:          balance,
+        DayRemaining:     total / remainingDays,
+        DayRemainingDiff: total - amountPerDay*(remainingDays-daysModifier),
+        DailyBreakdown:   s.calculateDailyBreakdown(request.MonthYear, total, today),
+        UsedAmountPerDay: amountPerDay,
+        UsedEurToUsd:     eurToUsd,
+        UsedUsdToArs:     usdToArs,
+    }
 
-		// Add to cash if entry is in the past or today
-		if entryDate.Before(today) || entryDate.Equal(today) {
-			cash += entryValue
-		}
+    return resp, nil
+}
 
-		// Add to balance if entry has any balance tag
-		if s.entryHasBalanceTags(entry.Tags, balanceTags) {
-			balance -= entryValue
-		}
-	}
+// resolveStatusParameters returns the effective parameters for status calculations
+func (s *StatusUseCase) resolveStatusParameters(request dto.StatusRequest) (amountPerDay, eurToUsd, usdToArs float64, err error) {
+    amountPerDay = request.AmountPerDay
+    eurToUsd = request.EurToUsd
+    usdToArs = request.UsdToArs
 
-	response := &dto.StatusResponse{
-		Period:           request.MonthYear.Format("2006-01"),
-		Difference:       total,
-		Cash:             cash,
-		Balance:          balance,
-		DayRemaining:     total / remainingDays,
-		DayRemainingDiff: total - request.AmountPerDay*(remainingDays-daysModifier),
-		DailyBreakdown:   s.calculateDailyBreakdown(request.MonthYear, total, today),
-	}
+    if amountPerDay == 0 {
+        var p *entities.Parameter
+        p, err = s.parameterRepo.Get("ApD")
+        if err != nil {
+            return 0, 0, 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
+        }
+        amountPerDay = p.Value
+    }
+    if eurToUsd == 0 {
+        var p *entities.Parameter
+        p, err = s.parameterRepo.Get("EUR2USD")
+        if err != nil {
+            return 0, 0, 0, fmt.Errorf("EUR to USD rate not configured. Use /set EUR2USD <rate>")
+        }
+        eurToUsd = p.Value
+    }
+    if usdToArs == 0 {
+        var p *entities.Parameter
+        p, err = s.parameterRepo.Get("USD2ARS")
+        if err != nil {
+            return 0, 0, 0, fmt.Errorf("USD to ARS rate not configured. Use /set USD2ARS <rate>")
+        }
+        usdToArs = p.Value
+    }
+    return amountPerDay, eurToUsd, usdToArs, nil
+}
 
-	return response, nil
+// accumulateMonthly converts and aggregates totals, cash and balance
+func (s *StatusUseCase) accumulateMonthly(entries []entities.Entry, balanceTags []string, today time.Time, loc *time.Location, usdToArs, eurToUsd float64) (total, cash, balance float64) {
+    for _, entry := range entries {
+        entryDate, _ := time.ParseInLocation("2006-01-02", entry.Date, loc)
+        entryValue := s.convertToEUR(entry.Amount, entry.Currency.Code, usdToArs, eurToUsd)
+
+        total += entryValue
+
+        if entryDate.Before(today) || entryDate.Equal(today) {
+            cash += entryValue
+        }
+        if s.entryHasBalanceTags(entry.Tags, balanceTags) {
+            balance -= entryValue
+        }
+    }
+    return
 }
 
 // entryHasBalanceTags checks if entry has any of the balance tags
