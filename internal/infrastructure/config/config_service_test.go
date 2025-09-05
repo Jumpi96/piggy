@@ -9,10 +9,10 @@ import (
 
 func TestConfigService_GetCreditTags(t *testing.T) {
 	// Store original env vars and restore after test
-	originalCreditAR := os.Getenv("CREDIT_AR_TAG")
+	originalCreditAR := os.Getenv("CREDIT_TAG")
 	originalCreditNL := os.Getenv("CREDIT_NL_TAG")
 	defer func() {
-		restoreEnv("CREDIT_AR_TAG", originalCreditAR)
+		restoreEnv("CREDIT_TAG", originalCreditAR)
 		restoreEnv("CREDIT_NL_TAG", originalCreditNL)
 	}()
 

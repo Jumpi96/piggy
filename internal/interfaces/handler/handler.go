@@ -26,7 +26,7 @@ type Handler struct {
 func NewHandler() *Handler {
 	// Initialize AWS session and DynamoDB client
 	awsSession := session.Must(session.NewSession(&aws.Config{
-		Region: aws.String(getEnv("AWS_REGION", "us-east-1")),
+		Region: aws.String(getEnv("AWS_REGION", "us-west-2")),
 	}))
 	dynamoClient := dynamodb.New(awsSession)
 
@@ -35,10 +35,10 @@ func NewHandler() *Handler {
 	toshlClient := external.NewToshlClient(toshlToken)
 
 	// Initialize repositories
-	timeZone := getEnv("TIMEZONE", "Europe/Amsterdam")
+	timeZone := getEnv("TIME_ZONE", "Europe/Amsterdam")
 	entryRepo := repositories.NewToshlEntryRepository(toshlClient, timeZone)
 
-	parameterTableName := getEnv("PARAMETER_TABLE_NAME", "piggy-parameters")
+	parameterTableName := getEnv("PARAMETER_TABLE_NAME", "piggy")
 	parameterRepo := repositories.NewDynamoDBParameterRepository(dynamoClient, parameterTableName)
 
 	// Initialize config service
