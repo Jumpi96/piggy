@@ -358,9 +358,8 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
             } else {
                 result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
             }
-            result = result[:len(result)-1]
         }
-        // trim trailing comma by just letting it be (telegram ok)
+        result = result[:len(result)-1]
     }
     result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s %0.2f", response.UsedBase, response.Difference)
     result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: %s %0.2f", response.UsedBase, response.DayRemainingDiff)
