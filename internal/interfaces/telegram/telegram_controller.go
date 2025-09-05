@@ -380,7 +380,7 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
     currencySymbol := c.getCurrencySymbol()
     result := fmt.Sprintf("\n🐷PERIOD: %v", response.Period)
     // Base and rates
-    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f.", currencySymbol, currencySymbol, response.UsedAmountPerDay)
+    result += fmt.Sprintf("\n💳Base: %s; ApD: %s%0.2f.", currencySymbol, currencySymbol, response.UsedAmountPerDay)
     if len(response.UsedRates) > 0 {
         // Build sorted list of rates
         keys := make([]string, 0, len(response.UsedRates))
@@ -398,10 +398,10 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
         }
         result = result[:len(result)-1]
     }
-    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s %0.2f", currencySymbol, response.Difference)
-    result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: %s %0.2f", currencySymbol, response.DayRemainingDiff)
-    result += fmt.Sprintf("\n💶That means for each remaining day: %s %0.2f", currencySymbol, response.DayRemaining)
-    result += fmt.Sprintf("\n⚖️Money to balance: %s %0.2f", currencySymbol, response.Balance)
+    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s%0.2f", currencySymbol, response.Difference)
+    result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: %s%0.2f", currencySymbol, response.DayRemainingDiff)
+    result += fmt.Sprintf("\n💶That means for each remaining day: %s%0.2f", currencySymbol, response.DayRemaining)
+    result += fmt.Sprintf("\n⚖️Money to balance: %s%0.2f", currencySymbol, response.Balance)
 
     // Daily breakdown (sorted by day)
     if len(response.DailyBreakdown) > 0 {
@@ -422,13 +422,13 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
         result += "\n"
         for _, d := range days {
             amount := response.DailyBreakdown[d]
-            result += fmt.Sprintf("\n %d ................. %s %0.2f", d, currencySymbol, amount)
+            result += fmt.Sprintf("\n %d ................. %s%0.2f", d, currencySymbol, amount)
         }
         result += "\n"
     }
 
     // Cash at the end, after the breakdown
-    result += fmt.Sprintf("\n💰Your available cash should be: %s %0.2f", currencySymbol, response.Cash)
+    result += fmt.Sprintf("\n💰Your available cash should be: %s%0.2f", currencySymbol, response.Cash)
     return result
 }
 
@@ -436,7 +436,7 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
     currencySymbol := c.getCurrencySymbol()
     // Header period and parameters used
     result := fmt.Sprintf("\n🐷PERIOD: %s to %s", response.FromDate, response.ToDate)
-    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f.", currencySymbol, currencySymbol, response.UsedAmountPerDay)
+    result += fmt.Sprintf("\n💳Base: %s; ApD: %s%0.2f.", currencySymbol, currencySymbol, response.UsedAmountPerDay)
     if len(response.UsedRates) > 0 {
         keys := make([]string, 0, len(response.UsedRates))
         for k := range response.UsedRates { keys = append(keys, k) }
@@ -472,14 +472,14 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
         result += "\n"
         for _, m := range months {
             amount := response.MonthlyBreakdown[m]
-            result += fmt.Sprintf("\n %s ................. %s %0.2f", m, currencySymbol, amount)
+            result += fmt.Sprintf("\n %s ................. %s%0.2f", m, currencySymbol, amount)
         }
         result += "\n"
     }
 
     // Summary lines
-    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s %0.2f", currencySymbol, response.Difference)
-    result += fmt.Sprintf("\n💷Comparing with what you expected to have: %s %0.2f", currencySymbol, response.DayRemainingDiff)
+    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s%0.2f", currencySymbol, response.Difference)
+    result += fmt.Sprintf("\n💷Comparing with what you expected to have: %s%0.2f", currencySymbol, response.DayRemainingDiff)
     return result
 }
 

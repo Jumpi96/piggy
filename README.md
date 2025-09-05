@@ -119,15 +119,23 @@ The bot supports separate symbols for display while keeping currency logic simpl
 When no symbol is defined, the currency code is used for display.
 
 #### Conversion Rate Examples
-With EUR as base currency, you only need to set rates FROM EUR:
+**IMPORTANT**: Rate keys should follow the format `"FROM2TO": rate_value`
+
+With EUR as base currency, you can set rates in either direction:
 ```bash
+# Option 1: Set rates FROM base currency  
 /set EUR2ARS 1450    # 1 EUR = 1450 ARS  
 /set EUR2USD 1.18    # 1 EUR = 1.18 USD
+
+# Option 2: Set rates TO base currency
+/set ARS2EUR 0.00069 # 1 ARS = 0.00069 EUR
+/set USD2EUR 0.85    # 1 USD = 0.85 EUR
 ```
 
-The bot automatically handles conversions in both directions:
-- Converting ARS→EUR: uses `EUR2ARS` rate with division (ARS_amount / 1450)
-- Converting EUR→ARS: uses `EUR2ARS` rate with multiplication (EUR_amount * 1450)
+**Rate Direction Matters**: 
+- `"EUR2ARS": 1450` means 1 EUR = 1450 ARS
+- `"ARS2EUR": 0.00069` means 1 ARS = 0.00069 EUR
+- These are inverses: 1450 ≈ 1/0.00069
 
 ### Local Development
 ```bash
