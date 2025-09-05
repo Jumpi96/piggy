@@ -48,7 +48,8 @@ func (s *StatusUseCase) GetMonthlyStatus(request dto.StatusRequest) (*dto.Status
     if err != nil || pBase.StringValue == "" {
         return nil, fmt.Errorf("base currency not configured. Use /set CURRENCY <CODE>")
     }
-    base := pBase.StringValue
+    // Extract just the currency code, not the symbol for conversions
+    base := services.GetCurrencyCode(pBase.StringValue)
 
     // Convert and aggregate
     usedRates := make(map[string]float64)

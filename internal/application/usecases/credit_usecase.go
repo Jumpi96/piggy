@@ -38,13 +38,20 @@ func (c *CreditUseCase) GetCreditStatus(request dto.CreditRequest) (*dto.CreditR
 		return nil, fmt.Errorf("failed to retrieve credit entries: %w", err)
 	}
 
+	// Get base currency for display
+    pBase, err := c.parameterRepo.Get("CURRENCY")
+    var baseCurrencyCode string = "EUR" // default fallback
+    if err == nil && pBase.StringValue != "" {
+        baseCurrencyCode = services.GetCurrencyCode(pBase.StringValue)
+    }
+
 	// Calculate totals and prepare response
     response := &dto.CreditResponse{
         Period: request.MonthYear.Format("2006-01"),
         Items:  make([]dto.CreditItem, 0),
     }
 
-    var totalEUR float64
+    var totalBase float64
     eurToUsd := request.EurToUsd
     if eurToUsd == 0 {
         eurToUsd = 1.0
@@ -55,30 +62,43 @@ func (c *CreditUseCase) GetCreditStatus(request dto.CreditRequest) (*dto.CreditR
     }
 
     for _, entry := range entries {
-        // Convert all to EUR, then flip sign so expenses display positive
-        var eur float64
+        // Convert all to base currency, then flip sign so expenses display positive
+        var baseAmount float64
         switch entry.Currency.Code {
         case "EUR":
-            eur = entry.Amount
+            if baseCurrencyCode == "EUR" {
+                baseAmount = entry.Amount
+            } else {
+                // Convert EUR to base currency (this would need additional rates)
+                baseAmount = entry.Amount / eurToUsd
+            }
         case "USD":
-            eur = entry.Amount / eurToUsd
+            if baseCurrencyCode == "USD" {
+                baseAmount = entry.Amount
+            } else {
+                baseAmount = entry.Amount / eurToUsd
+            }
         case "ARS":
-            eur = entry.Amount / (usdToArs * eurToUsd)
+            if baseCurrencyCode == "ARS" {
+                baseAmount = entry.Amount
+            } else {
+                baseAmount = entry.Amount / (usdToArs * eurToUsd)
+            }
         default:
-            eur = entry.Amount / eurToUsd
+            baseAmount = entry.Amount / eurToUsd
         }
 
-        displayAmount := -eur
-        totalEUR += displayAmount
+        displayAmount := -baseAmount
+        totalBase += displayAmount
 
         response.Items = append(response.Items, dto.CreditItem{
             Description: fmt.Sprintf("%s %s", entry.Category, entry.Desc),
             Amount:      displayAmount,
-            Currency:    "EUR",
+            Currency:    baseCurrencyCode,
         })
     }
 
-    response.Total = totalEUR
+    response.Total = totalBase
     return response, nil
 }
 

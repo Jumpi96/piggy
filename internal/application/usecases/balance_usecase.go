@@ -45,7 +45,8 @@ func (b *BalanceUseCase) GetBalanceReport(request dto.BalanceRequest) (*dto.Bala
     if err != nil || pBase.StringValue == "" {
         return nil, fmt.Errorf("base currency not configured. Use /set CURRENCY <CODE>")
     }
-    base := pBase.StringValue
+    // Extract just the currency code, not the symbol for conversions
+    base := services.GetCurrencyCode(pBase.StringValue)
 
     // Compute totals and monthly sums in base
     usedRates := make(map[string]float64)
