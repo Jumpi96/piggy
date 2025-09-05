@@ -304,27 +304,50 @@ func (c *TelegramController) parseStatusCommand(message string) (time.Time, floa
 }
 
 func (c *TelegramController) parseBalanceCommand(message string) (time.Time, time.Time, float64, float64, float64, error) {
-	now := time.Now()
-	fromDate := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.Local)
-	toDate := now
-	
-	// Get parameters from storage
-	amountPerDay, err := c.parameterUseCase.GetParameter("ApD")
-	if err != nil {
-		return fromDate, toDate, 0, 0, 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
-	}
-	
-	eurToUsd, err := c.parameterUseCase.GetParameter("EUR2USD")
-	if err != nil {
-		return fromDate, toDate, 0, 0, 0, fmt.Errorf("EUR to USD rate not configured. Use /set EUR2USD <rate>")
-	}
-	
-	usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
-	if err != nil {
-		return fromDate, toDate, 0, 0, 0, fmt.Errorf("USD to ARS rate not configured. Use /set USD2ARS <rate>")
-	}
+    // Use configured timezone consistently
+    loc, _ := time.LoadLocation(c.configService.GetTimeZone())
+    now := time.Now().In(loc)
+    fromDate := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, loc)
+    toDate := now
 
-	return fromDate, toDate, amountPerDay.Value, eurToUsd.Value, usdToArs.Value, nil
+    parts := strings.Fields(message)
+    if len(parts) >= 3 {
+        // Parse explicit from/to dates in YYYY-MM-DD
+        var err error
+        fromDate, err = time.ParseInLocation("2006-01-02", parts[1], loc)
+        if err != nil {
+            return fromDate, toDate, 0, 0, 0, fmt.Errorf("invalid 'from' date. Use YYYY-MM-DD")
+        }
+        toDate, err = time.ParseInLocation("2006-01-02", parts[2], loc)
+        if err != nil {
+            return fromDate, toDate, 0, 0, 0, fmt.Errorf("invalid 'to' date. Use YYYY-MM-DD")
+        }
+        if toDate.Before(fromDate) {
+            // Swap to keep a valid range
+            fromDate, toDate = toDate, fromDate
+        }
+    } else if len(parts) == 2 {
+        // If a single date is provided, require both for clarity
+        return fromDate, toDate, 0, 0, 0, fmt.Errorf("usage: /balance <from YYYY-MM-DD> <to YYYY-MM-DD>")
+    }
+
+    // Get parameters from storage
+    amountPerDay, err := c.parameterUseCase.GetParameter("ApD")
+    if err != nil {
+        return fromDate, toDate, 0, 0, 0, fmt.Errorf("amount per day not configured. Use /set ApD <amount>")
+    }
+
+    eurToUsd, err := c.parameterUseCase.GetParameter("EUR2USD")
+    if err != nil {
+        return fromDate, toDate, 0, 0, 0, fmt.Errorf("EUR to USD rate not configured. Use /set EUR2USD <rate>")
+    }
+
+    usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
+    if err != nil {
+        return fromDate, toDate, 0, 0, 0, fmt.Errorf("USD to ARS rate not configured. Use /set USD2ARS <rate>")
+    }
+
+    return fromDate, toDate, amountPerDay.Value, eurToUsd.Value, usdToArs.Value, nil
 }
 
 func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse, request appdto.StatusRequest) string {
