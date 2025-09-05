@@ -228,3 +228,117 @@ func TestParameterStoreService_SetFloatValue(t *testing.T) {
 		t.Errorf("Expected USD2EUR rate 0.85, got %f", rate)
 	}
 }
+
+func TestParameterStoreService_GetCurrencySymbol(t *testing.T) {
+	tests := []struct {
+		name             string
+		configJSON       string
+		expectedSymbol   string
+	}{
+		{
+			name: "Currency without symbol",
+			configJSON: `{
+				"currency": "USD",
+				"conversions": {},
+				"budgeting": {"amountPerDay": 100.0}
+			}`,
+			expectedSymbol: "USD",
+		},
+		{
+			name: "Currency with symbol",
+			configJSON: `{
+				"currency": "ARS/AR$",
+				"conversions": {},
+				"budgeting": {"amountPerDay": 100.0}
+			}`,
+			expectedSymbol: "AR$",
+		},
+		{
+			name: "USD with $ symbol",
+			configJSON: `{
+				"currency": "USD/$",
+				"conversions": {},
+				"budgeting": {"amountPerDay": 100.0}
+			}`,
+			expectedSymbol: "$",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mockClient := &mockSSMClient{
+				parameters: map[string]string{
+					"/piggy/config": test.configJSON,
+				},
+			}
+
+			service := NewParameterStoreServiceWithInterface(mockClient, "/piggy/config")
+
+			symbol, err := service.GetCurrencySymbol()
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+
+			if symbol != test.expectedSymbol {
+				t.Errorf("Expected symbol %s, got %s", test.expectedSymbol, symbol)
+			}
+		})
+	}
+}
+
+func TestParameterStoreService_GetCurrencyCode(t *testing.T) {
+	tests := []struct {
+		name           string
+		configJSON     string
+		expectedCode   string
+	}{
+		{
+			name: "Currency without symbol",
+			configJSON: `{
+				"currency": "USD",
+				"conversions": {},
+				"budgeting": {"amountPerDay": 100.0}
+			}`,
+			expectedCode: "USD",
+		},
+		{
+			name: "Currency with symbol",
+			configJSON: `{
+				"currency": "ARS/AR$",
+				"conversions": {},
+				"budgeting": {"amountPerDay": 100.0}
+			}`,
+			expectedCode: "ARS",
+		},
+		{
+			name: "USD with $ symbol",
+			configJSON: `{
+				"currency": "USD/$",
+				"conversions": {},
+				"budgeting": {"amountPerDay": 100.0}
+			}`,
+			expectedCode: "USD",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			mockClient := &mockSSMClient{
+				parameters: map[string]string{
+					"/piggy/config": test.configJSON,
+				},
+			}
+
+			service := NewParameterStoreServiceWithInterface(mockClient, "/piggy/config")
+
+			code, err := service.GetCurrencyCode()
+			if err != nil {
+				t.Fatalf("Expected no error, got %v", err)
+			}
+
+			if code != test.expectedCode {
+				t.Errorf("Expected code %s, got %s", test.expectedCode, code)
+			}
+		})
+	}
+}

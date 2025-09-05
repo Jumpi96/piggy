@@ -63,6 +63,20 @@ func (m *mockParameterRepository) Set(parameter *entities.Parameter) error {
 	return nil
 }
 
+func (m *mockParameterRepository) GetCurrencySymbol() (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "EUR", nil // default fallback for tests
+}
+
+func (m *mockParameterRepository) GetCurrencyCode() (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "EUR", nil // default fallback for tests
+}
+
 type mockConfigService struct {
 	creditTags  map[string][]string
 	balanceTags []string

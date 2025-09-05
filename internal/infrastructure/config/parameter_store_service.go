@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"piggy/internal/domain/services"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/ssm"
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
@@ -132,6 +134,24 @@ func (p *ParameterStoreService) SetStringValue(key, value string) error {
 	}
 
 	return p.UpdateConfig(config)
+}
+
+// GetCurrencySymbol gets the display symbol for the currency
+func (p *ParameterStoreService) GetCurrencySymbol() (string, error) {
+	config, err := p.GetConfig()
+	if err != nil {
+		return "", err
+	}
+	return services.GetDisplaySymbol(config.Currency), nil
+}
+
+// GetCurrencyCode gets the currency code (without symbol)
+func (p *ParameterStoreService) GetCurrencyCode() (string, error) {
+	config, err := p.GetConfig()
+	if err != nil {
+		return "", err
+	}
+	return services.GetCurrencyCode(config.Currency), nil
 }
 
 // SetFloatValue sets a float value in the configuration

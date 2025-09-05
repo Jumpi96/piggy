@@ -9,4 +9,10 @@ type ParameterRepository interface {
 	
 	// Set stores or updates a parameter
 	Set(parameter *entities.Parameter) error
+
+	// GetCurrencySymbol gets the display symbol for the currency
+	GetCurrencySymbol() (string, error)
+
+	// GetCurrencyCode gets the currency code (without symbol)
+	GetCurrencyCode() (string, error)
 }

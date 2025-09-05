@@ -79,3 +79,13 @@ func (p *ParameterUseCase) SetStringParameter(key string, value string) error {
 func (p *ParameterUseCase) GetParameter(key string) (*entities.Parameter, error) {
     return p.parameterRepo.Get(key)
 }
+
+// GetCurrencySymbol gets the display symbol for the currency
+func (p *ParameterUseCase) GetCurrencySymbol() (string, error) {
+    return p.parameterRepo.GetCurrencySymbol()
+}
+
+// GetCurrencyCode gets the currency code (without symbol)
+func (p *ParameterUseCase) GetCurrencyCode() (string, error) {
+    return p.parameterRepo.GetCurrencyCode()
+}

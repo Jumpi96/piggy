@@ -83,7 +83,7 @@ PARAMETER_NAME=/piggy/config            # Parameter Store parameter name
 Create a SecureString parameter in AWS Parameter Store with the following JSON structure:
 ```json
 {
-  "currency": "ARS",
+  "currency": "ARS/AR$",
   "conversions": {
     "ARS2USD": 0.001,
     "ARS2EUR": 0.0009,
@@ -94,6 +94,15 @@ Create a SecureString parameter in AWS Parameter Store with the following JSON s
   }
 }
 ```
+
+#### Currency Symbol Support
+The `currency` field supports optional display symbols using the format `CODE/SYMBOL`:
+- `"ARS"` - displays as "ARS" 
+- `"ARS/AR$"` - displays as "AR$" in Telegram responses
+- `"USD/$"` - displays as "$" in Telegram responses
+- `"EUR/€"` - displays as "€" in Telegram responses
+
+When no symbol is specified, the currency code is used for display.
 
 ### Local Development
 ```bash
@@ -113,13 +122,22 @@ aws lambda update-function-code --function-name Piggy --zip-file fileb://deploym
 ## Usage Example
 ```
 /status 2023-10
-# Returns monthly spending breakdown with budget tracking
+# Returns monthly spending breakdown with budget tracking using currency symbols
+# 🐷PERIOD: 2023-10
+# 💳Base: AR$; ApD: AR$ 100.00.
+# 💵YOUR CURRENT SITUATION: AR$ -50.25
 
 /creditNL 2023-10
 # Shows Netherlands credit card expenses
+# 💳CREDIT REPORT
+# 💰TOTAL: € 125.50
 
 /payNL
 # Marks current month's NL credit entries as paid
+
+/set CURRENCY ARS/AR$
+# Sets currency with custom display symbol
+# ✅ Parameter CURRENCY set to ARS/AR$
 ```
 
 ## Testing

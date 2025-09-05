@@ -43,3 +43,13 @@ func (r *ParameterStoreParameterRepository) Set(parameter *entities.Parameter) e
 	}
 	return r.parameterStore.SetFloatValue(parameter.Key, parameter.Value)
 }
+
+// GetCurrencySymbol gets the display symbol for the currency
+func (r *ParameterStoreParameterRepository) GetCurrencySymbol() (string, error) {
+	return r.parameterStore.GetCurrencySymbol()
+}
+
+// GetCurrencyCode gets the currency code (without symbol)  
+func (r *ParameterStoreParameterRepository) GetCurrencyCode() (string, error) {
+	return r.parameterStore.GetCurrencyCode()
+}

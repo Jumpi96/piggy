@@ -94,6 +94,20 @@ func (m *mockParameterUseCase) SetCurrencies(monthYear time.Time, usdToArs, eurT
 	return 0, nil
 }
 
+func (m *mockParameterUseCase) GetCurrencySymbol() (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "EUR", nil // default fallback for tests
+}
+
+func (m *mockParameterUseCase) GetCurrencyCode() (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return "EUR", nil // default fallback for tests
+}
+
 type mockConfigService struct {
 	telegramUser string
 }
