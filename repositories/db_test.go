@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"os"
 	"testing"
 )
 
@@ -29,22 +30,33 @@ func TestTableNameConstant(t *testing.T) {
 }
 
 func TestStartDynamoClient_FunctionExists(t *testing.T) {
-	// Test that the function exists and can be called
-	// We can't test the actual AWS connection without credentials,
-	// but we can verify the function doesn't panic
+	// Set AWS region to avoid panic in CI
+	originalRegion := os.Getenv("AWS_REGION")
+	os.Setenv("AWS_REGION", "us-east-1")
 	defer func() {
-		if r := recover(); r != nil {
-			// If it panics due to missing AWS config, that's expected
-			t.Log("Function panicked as expected without AWS credentials")
+		if originalRegion == "" {
+			os.Unsetenv("AWS_REGION")
+		} else {
+			os.Setenv("AWS_REGION", originalRegion)
 		}
 	}()
 
-	// This might panic due to missing AWS credentials, which is expected
+	// Test that the function exists and can be called
+	// We can't test the actual AWS connection without credentials,
+	// but we can verify the function doesn't panic with region set
+	defer func() {
+		if r := recover(); r != nil {
+			// If it panics due to other AWS issues, that's expected
+			t.Logf("Function panicked as expected: %v", r)
+		}
+	}()
+
+	// This should not panic due to missing region now
 	client := StartDynamoClient()
 	
-	// If we get here, it means AWS credentials might be configured
-	if client.Config.Region == nil {
-		t.Log("DynamoDB client created but no region configured")
+	// If we get here, basic client creation worked
+	if client.Config.Region != nil {
+		t.Log("DynamoDB client created successfully with region")
 	}
 }
 
@@ -70,6 +82,17 @@ func TestInitParamsTable_FunctionExists(t *testing.T) {
 }
 
 func TestGetParam_FunctionSignature(t *testing.T) {
+	// Set AWS region to avoid panic in CI
+	originalRegion := os.Getenv("AWS_REGION")
+	os.Setenv("AWS_REGION", "us-east-1")
+	defer func() {
+		if originalRegion == "" {
+			os.Unsetenv("AWS_REGION")
+		} else {
+			os.Setenv("AWS_REGION", originalRegion)
+		}
+	}()
+
 	// Test function signature and basic parameter handling
 	client := StartDynamoClient()
 	
@@ -89,6 +112,17 @@ func TestGetParam_FunctionSignature(t *testing.T) {
 }
 
 func TestSetParam_FunctionSignature(t *testing.T) {
+	// Set AWS region to avoid panic in CI
+	originalRegion := os.Getenv("AWS_REGION")
+	os.Setenv("AWS_REGION", "us-east-1")
+	defer func() {
+		if originalRegion == "" {
+			os.Unsetenv("AWS_REGION")
+		} else {
+			os.Setenv("AWS_REGION", originalRegion)
+		}
+	}()
+
 	// Test function signature and basic parameter handling
 	client := StartDynamoClient()
 	

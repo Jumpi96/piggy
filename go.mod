@@ -1,6 +1,6 @@
 module piggy
 
-go 1.25
+go 1.21
 
 require (
 	github.com/aws/aws-lambda-go v1.28.0
