@@ -50,12 +50,42 @@ func (b *BalanceUseCase) GetBalanceReport(request dto.BalanceRequest) (*dto.Bala
         }
     }
 
+    // Adjust monthly breakdown by subtracting expected spending per month
+    adjusted := make(map[string]float64, len(monthly))
+    loc := request.FromDate.Location()
+    for monthKey, sum := range monthly {
+        // Parse monthKey (YYYY-MM)
+        t, err := time.Parse("2006-01", monthKey)
+        if err != nil {
+            // If parsing fails, keep raw sum
+            adjusted[monthKey] = sum
+            continue
+        }
+        monthStart := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, loc)
+        monthEnd := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, loc)
+
+        // Clamp to requested range
+        start := monthStart
+        if request.FromDate.After(start) {
+            start = request.FromDate
+        }
+        end := monthEnd
+        if request.ToDate.Before(end) {
+            end = request.ToDate
+        }
+        days := 0
+        if !end.Before(start) {
+            days = int(end.Sub(start).Hours()/24) + 1
+        }
+        adjusted[monthKey] = sum - request.AmountPerDay*float64(days)
+    }
+
     response := &dto.BalanceResponse{
         FromDate:         request.FromDate.Format("2006-01-02"),
         ToDate:           request.ToDate.Format("2006-01-02"),
         Difference:       total,
         DayRemainingDiff: total - request.AmountPerDay*remainingDays,
-        MonthlyBreakdown: monthly,
+        MonthlyBreakdown: adjusted,
     }
 
     return response, nil
