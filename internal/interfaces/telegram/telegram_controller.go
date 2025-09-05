@@ -343,7 +343,7 @@ func (c *TelegramController) parseBalanceCommand(message string) (time.Time, tim
 func (c *TelegramController) formatStatusResponse(response *appdto.StatusResponse) string {
     result := fmt.Sprintf("\n🐷PERIOD: %v", response.Period)
     // Base and rates
-    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f", response.UsedBase, response.UsedBase, response.UsedAmountPerDay)
+    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f.", response.UsedBase, response.UsedBase, response.UsedAmountPerDay)
     if len(response.UsedRates) > 0 {
         // Build sorted list of rates
         keys := make([]string, 0, len(response.UsedRates))
@@ -354,17 +354,17 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
             // k format: BASE2CODE
             parts := strings.Split(k, "2")
             if len(parts) == 2 {
-                result += fmt.Sprintf(" %s per %s=%0.2f,", parts[0], parts[1], response.UsedRates[k])
+                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[0], response.UsedRates[k], parts[1])
             } else {
                 result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
             }
         }
         // trim trailing comma by just letting it be (telegram ok)
     }
-    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
-    result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: €%0.2f", response.DayRemainingDiff)
-    result += fmt.Sprintf("\n💶That means for each remaining day: €%0.2f", response.DayRemaining)
-    result += fmt.Sprintf("\n⚖️Money to balance: €%0.2f", response.Balance)
+    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s %0.2f", response.UsedBase, response.Difference)
+    result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: %s %0.2f", response.UsedBase, response.DayRemainingDiff)
+    result += fmt.Sprintf("\n💶That means for each remaining day: %s %0.2f", response.UsedBase, response.DayRemaining)
+    result += fmt.Sprintf("\n⚖️Money to balance: %s %0.2f", response.UsedBase, response.Balance)
 
     // Daily breakdown (sorted by day)
     if len(response.DailyBreakdown) > 0 {
@@ -385,20 +385,20 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
         result += "\n"
         for _, d := range days {
             amount := response.DailyBreakdown[d]
-            result += fmt.Sprintf("\n %d ................. €%0.2f", d, amount)
+            result += fmt.Sprintf("\n %d ................. %s %0.2f", d, response.UsedBase, amount)
         }
         result += "\n"
     }
 
     // Cash at the end, after the breakdown
-    result += fmt.Sprintf("\n💰Your available cash should be: €%0.2f", response.Cash)
+    result += fmt.Sprintf("\n💰Your available cash should be: %s %0.2f", response.UsedBase, response.Cash)
     return result
 }
 
 func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceResponse) string {
     // Header period and parameters used
     result := fmt.Sprintf("\n🐷PERIOD: %s to %s", response.FromDate, response.ToDate)
-    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f", response.UsedBase, response.UsedBase, response.UsedAmountPerDay)
+    result += fmt.Sprintf("\n💳Base: %s; ApD: %s %0.2f.", response.UsedBase, response.UsedBase, response.UsedAmountPerDay)
     if len(response.UsedRates) > 0 {
         keys := make([]string, 0, len(response.UsedRates))
         for k := range response.UsedRates { keys = append(keys, k) }
@@ -407,7 +407,7 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
         for _, k := range keys {
             parts := strings.Split(k, "2")
             if len(parts) == 2 {
-                result += fmt.Sprintf(" %s per %s=%0.2f,", parts[0], parts[1], response.UsedRates[k])
+                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[0], response.UsedRates[k], parts[1])
             } else {
                 result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
             }
@@ -433,14 +433,14 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
         result += "\n"
         for _, m := range months {
             amount := response.MonthlyBreakdown[m]
-            result += fmt.Sprintf("\n %s ................. €%0.2f", m, amount)
+            result += fmt.Sprintf("\n %s ................. %s %0.2f", m, response.UsedBase, amount)
         }
         result += "\n"
     }
 
     // Summary lines
-    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: €%0.2f", response.Difference)
-    result += fmt.Sprintf("\n💷Comparing with what you expected to have: €%0.2f", response.DayRemainingDiff)
+    result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s %0.2f", response.UsedBase, response.Difference)
+    result += fmt.Sprintf("\n💷Comparing with what you expected to have: %s %0.2f", response.UsedBase, response.DayRemainingDiff)
     return result
 }
 
@@ -459,7 +459,12 @@ func (c *TelegramController) formatCreditResponse(response *appdto.CreditRespons
 
     result := header
     result += fmt.Sprintf("\n🐷PERIOD: %s", response.Period)
-    result += fmt.Sprintf("\n💰TOTAL: €%0.2f", response.Total)
+    // Determine display currency from items if available, else default to EUR
+    dispCurr := "EUR"
+    if len(response.Items) > 0 && response.Items[0].Currency != "" {
+        dispCurr = response.Items[0].Currency
+    }
+    result += fmt.Sprintf("\n💰TOTAL: %s %0.2f", dispCurr, response.Total)
 
     if len(response.Items) > 0 {
         result += "\nYour credit items are: "
