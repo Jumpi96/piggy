@@ -1,4 +1,4 @@
-# Piggy ![Test](https://github.com/Jumpi96/piggy/workflows/Test/badge.svg?branch=main) [![codecov](https://codecov.io/gh/Jumpi96/piggy/branch/main/graph/badge.svg)](https://codecov.io/gh/Jumpi96/piggy)
+# Piggy
 
 A personal finance Telegram bot written in Go that helps you track expenses, credit card payments, and monthly budgets through Toshl integration.
 
@@ -19,10 +19,44 @@ A personal finance Telegram bot written in Go that helps you track expenses, cre
 
 ## Architecture
 
+Built with Clean Architecture principles for maintainability and testability:
+
 ```
-Telegram Bot Webhook → AWS Lambda → Toshl API
-                            ↓
-                       DynamoDB (Config)
+┌─────────────────────────────────────────────────────────────┐
+│                    Interface Layer                          │
+│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
+│  │ Telegram Bot    │    │ AWS Lambda Handler              │ │
+│  │ (Webhook)       │────│ (main.go)                      │ │
+│  └─────────────────┘    └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                                   │
+┌─────────────────────────────────────────────────────────────┐
+│                  Application Layer                          │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │ Use Cases (Business Logic)                              │ │
+│  │ • CreditUseCase   • StatusUseCase   • BalanceUseCase   │ │
+│  │ • ParameterUseCase                                     │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                                   │
+┌─────────────────────────────────────────────────────────────┐
+│                    Domain Layer                             │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │ Entities: Entry, Currency, Parameter                    │ │
+│  │ Repository Interfaces: EntryRepo, ParameterRepo        │ │
+│  │ Service Interfaces: ConfigService                      │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                                   │
+┌─────────────────────────────────────────────────────────────┐
+│                Infrastructure Layer                         │
+│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
+│  │ Repositories    │    │ External Services               │ │
+│  │ • ToshlRepo     │    │ • Toshl API                     │ │
+│  │ • DynamoDBRepo  │    │ • DynamoDB                      │ │
+│  │ • ConfigService │    │ • Environment Variables         │ │
+│  └─────────────────┘    └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Setup
@@ -38,9 +72,9 @@ Telegram Bot Webhook → AWS Lambda → Toshl API
 TOSHL_TOKEN=your_toshl_api_token
 TELEGRAM_TOKEN=your_bot_token
 TELEGRAM_USER=your_telegram_username
-CREDIT_NL_TAG=netherlands_credit_tag
-CREDIT_TAG=argentina_credit_tag
-BALANCE_TAG=balance_tracking_tag
+CREDIT_NL_TAGS=1234,2345  # Comma-separated tags for NL
+CREDIT_AR_TAGS=9876,8765 # Comma-separated tags for AR  
+BALANCE_TAGS=balance,income             # Comma-separated balance tags
 TIME_ZONE=Europe/Amsterdam
 ```
 
@@ -81,7 +115,7 @@ aws lambda update-function-code --function-name Piggy --zip-file fileb://deploym
 /status 2023-10
 # Returns monthly spending breakdown with budget tracking
 
-/creditNL 2023-10 90.50
+/creditNL 2023-10
 # Shows Netherlands credit card expenses
 
 /payNL

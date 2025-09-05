@@ -1,11 +1,12 @@
 package main
 
 import (
-	"piggy/serverless"
+	"piggy/internal/interfaces/handler"
 
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
 func main() {
-	lambda.Start(serverless.Handler)
+	h := handler.NewHandler()
+	lambda.Start(h.HandleRequest)
 }
