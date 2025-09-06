@@ -50,6 +50,7 @@ func NewHandler() *Handler {
 	balanceUseCase := usecases.NewBalanceUseCase(entryRepo, parameterRepo, configService)
 	creditUseCase := usecases.NewCreditUseCase(entryRepo, parameterRepo, configService)
 	parameterUseCase := usecases.NewParameterUseCase(entryRepo, parameterRepo, configService)
+	adjustUseCase := usecases.NewAdjustUseCase(entryRepo, parameterRepo, configService)
 
 	// Initialize Telegram controller
 	telegramToken := getEnv("TELEGRAM_TOKEN", "")
@@ -58,6 +59,7 @@ func NewHandler() *Handler {
 		statusUseCase,
 		balanceUseCase,
 		parameterUseCase,
+		adjustUseCase,
 		configService,
 		telegramToken,
 	)

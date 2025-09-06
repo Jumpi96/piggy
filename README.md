@@ -9,6 +9,7 @@ A personal finance Telegram bot written in Go that helps you track expenses, cre
 - `/balance` - View current balance and remaining budget
 - `/credit[CODE]` - Check credit card spending for specific country (AR/NL)
 - `/pay[CODE]` - Mark credit card payments as completed
+- `/adjust [YYYY-MM]` - Update Toshl conversion rates for all entries (current month if not specified)
 - `/set` - Configure budget and exchange rate parameters
 
 ### Integrations
@@ -207,6 +208,14 @@ aws lambda update-function-code --function-name Piggy --zip-file fileb://deploym
 # Shows Netherlands credit card expenses
 # 💳CREDIT REPORT
 # 💰TOTAL: € 125.50
+
+/adjust 2023-10
+# Updates Toshl conversion rates for October 2023 entries
+# 🔧 CURRENCY RATE ADJUSTMENT
+# 🐷 PERIOD: 2023-10
+# 💱 BASE CURRENCY: EUR
+# 📊 UPDATED ENTRIES: 15
+# ✅ Updated 15 entries with new conversion rates
 ```
 
 ## Testing

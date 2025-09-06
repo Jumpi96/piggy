@@ -119,6 +119,26 @@ func (m *mockParameterUseCase) GetSymbol(currency string) (string, error) {
 	return currency, nil
 }
 
+type mockAdjustUseCase struct {
+	response *appdto.AdjustResponse
+	err      error
+}
+
+func (m *mockAdjustUseCase) AdjustCurrencyRates(request appdto.AdjustRequest) (*appdto.AdjustResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.response == nil {
+		return &appdto.AdjustResponse{
+			Period:       request.MonthYear.Format("2006-01"),
+			UpdatedCount: 0,
+			BaseCurrency: "EUR",
+			Message:      "No entries to update",
+		}, nil
+	}
+	return m.response, nil
+}
+
 type mockConfigService struct {
 	telegramUser string
 }
@@ -216,6 +236,7 @@ func TestTelegramController_HandleWebhook(t *testing.T) {
 				mockStatus,
 				mockBalance,
 				mockParameter,
+				&mockAdjustUseCase{},
 				mockConfig,
 				"fake-token",
 			)
@@ -266,7 +287,7 @@ func TestTelegramController_routeCommand(t *testing.T) {
 			message:      "/unknown",
 			username:     "authorized",
 			telegramUser: "authorized",
-			expected:     "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]\n /set\n /balance",
+			expected:     "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]\n /adjust\n /set\n /balance",
 		},
 	}
 
@@ -275,7 +296,7 @@ func TestTelegramController_routeCommand(t *testing.T) {
 			// Setup mocks
 			mockConfig := &mockConfigService{telegramUser: tc.telegramUser}
 			controller := NewTelegramControllerWithInterfaces(
-				nil, nil, nil, nil, // Use cases not needed for routing test
+				nil, nil, nil, nil, &mockAdjustUseCase{}, // Use cases not needed for routing test
 				mockConfig,
 				"fake-token",
 			)
@@ -360,6 +381,7 @@ func TestTelegramController_handleStatusCommand(t *testing.T) {
 				mockStatus,
 				nil, // balance use case not needed
 				mockParameter,
+				&mockAdjustUseCase{},
 				mockConfig,
 				"fake-token",
 			)
@@ -447,12 +469,96 @@ func TestTelegramController_handleCreditCommand(t *testing.T) {
 				nil, // status use case not needed
 				nil, // balance use case not needed
 				mockParameter,
+				&mockAdjustUseCase{},
 				nil, // config service not needed for this test
 				"fake-token",
 			)
 
 			// Execute
 			result := controller.handleCreditCommand(tc.message, tc.isPay)
+
+			// Assert
+			for _, expected := range tc.expectedContains {
+				if !strings.Contains(result, expected) {
+					t.Errorf("Expected result to contain '%s', got: %s", expected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestTelegramController_handleAdjustCommand(t *testing.T) {
+	testCases := []struct {
+		name               string
+		message            string
+		mockAdjustResponse *appdto.AdjustResponse
+		mockError          error
+		expectedContains   []string
+	}{
+		{
+			name:    "successful adjust command",
+			message: "/adjust",
+			mockAdjustResponse: &appdto.AdjustResponse{
+				Period:       "2023-01",
+				UpdatedCount: 5,
+				BaseCurrency: "EUR",
+				Message:      "Updated 5 entries with new conversion rates",
+			},
+			expectedContains: []string{
+				"🔧 CURRENCY RATE ADJUSTMENT",
+				"🐷 PERIOD: 2023-01",
+				"💱 BASE CURRENCY: EUR",
+				"📊 UPDATED ENTRIES: 5",
+				"✅ Updated 5 entries with new conversion rates",
+			},
+		},
+		{
+			name:    "successful adjust with month parameter",
+			message: "/adjust 2023-12",
+			mockAdjustResponse: &appdto.AdjustResponse{
+				Period:       "2023-12",
+				UpdatedCount: 3,
+				BaseCurrency: "USD",
+				Message:      "Updated 3 entries with new conversion rates",
+			},
+			expectedContains: []string{
+				"🔧 CURRENCY RATE ADJUSTMENT",
+				"🐷 PERIOD: 2023-12",
+				"💱 BASE CURRENCY: USD",
+				"📊 UPDATED ENTRIES: 3",
+				"✅ Updated 3 entries with new conversion rates",
+			},
+		},
+		{
+			name:               "adjust command error",
+			message:            "/adjust",
+			mockAdjustResponse: nil,
+			mockError:          fmt.Errorf("no base currency configured"),
+			expectedContains:   []string{"❌", "Error adjusting currency rates", "no base currency configured"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup mocks
+			mockAdjust := &mockAdjustUseCase{
+				response: tc.mockAdjustResponse,
+				err:      tc.mockError,
+			}
+			mockConfig := &mockConfigService{}
+
+			controller := NewTelegramControllerWithInterfaces(
+				nil, // credit use case not needed
+				nil, // status use case not needed
+				nil, // balance use case not needed
+				nil, // parameter use case not needed
+				mockAdjust,
+				mockConfig,
+				"fake-token",
+			)
+
+			// Execute
+			result := controller.handleAdjustCommand(tc.message)
 
 			// Assert
 			for _, expected := range tc.expectedContains {
@@ -515,6 +621,7 @@ func TestTelegramController_handleSetCommand(t *testing.T) {
 				nil, // status use case not needed
 				nil, // balance use case not needed
 				mockParameter,
+				&mockAdjustUseCase{},
 				nil, // config service not needed for this test
 				"fake-token",
 			)
@@ -545,6 +652,7 @@ func TestNewTelegramController(t *testing.T) {
 		mockStatus,
 		mockBalance,
 		mockParameter,
+		&mockAdjustUseCase{},
 		mockConfig,
 		token,
 	)

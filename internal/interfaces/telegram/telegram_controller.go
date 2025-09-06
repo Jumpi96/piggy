@@ -43,12 +43,18 @@ type ParameterUseCaseInterface interface {
     GetSymbol(currency string) (string, error)
 }
 
+// AdjustUseCaseInterface defines the interface for adjust operations
+type AdjustUseCaseInterface interface {
+    AdjustCurrencyRates(request appdto.AdjustRequest) (*appdto.AdjustResponse, error)
+}
+
 // TelegramController handles Telegram webhook requests
 type TelegramController struct {
 	creditUseCase    CreditUseCaseInterface
 	statusUseCase    StatusUseCaseInterface
 	balanceUseCase   BalanceUseCaseInterface
 	parameterUseCase ParameterUseCaseInterface
+	adjustUseCase    AdjustUseCaseInterface
 	configService    services.ConfigService
 	telegramToken    string
 }
@@ -59,6 +65,7 @@ func NewTelegramController(
 	statusUseCase *usecases.StatusUseCase,
 	balanceUseCase *usecases.BalanceUseCase,
 	parameterUseCase *usecases.ParameterUseCase,
+	adjustUseCase *usecases.AdjustUseCase,
 	configService services.ConfigService,
 	telegramToken string,
 ) *TelegramController {
@@ -67,6 +74,7 @@ func NewTelegramController(
 		statusUseCase:    statusUseCase,
 		balanceUseCase:   balanceUseCase,
 		parameterUseCase: parameterUseCase,
+		adjustUseCase:    adjustUseCase,
 		configService:    configService,
 		telegramToken:    telegramToken,
 	}
@@ -78,6 +86,7 @@ func NewTelegramControllerWithInterfaces(
 	statusUseCase StatusUseCaseInterface,
 	balanceUseCase BalanceUseCaseInterface,
 	parameterUseCase ParameterUseCaseInterface,
+	adjustUseCase AdjustUseCaseInterface,
 	configService services.ConfigService,
 	telegramToken string,
 ) *TelegramController {
@@ -86,6 +95,7 @@ func NewTelegramControllerWithInterfaces(
 		statusUseCase:    statusUseCase,
 		balanceUseCase:   balanceUseCase,
 		parameterUseCase: parameterUseCase,
+		adjustUseCase:    adjustUseCase,
 		configService:    configService,
 		telegramToken:    telegramToken,
 	}
@@ -125,6 +135,7 @@ func (c *TelegramController) routeCommand(message string, username string) strin
 		rBalance   = regexp.MustCompile(`\/balance.*`)
 		rCredit    = regexp.MustCompile(`\/credit(AR|NL).*`)
 		rPayCredit = regexp.MustCompile(`\/pay(AR|NL).*`)
+		rAdjust    = regexp.MustCompile(`\/adjust.*`)
 		rSet       = regexp.MustCompile(`\/set.*`)
 	)
 
@@ -137,11 +148,13 @@ func (c *TelegramController) routeCommand(message string, username string) strin
 		return c.handleCreditCommand(message, false)
 	case rPayCredit.MatchString(message):
 		return c.handleCreditCommand(message, true)
+	case rAdjust.MatchString(message):
+		return c.handleAdjustCommand(message)
 	case rSet.MatchString(message):
 		return c.handleSetCommand(message)
 	}
 
-	return "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]\n /set\n /balance"
+	return "❓ Use one of the Piggy commands:\n /status\n /credit[CODE]\n /pay[CODE]\n /adjust\n /set\n /balance"
 }
 
 // sendTelegramMessage sends a message to Telegram
@@ -294,6 +307,40 @@ func (c *TelegramController) handleSetCommand(message string) string {
 	}
 
     return fmt.Sprintf("✅ Parameter %s set to %v", parameter, valueStr)
+}
+
+// handleAdjustCommand handles the /adjust command
+func (c *TelegramController) handleAdjustCommand(message string) string {
+    // Parse optional month parameter (YYYY-MM)
+    monthYear := time.Now()
+    parts := strings.Fields(message)
+    if len(parts) > 1 {
+        loc, _ := time.LoadLocation(c.configService.GetTimeZone())
+        if t, err := time.ParseInLocation("2006-01-02", parts[1]+"-01", loc); err == nil {
+            monthYear = t
+        }
+    }
+
+    request := appdto.AdjustRequest{
+        MonthYear: monthYear,
+    }
+
+    response, err := c.adjustUseCase.AdjustCurrencyRates(request)
+    if err != nil {
+        return fmt.Sprintf("❌ Error adjusting currency rates: %v", err)
+    }
+
+    return c.formatAdjustResponse(response)
+}
+
+// formatAdjustResponse formats the adjust response for display
+func (c *TelegramController) formatAdjustResponse(response *appdto.AdjustResponse) string {
+    result := "\n🔧 CURRENCY RATE ADJUSTMENT"
+    result += fmt.Sprintf("\n🐷 PERIOD: %s", response.Period)
+    result += fmt.Sprintf("\n💱 BASE CURRENCY: %s", response.BaseCurrency)
+    result += fmt.Sprintf("\n📊 UPDATED ENTRIES: %d", response.UpdatedCount)
+    result += fmt.Sprintf("\n✅ %s", response.Message)
+    return result
 }
 
 // Helper methods for parsing commands and formatting responses
