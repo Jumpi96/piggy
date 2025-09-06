@@ -288,3 +288,214 @@ func TestNewParameterUseCase(t *testing.T) {
 		t.Error("Config service not set correctly")
 	}
 }
+
+func TestParameterUseCase_SetStringParameter(t *testing.T) {
+	testCases := []struct {
+		name          string
+		key           string
+		value         string
+		mockError     error
+		expectedError bool
+	}{
+		{
+			name:          "successful string parameter set",
+			key:           "CURRENCY",
+			value:         "USD",
+			mockError:     nil,
+			expectedError: false,
+		},
+		{
+			name:          "empty value",
+			key:           "TEST_PARAM",
+			value:         "",
+			mockError:     nil,
+			expectedError: false,
+		},
+		{
+			name:          "repository error",
+			key:           "CURRENCY",
+			value:         "EUR",
+			mockError:     fmt.Errorf("database error"),
+			expectedError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockEntryRepo := &mockEntryRepository{}
+			mockParamRepo := &mockParameterRepository{
+				parameters: make(map[string]*entities.Parameter),
+				err:        tc.mockError,
+			}
+			mockConfig := &mockConfigService{}
+
+			useCase := NewParameterUseCase(mockEntryRepo, mockParamRepo, mockConfig)
+
+			err := useCase.SetStringParameter(tc.key, tc.value)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected error, but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestParameterUseCase_GetCurrencySymbol(t *testing.T) {
+	testCases := []struct {
+		name           string
+		mockError      error
+		expectedSymbol string
+		expectedError  bool
+	}{
+		{
+			name:           "successful get currency symbol",
+			mockError:      nil,
+			expectedSymbol: "EUR",
+			expectedError:  false,
+		},
+		{
+			name:           "repository error",
+			mockError:      fmt.Errorf("database error"),
+			expectedSymbol: "",
+			expectedError:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockEntryRepo := &mockEntryRepository{}
+			mockParamRepo := &mockParameterRepository{
+				parameters: make(map[string]*entities.Parameter),
+				err:        tc.mockError,
+			}
+			mockConfig := &mockConfigService{}
+
+			useCase := NewParameterUseCase(mockEntryRepo, mockParamRepo, mockConfig)
+
+			symbol, err := useCase.GetCurrencySymbol()
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected error, but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if symbol != tc.expectedSymbol {
+					t.Errorf("Expected symbol %s, got %s", tc.expectedSymbol, symbol)
+				}
+			}
+		})
+	}
+}
+
+func TestParameterUseCase_SetCurrencySymbol(t *testing.T) {
+	testCases := []struct {
+		name          string
+		currency      string
+		symbol        string
+		mockError     error
+		expectedError bool
+	}{
+		{
+			name:          "successful set currency symbol",
+			currency:      "USD",
+			symbol:        "$",
+			mockError:     nil,
+			expectedError: false,
+		},
+		{
+			name:          "repository error",
+			currency:      "EUR",
+			symbol:        "€",
+			mockError:     fmt.Errorf("database error"),
+			expectedError: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockEntryRepo := &mockEntryRepository{}
+			mockParamRepo := &mockParameterRepository{
+				parameters: make(map[string]*entities.Parameter),
+				err:        tc.mockError,
+			}
+			mockConfig := &mockConfigService{}
+
+			useCase := NewParameterUseCase(mockEntryRepo, mockParamRepo, mockConfig)
+
+			err := useCase.SetCurrencySymbol(tc.currency, tc.symbol)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected error, but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestParameterUseCase_GetSymbol(t *testing.T) {
+	testCases := []struct {
+		name           string
+		currency       string
+		mockError      error
+		expectedSymbol string
+		expectedError  bool
+	}{
+		{
+			name:           "successful get symbol",
+			currency:       "USD",
+			mockError:      nil,
+			expectedSymbol: "USD",
+			expectedError:  false,
+		},
+		{
+			name:           "repository error",
+			currency:       "EUR",
+			mockError:      fmt.Errorf("database error"),
+			expectedSymbol: "EUR",
+			expectedError:  true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockEntryRepo := &mockEntryRepository{}
+			mockParamRepo := &mockParameterRepository{
+				parameters: make(map[string]*entities.Parameter),
+				err:        tc.mockError,
+			}
+			mockConfig := &mockConfigService{}
+
+			useCase := NewParameterUseCase(mockEntryRepo, mockParamRepo, mockConfig)
+
+			symbol, err := useCase.GetSymbol(tc.currency)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected error, but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+
+			if symbol != tc.expectedSymbol {
+				t.Errorf("Expected symbol %s, got %s", tc.expectedSymbol, symbol)
+			}
+		})
+	}
+}

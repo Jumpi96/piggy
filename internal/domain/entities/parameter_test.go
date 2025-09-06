@@ -65,6 +65,71 @@ func TestNewParameter(t *testing.T) {
 	}
 }
 
+func TestNewStringParameter(t *testing.T) {
+	testCases := []struct {
+		name     string
+		key      string
+		value    string
+		expected *Parameter
+	}{
+		{
+			name:  "valid string parameter",
+			key:   "CURRENCY",
+			value: "EUR",
+			expected: &Parameter{
+				Key:         "CURRENCY",
+				StringValue: "EUR",
+			},
+		},
+		{
+			name:  "empty string value",
+			key:   "BASE_CURRENCY",
+			value: "",
+			expected: &Parameter{
+				Key:         "BASE_CURRENCY",
+				StringValue: "",
+			},
+		},
+		{
+			name:  "multiword string value",
+			key:   "DISPLAY_NAME",
+			value: "Euro Dollar",
+			expected: &Parameter{
+				Key:         "DISPLAY_NAME",
+				StringValue: "Euro Dollar",
+			},
+		},
+		{
+			name:  "empty key with string value",
+			key:   "",
+			value: "USD",
+			expected: &Parameter{
+				Key:         "",
+				StringValue: "USD",
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := NewStringParameter(tc.key, tc.value)
+			
+			if result.Key != tc.expected.Key {
+				t.Errorf("Key: expected %s, got %s", tc.expected.Key, result.Key)
+			}
+			
+			if result.StringValue != tc.expected.StringValue {
+				t.Errorf("StringValue: expected %s, got %s", tc.expected.StringValue, result.StringValue)
+			}
+
+			// Verify that Value field is not set (should be 0)
+			if result.Value != 0.0 {
+				t.Errorf("Value should be 0.0 for string parameter, got %f", result.Value)
+			}
+		})
+	}
+}
+
 func TestParameter_String(t *testing.T) {
 	testCases := []struct {
 		name      string

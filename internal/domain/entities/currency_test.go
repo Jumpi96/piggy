@@ -120,9 +120,10 @@ func TestCurrency_IsFixed(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.currency.Fixed != tc.expected {
-				t.Errorf("Fixed field for %s: expected %v, got %v", 
-					tc.currency.Code, tc.expected, tc.currency.Fixed)
+			result := tc.currency.IsFixed()
+			if result != tc.expected {
+				t.Errorf("IsFixed() for %s: expected %v, got %v", 
+					tc.currency.Code, tc.expected, result)
 			}
 		})
 	}

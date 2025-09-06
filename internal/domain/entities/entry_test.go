@@ -167,3 +167,71 @@ func TestEntry_HasMultipleTags(t *testing.T) {
 		})
 	}
 }
+
+func TestEntry_IsCompleted(t *testing.T) {
+	testCases := []struct {
+		name      string
+		completed bool
+		expected  bool
+	}{
+		{"completed entry", true, true},
+		{"not completed entry", false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := &Entry{Completed: tc.completed}
+			result := entry.IsCompleted()
+			if result != tc.expected {
+				t.Errorf("IsCompleted() for completed=%v: expected %v, got %v", tc.completed, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestEntry_IsDeleted(t *testing.T) {
+	testCases := []struct {
+		name     string
+		deleted  bool
+		expected bool
+	}{
+		{"deleted entry", true, true},
+		{"not deleted entry", false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := &Entry{Deleted: tc.deleted}
+			result := entry.IsDeleted()
+			if result != tc.expected {
+				t.Errorf("IsDeleted() for deleted=%v: expected %v, got %v", tc.deleted, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestEntry_IsIncome(t *testing.T) {
+	testCases := []struct {
+		name     string
+		amount   float64
+		expected bool
+	}{
+		{"positive amount", 100.0, true},
+		{"negative amount", -50.0, false},
+		{"zero amount", 0.0, false},
+		{"small positive", 0.01, true},
+		{"small negative", -0.01, false},
+		{"large positive", 1000000.0, true},
+		{"large negative", -1000000.0, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := &Entry{Amount: tc.amount}
+			result := entry.IsIncome()
+			if result != tc.expected {
+				t.Errorf("IsIncome() for amount %f: expected %v, got %v", tc.amount, tc.expected, result)
+			}
+		})
+	}
+}

@@ -323,3 +323,225 @@ func TestCreditUseCase_GetCreditStatus_ConfigServiceIntegration(t *testing.T) {
 		t.Errorf("Config service not returning expected tags: %v", expectedTags)
 	}
 }
+
+func TestCreditUseCase_PayCredit(t *testing.T) {
+	testCases := []struct {
+		name            string
+		request         dto.CreditRequest
+		mockEntries     []entities.Entry
+		mockCreditTags  []string
+		mockRepoError   error
+		mockTagsError   error
+		mockUpdateError error
+		expectedError   bool
+	}{
+		{
+			name: "successful credit payment",
+			request: dto.CreditRequest{
+				MonthYear:   time.Date(2023, 6, 1, 0, 0, 0, 0, time.UTC),
+				CountryCode: "AR",
+			},
+			mockEntries: []entities.Entry{
+				{
+					ID:       "1",
+					Date:     "2023-06-01",
+					Amount:   -100.0,
+					Tags:     []string{"expense", "credit-card", "food"},
+					Currency: entities.Currency{Code: "USD"},
+				},
+				{
+					ID:       "2",
+					Date:     "2023-06-15",
+					Amount:   -50.0,
+					Tags:     []string{"credit-card", "shopping"},
+					Currency: entities.Currency{Code: "USD"},
+				},
+			},
+			mockCreditTags: []string{"credit-card"},
+			expectedError:  false,
+		},
+		{
+			name: "failed to get credit card tags",
+			request: dto.CreditRequest{
+				MonthYear:   time.Date(2023, 6, 1, 0, 0, 0, 0, time.UTC),
+				CountryCode: "AR",
+			},
+			mockTagsError: fmt.Errorf("credit card tags not configured"),
+			expectedError: true,
+		},
+		{
+			name: "failed to retrieve entries",
+			request: dto.CreditRequest{
+				MonthYear:   time.Date(2023, 6, 1, 0, 0, 0, 0, time.UTC),
+				CountryCode: "AR",
+			},
+			mockCreditTags: []string{"credit-card"},
+			mockRepoError:  fmt.Errorf("database error"),
+			expectedError:  true,
+		},
+		{
+			name: "failed to update entry",
+			request: dto.CreditRequest{
+				MonthYear:   time.Date(2023, 6, 1, 0, 0, 0, 0, time.UTC),
+				CountryCode: "AR",
+			},
+			mockEntries: []entities.Entry{
+				{
+					ID:       "1",
+					Date:     "2023-06-01",
+					Amount:   -100.0,
+					Tags:     []string{"credit-card"},
+					Currency: entities.Currency{Code: "USD"},
+				},
+			},
+			mockCreditTags:  []string{"credit-card"},
+			mockUpdateError: fmt.Errorf("update failed"),
+			expectedError:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockEntryRepo := &mockEntryRepository{
+				entries: tc.mockEntries,
+				err:     tc.mockRepoError,
+			}
+
+			if tc.mockUpdateError != nil {
+				mockEntryRepo.err = tc.mockUpdateError
+			}
+
+			mockParamRepo := &mockParameterRepository{
+				parameters: make(map[string]*entities.Parameter),
+				err:        tc.mockTagsError,
+			}
+			
+			// Mock credit card tags response
+			if tc.mockTagsError == nil {
+				mockParamRepo.parameters["CREDIT_TAGS_"+tc.request.CountryCode] = entities.NewStringParameter("CREDIT_TAGS_"+tc.request.CountryCode, "credit-card")
+			}
+
+			mockConfig := &mockConfigService{}
+
+			useCase := NewCreditUseCase(mockEntryRepo, mockParamRepo, mockConfig)
+
+			err := useCase.PayCredit(tc.request)
+
+			if tc.expectedError {
+				if err == nil {
+					t.Errorf("Expected error, but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestCreditUseCase_ConvertToPaymentEntry(t *testing.T) {
+	testCases := []struct {
+		name               string
+		entry              entities.Entry
+		creditTags         []string
+		expectedTags       []string
+		expectedCompleted  bool
+	}{
+		{
+			name: "remove credit tags from entry",
+			entry: entities.Entry{
+				ID:       "1",
+				Date:     "2023-06-01",
+				Account:  "Test Account",
+				Category: "Test Category",
+				Modified: "2023-06-01T10:00:00Z",
+				Amount:   -100.0,
+				Tags:     []string{"expense", "credit-card", "food", "argentina"},
+				Currency: entities.Currency{Code: "USD", Rate: 1.0},
+			},
+			creditTags:        []string{"credit-card", "argentina"},
+			expectedTags:      []string{"expense", "food"},
+			expectedCompleted: true,
+		},
+		{
+			name: "no credit tags to remove",
+			entry: entities.Entry{
+				ID:       "2",
+				Date:     "2023-06-15",
+				Account:  "Test Account",
+				Category: "Test Category",
+				Modified: "2023-06-15T10:00:00Z",
+				Amount:   -50.0,
+				Tags:     []string{"expense", "food"},
+				Currency: entities.Currency{Code: "EUR", Rate: 1.2},
+			},
+			creditTags:        []string{"credit-card"},
+			expectedTags:      []string{"expense", "food"},
+			expectedCompleted: true,
+		},
+		{
+			name: "all tags are credit tags",
+			entry: entities.Entry{
+				ID:       "3",
+				Date:     "2023-06-20",
+				Account:  "Test Account",
+				Category: "Test Category",
+				Modified: "2023-06-20T10:00:00Z",
+				Amount:   -75.0,
+				Tags:     []string{"credit-card", "argentina"},
+				Currency: entities.Currency{Code: "ARS", Rate: 350.0},
+			},
+			creditTags:        []string{"credit-card", "argentina"},
+			expectedTags:      []string{},
+			expectedCompleted: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			useCase := NewCreditUseCase(&mockEntryRepository{}, &mockParameterRepository{}, &mockConfigService{})
+
+			result := useCase.convertToPaymentEntry(tc.entry, tc.creditTags)
+
+			// Check basic fields are preserved
+			if result.ID != tc.entry.ID {
+				t.Errorf("Expected ID %s, got %s", tc.entry.ID, result.ID)
+			}
+			if result.Date != tc.entry.Date {
+				t.Errorf("Expected Date %s, got %s", tc.entry.Date, result.Date)
+			}
+			if result.Account != tc.entry.Account {
+				t.Errorf("Expected Account %s, got %s", tc.entry.Account, result.Account)
+			}
+			if result.Category != tc.entry.Category {
+				t.Errorf("Expected Category %s, got %s", tc.entry.Category, result.Category)
+			}
+			if result.Modified != tc.entry.Modified {
+				t.Errorf("Expected Modified %s, got %s", tc.entry.Modified, result.Modified)
+			}
+			if result.Amount != tc.entry.Amount {
+				t.Errorf("Expected Amount %f, got %f", tc.entry.Amount, result.Amount)
+			}
+			if result.Currency.Code != tc.entry.Currency.Code {
+				t.Errorf("Expected Currency Code %s, got %s", tc.entry.Currency.Code, result.Currency.Code)
+			}
+
+			// Check completed flag
+			if result.Completed != tc.expectedCompleted {
+				t.Errorf("Expected Completed %t, got %t", tc.expectedCompleted, result.Completed)
+			}
+
+			// Check tags are properly filtered
+			if len(result.Tags) != len(tc.expectedTags) {
+				t.Errorf("Expected %d tags, got %d", len(tc.expectedTags), len(result.Tags))
+			}
+
+			for i, expectedTag := range tc.expectedTags {
+				if i >= len(result.Tags) || result.Tags[i] != expectedTag {
+					t.Errorf("Expected tag %s at position %d, got %v", expectedTag, i, result.Tags)
+				}
+			}
+		})
+	}
+}
