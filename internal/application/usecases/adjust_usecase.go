@@ -76,15 +76,17 @@ func (a *AdjustUseCase) AdjustCurrencyRates(request dto.AdjustRequest) (*dto.Adj
 }
 
 // getConversionRate gets the conversion rate from the parameter store
+// Returns the rate FROM base currency TO entry currency (for Toshl Rate field)
 func (a *AdjustUseCase) getConversionRate(fromCurrency, baseCurrency string) (float64, error) {
-	// Try direct conversion rate: FROM2BASE
-	directRateKey := fmt.Sprintf("%s2%s", fromCurrency, baseCurrency)
+	// Try direct conversion rate: BASE2FROM (e.g., EUR2ARS = 1598.69)
+	directRateKey := fmt.Sprintf("%s2%s", baseCurrency, fromCurrency)
 	if param, err := a.parameterRepo.Get(directRateKey); err == nil {
-		return param.Value, nil
+		return param.Value, nil // Use the EUR2ARS rate directly
 	}
 
-	// Try inverse conversion rate: BASE2FROM
-	inverseRateKey := fmt.Sprintf("%s2%s", baseCurrency, fromCurrency)
+	// Try inverse conversion rate: FROM2BASE (e.g., ARS2EUR = 0.000626)
+	// If we have ARS2EUR, we need EUR2ARS = 1/ARS2EUR
+	inverseRateKey := fmt.Sprintf("%s2%s", fromCurrency, baseCurrency)
 	if param, err := a.parameterRepo.Get(inverseRateKey); err == nil {
 		return 1.0 / param.Value, nil
 	}
