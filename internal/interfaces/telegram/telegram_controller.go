@@ -338,7 +338,6 @@ func (c *TelegramController) formatAdjustResponse(response *appdto.AdjustRespons
     result := "\n🔧 CURRENCY RATE ADJUSTMENT"
     result += fmt.Sprintf("\n🐷 PERIOD: %s", response.Period)
     result += fmt.Sprintf("\n💱 BASE CURRENCY: %s", response.BaseCurrency)
-    result += fmt.Sprintf("\n📊 UPDATED ENTRIES: %d", response.UpdatedCount)
     result += fmt.Sprintf("\n✅ %s", response.Message)
     return result
 }

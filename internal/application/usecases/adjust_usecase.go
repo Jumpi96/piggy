@@ -101,14 +101,14 @@ func (a *AdjustUseCase) createUpdatedEntry(entry entities.Entry, newRate float64
 		Currency: entities.Currency{
 			Code:     entry.Currency.Code,
 			Rate:     newRate,
-			MainRate: newRate, // Set MainRate to same value
-			Fixed:    false,
+			MainRate: entry.Currency.MainRate, // Keep original MainRate
+			Fixed:    true,                     // Set to true to force Toshl to use our rate
 		},
 		Date:      entry.Date,
 		Account:   entry.Account,
 		Category:  entry.Category,
 		Tags:      entry.Tags,
-		Modified:  time.Now().Format("2006-01-02T15:04:05Z"),
+		Modified:  entry.Modified, // Keep original modified timestamp
 		Completed: entry.Completed,
 	}
 }
