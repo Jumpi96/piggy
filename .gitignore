@@ -24,5 +24,7 @@ config.json
 # Lambda
 deployment.zip
 
-# WIP files
+# WIP and Claude Code files
 TODO.md
+CLAUDE.local.md
+.claude

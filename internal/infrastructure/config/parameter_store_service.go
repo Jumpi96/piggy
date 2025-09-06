@@ -9,11 +9,18 @@ import (
 	"github.com/aws/aws-sdk-go/service/ssm/ssmiface"
 )
 
+// CreditCard represents a credit card configuration
+type CreditCard struct {
+	Currencies []string `json:"currencies"`
+	Tags       []string `json:"tags"`
+}
+
 // ParameterStoreConfig represents the configuration stored in Parameter Store
 type ParameterStoreConfig struct {
-	Currency    string             `json:"currency"`
-	Conversions map[string]float64 `json:"conversions"`
-	Symbols     map[string]string  `json:"symbols"`
+	Currency    string                    `json:"currency"`
+	Conversions map[string]float64        `json:"conversions"`
+	Symbols     map[string]string         `json:"symbols"`
+	CreditCards map[string]*CreditCard    `json:"credit_cards"`
 	Budgeting   struct {
 		AmountPerDay float64 `json:"amountPerDay"`
 	} `json:"budgeting"`
@@ -121,6 +128,8 @@ func (p *ParameterStoreService) SetStringValue(key, value string) error {
 		config = &ParameterStoreConfig{
 			Currency:    "EUR",
 			Conversions: make(map[string]float64),
+			Symbols:     make(map[string]string),
+			CreditCards: make(map[string]*CreditCard),
 		}
 		config.Budgeting.AmountPerDay = 100.0
 	}
@@ -194,6 +203,8 @@ func (p *ParameterStoreService) SetFloatValue(key string, value float64) error {
 		config = &ParameterStoreConfig{
 			Currency:    "EUR",
 			Conversions: make(map[string]float64),
+			Symbols:     make(map[string]string),
+			CreditCards: make(map[string]*CreditCard),
 		}
 		config.Budgeting.AmountPerDay = 100.0
 	}
@@ -207,4 +218,56 @@ func (p *ParameterStoreService) SetFloatValue(key string, value float64) error {
 	}
 
 	return p.UpdateConfig(config)
+}
+
+// GetCreditCardCurrencies gets the currencies for a credit card
+func (p *ParameterStoreService) GetCreditCardCurrencies(cardCode string) ([]string, error) {
+	config, err := p.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	
+	if config.CreditCards == nil {
+		return nil, fmt.Errorf("no credit cards configured")
+	}
+	
+	creditCard, exists := config.CreditCards[cardCode]
+	if !exists {
+		return nil, fmt.Errorf("credit card %s not found", cardCode)
+	}
+	
+	return creditCard.Currencies, nil
+}
+
+// GetCreditCardTags gets the tags for a credit card
+func (p *ParameterStoreService) GetCreditCardTags(cardCode string) ([]string, error) {
+	config, err := p.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	
+	if config.CreditCards == nil {
+		return nil, fmt.Errorf("no credit cards configured")
+	}
+	
+	creditCard, exists := config.CreditCards[cardCode]
+	if !exists {
+		return nil, fmt.Errorf("credit card %s not found", cardCode)
+	}
+	
+	return creditCard.Tags, nil
+}
+
+// GetCreditCards gets all configured credit cards
+func (p *ParameterStoreService) GetCreditCards() (map[string]*CreditCard, error) {
+	config, err := p.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	
+	if config.CreditCards == nil {
+		return make(map[string]*CreditCard), nil
+	}
+	
+	return config.CreditCards, nil
 }

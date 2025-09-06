@@ -23,6 +23,9 @@ func (m *mockCreditUseCase) GetCreditStatus(request appdto.CreditRequest) (*appd
 	if m.err != nil {
 		return nil, m.err
 	}
+	if m.response == nil {
+		return nil, fmt.Errorf("credit use case error")
+	}
 	return m.response, nil
 }
 
@@ -419,12 +422,13 @@ func TestTelegramController_handleCreditCommand(t *testing.T) {
 			expectError:      false,
 		},
 		{
-			name:             "missing USD2ARS parameter",
-			message:          "/creditAR",
-			isPay:            false,
-			mockParameters:   map[string]*entities.Parameter{},
-			expectedContains: []string{"❓", "USD to ARS rate not configured"},
-			expectError:      false,
+			name:               "credit use case error",
+			message:            "/creditAR",
+			isPay:              false,
+			mockParameters:     map[string]*entities.Parameter{},
+			mockCreditResponse: nil, // nil response simulates error from use case
+			expectedContains:   []string{"❌", "Error getting credit status"},
+			expectError:        false,
 		},
 	}
 

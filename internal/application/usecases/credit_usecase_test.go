@@ -85,6 +85,22 @@ func (m *mockParameterRepository) GetSymbol(currency string) (string, error) {
 	return currency, nil
 }
 
+func (m *mockParameterRepository) GetCreditCardCurrencies(cardCode string) ([]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	// Simple mock: return EUR for all cards
+	return []string{"EUR"}, nil
+}
+
+func (m *mockParameterRepository) GetCreditCardTags(cardCode string) ([]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	// Simple mock: return test tags
+	return []string{"credit-" + cardCode}, nil
+}
+
 type mockConfigService struct {
 	creditTags  map[string][]string
 	balanceTags []string
@@ -156,7 +172,7 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 				"AR": {"credit", "argentina"},
 			},
         expectedError: false,
-        expectedTotal: 100.142857, // EUR total with sign flip: 100 (USD) + 50/(350*1) ≈ 0.142857
+        expectedTotal: 85.1, // EUR total: 100*0.85 + 50*0.002 = 85.1
 		},
 		{
 			name: "successful credit status for NL",
@@ -201,9 +217,14 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup mocks
+			// Setup mocks with conversion rates
 			mockEntryRepo := &mockEntryRepository{entries: tc.mockEntries}
-			mockParamRepo := &mockParameterRepository{parameters: make(map[string]*entities.Parameter)}
+			mockParamRepo := &mockParameterRepository{
+				parameters: map[string]*entities.Parameter{
+					"USD2EUR": {Key: "USD2EUR", Value: 0.85},  // 1 USD = 0.85 EUR
+					"ARS2EUR": {Key: "ARS2EUR", Value: 0.002}, // 1 ARS = 0.002 EUR
+				},
+			}
 			mockConfig := &mockConfigService{creditTags: tc.mockConfigTags}
 
 			// Create use case

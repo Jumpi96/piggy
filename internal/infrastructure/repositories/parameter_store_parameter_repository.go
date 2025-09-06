@@ -58,3 +58,13 @@ func (r *ParameterStoreParameterRepository) SetCurrencySymbol(currency, symbol s
 func (r *ParameterStoreParameterRepository) GetSymbol(currency string) (string, error) {
 	return r.parameterStore.GetSymbol(currency)
 }
+
+// GetCreditCardCurrencies gets the configured currencies for a credit card
+func (r *ParameterStoreParameterRepository) GetCreditCardCurrencies(cardCode string) ([]string, error) {
+	return r.parameterStore.GetCreditCardCurrencies(cardCode)
+}
+
+// GetCreditCardTags gets the configured tags for a credit card
+func (r *ParameterStoreParameterRepository) GetCreditCardTags(cardCode string) ([]string, error) {
+	return r.parameterStore.GetCreditCardTags(cardCode)
+}

@@ -18,4 +18,10 @@ type ParameterRepository interface {
 
 	// GetSymbol gets the display symbol for any currency code
 	GetSymbol(currency string) (string, error)
+
+	// GetCreditCardCurrencies gets the configured currencies for a credit card
+	GetCreditCardCurrencies(cardCode string) ([]string, error)
+
+	// GetCreditCardTags gets the configured tags for a credit card
+	GetCreditCardTags(cardCode string) ([]string, error)
 }

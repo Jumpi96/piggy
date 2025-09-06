@@ -12,11 +12,12 @@ type CreditRequest struct {
 
 // CreditResponse represents the response from credit operations
 type CreditResponse struct {
-    Period     string             `json:"period"`
-    TotalUSD   float64            `json:"total_usd"`
-    TotalARS   float64            `json:"total_ars"`
-    Total      float64            `json:"total"`
-    Items      []CreditItem       `json:"items"`
+    Period         string                    `json:"period"`
+    TotalUSD       float64                   `json:"total_usd"`       // Deprecated: use CurrencyTotals
+    TotalARS       float64                   `json:"total_ars"`       // Deprecated: use CurrencyTotals
+    Total          float64                   `json:"total"`
+    CurrencyTotals map[string]float64        `json:"currency_totals,omitempty"`
+    Items          []CreditItem              `json:"items"`
 }
 
 // CreditItem represents a single credit item

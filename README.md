@@ -95,6 +95,16 @@ Create a SecureString parameter in AWS Parameter Store with the following JSON s
     "USD": "$",
     "EUR": "€"
   },
+  "credit_cards": {
+    "NL": {
+      "currencies": ["EUR"],
+      "tags": ["credit-nl", "mastercard"]
+    },
+    "AR": {
+      "currencies": ["USD", "ARS"],
+      "tags": ["credit-ar", "visa"]
+    }
+  },
   "budgeting": {
     "amountPerDay": 100.0
   }
@@ -117,6 +127,30 @@ The bot supports separate symbols for display while keeping currency logic simpl
 ```
 
 When no symbol is defined, the currency code is used for display.
+
+#### Credit Card Configuration
+The bot supports flexible credit card configuration through the `credit_cards` object:
+
+- **Card codes** (e.g., `"NL"`, `"AR"`) correspond to the country codes used in `/credit[CODE]` commands
+- **Currencies array** specifies which currencies to track separately (e.g., `["EUR"]` or `["USD", "ARS"]`)
+- **Tags array** contains the credit card tags to filter transactions
+- **Multiple currency support**: When multiple currencies are configured, the bot calculates separate totals for each
+- **Conversion handling**: Items in unspecified currencies are converted to the first currency in the array
+
+**Examples:**
+```bash
+# Single currency credit card
+"NL": {
+  "currencies": ["EUR"],
+  "tags": ["credit-nl"]
+}
+
+# Multi-currency credit card  
+"AR": {
+  "currencies": ["USD", "ARS"],
+  "tags": ["credit-ar", "visa", "mastercard"]
+}
+```
 
 #### Conversion Rate Examples
 **IMPORTANT**: Rate keys should follow the format `"FROM2TO": rate_value`

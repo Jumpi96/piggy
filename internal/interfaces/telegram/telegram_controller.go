@@ -231,16 +231,6 @@ func (c *TelegramController) handleCreditCommand(message string, isPay bool) str
 		return "❓ Please specify country code (AR or NL)"
 	}
 
-    // Get parameters from storage
-    usdToArs, err := c.parameterUseCase.GetParameter("USD2ARS")
-    if err != nil {
-        return "❓ USD to ARS rate not configured. Use /set USD2ARS <rate>"
-    }
-    eurToUsd, err := c.parameterUseCase.GetParameter("EUR2USD")
-    if err != nil {
-        return "❓ EUR to USD rate not configured. Use /set EUR2USD <rate>"
-    }
-
     // Parse optional month parameter (YYYY-MM)
     monthYear := time.Now()
     parts := strings.Fields(message)
@@ -252,8 +242,6 @@ func (c *TelegramController) handleCreditCommand(message string, isPay bool) str
     }
     request := appdto.CreditRequest{
         MonthYear:   monthYear,
-        UsdToArs:    usdToArs.Value,
-        EurToUsd:    eurToUsd.Value,
         CountryCode: countryCode,
     }
 
@@ -498,12 +486,22 @@ func (c *TelegramController) formatCreditResponse(response *appdto.CreditRespons
 
     result := header
     result += fmt.Sprintf("\n🐷PERIOD: %s", response.Period)
-    // Determine display currency symbol from items if available, else use default
-    dispCurr := c.getCurrencySymbol()
-    if len(response.Items) > 0 && response.Items[0].Currency != "" {
-        dispCurr = c.getCurrencySymbolFromCode(response.Items[0].Currency)
+    
+    // Show currency totals if available, otherwise show single total
+    if response.CurrencyTotals != nil && len(response.CurrencyTotals) > 1 {
+        result += "\n💰TOTALS:"
+        for currency, total := range response.CurrencyTotals {
+            currencySymbol := c.getCurrencySymbolFromCode(currency)
+            result += fmt.Sprintf("\n  %s: %s %0.2f", currency, currencySymbol, total)
+        }
+    } else {
+        // Single total display (backwards compatibility)
+        dispCurr := c.getCurrencySymbol()
+        if len(response.Items) > 0 && response.Items[0].Currency != "" {
+            dispCurr = c.getCurrencySymbolFromCode(response.Items[0].Currency)
+        }
+        result += fmt.Sprintf("\n💰TOTAL: %s %0.2f", dispCurr, response.Total)
     }
-    result += fmt.Sprintf("\n💰TOTAL: %s %0.2f", dispCurr, response.Total)
 
     if len(response.Items) > 0 {
         result += "\nYour credit items are: "

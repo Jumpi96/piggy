@@ -43,7 +43,7 @@ func NewHandler() *Handler {
 	parameterRepo := repositories.NewParameterStoreParameterRepository(parameterStore)
 
 	// Initialize config service
-	var configService services.ConfigService = config.NewConfigService()
+	var configService services.ConfigService = config.NewConfigService(parameterStore)
 
 	// Initialize use cases
 	statusUseCase := usecases.NewStatusUseCase(entryRepo, parameterRepo, configService)

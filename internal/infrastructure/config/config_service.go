@@ -9,18 +9,16 @@ import (
 
 // ConfigServiceImpl implements the ConfigService interface
 type ConfigServiceImpl struct {
-	creditNLTags   []string
-	creditARTags   []string
+	parameterStore *ParameterStoreService
 	balanceTags    []string
 	timeZone       string
 	telegramUser   string
 }
 
 // NewConfigService creates a new configuration service
-func NewConfigService() services.ConfigService {
+func NewConfigService(parameterStore *ParameterStoreService) services.ConfigService {
 	return &ConfigServiceImpl{
-		creditNLTags:   parseCommaSeparated(getEnv("CREDIT_NL_TAG", "123456")),
-		creditARTags:   parseCommaSeparated(getEnv("CREDIT_TAG", "123456")),
+		parameterStore: parameterStore,
 		balanceTags:    parseCommaSeparated(getEnv("BALANCE_TAG", "123456")),
 		timeZone:       getEnv("TIME_ZONE", "Europe/Amsterdam"),
 		telegramUser:   os.Getenv("TELEGRAM_USER"),
@@ -29,14 +27,12 @@ func NewConfigService() services.ConfigService {
 
 // GetCreditTags returns the credit tags for a specific country
 func (c *ConfigServiceImpl) GetCreditTags(countryCode string) []string {
-	switch countryCode {
-	case "NL":
-		return c.creditNLTags
-	case "AR":
-		return c.creditARTags
-	default:
-		return c.creditARTags // Default to AR
+	tags, err := c.parameterStore.GetCreditCardTags(countryCode)
+	if err != nil {
+		// Return empty slice if credit card not found or error occurred
+		return []string{}
 	}
+	return tags
 }
 
 // GetBalanceTags returns the balance tags
