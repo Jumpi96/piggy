@@ -450,21 +450,31 @@ func (c *TelegramController) formatStatusResponse(response *appdto.StatusRespons
     // Base and rates
     result += fmt.Sprintf("\n💳Base: %s; ApD: %s%0.2f.", currencySymbol, currencySymbol, response.UsedAmountPerDay)
     if len(response.UsedRates) > 0 {
-        // Build sorted list of rates
-        keys := make([]string, 0, len(response.UsedRates))
-        for k := range response.UsedRates { keys = append(keys, k) }
-        for i := 1; i < len(keys); i++ { j:=i; for j>0 && keys[j-1] > keys[j] { keys[j-1], keys[j] = keys[j], keys[j-1]; j-- } }
-        result += "\n🔁Rates:"
-        for _, k := range keys {
-            // k format: BASE2CODE
+        // Display consistently as: 1 BASE per X OTHER
+        type rateItem struct{ other string; value float64 }
+        items := make([]rateItem, 0, len(response.UsedRates))
+        base := response.UsedBase
+        for k, v := range response.UsedRates {
             parts := strings.Split(k, "2")
-            if len(parts) == 2 {
-                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[1], response.UsedRates[k], parts[0])
-            } else {
-                result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
+            if len(parts) != 2 { continue }
+            a, b := parts[0], parts[1]
+            if a == base {
+                items = append(items, rateItem{other: b, value: v})
+            } else if b == base {
+                if v != 0 {
+                    items = append(items, rateItem{other: a, value: 1 / v})
+                }
             }
         }
-        result = result[:len(result)-1]
+        // Sort by OTHER currency code
+        for i := 1; i < len(items); i++ { j:=i; for j>0 && items[j-1].other > items[j].other { items[j-1], items[j] = items[j], items[j-1]; j-- } }
+        if len(items) > 0 {
+            result += "\n🔁Rates:"
+            for _, it := range items {
+                result += fmt.Sprintf(" 1 %s per %s %s,", base, formatFloatUpTo5(it.value), it.other)
+            }
+            result = result[:len(result)-1]
+        }
     }
     result += fmt.Sprintf("\n💵YOUR CURRENT SITUATION: %s%0.2f", currencySymbol, response.Difference)
     result += fmt.Sprintf("\n💷Comparing with what you expected to have considering today: %s%0.2f", currencySymbol, response.DayRemainingDiff)
@@ -506,19 +516,31 @@ func (c *TelegramController) formatBalanceResponse(response *appdto.BalanceRespo
     result := fmt.Sprintf("\n🐷PERIOD: %s to %s", response.FromDate, response.ToDate)
     result += fmt.Sprintf("\n💳Base: %s; ApD: %s%0.2f.", currencySymbol, currencySymbol, response.UsedAmountPerDay)
     if len(response.UsedRates) > 0 {
-        keys := make([]string, 0, len(response.UsedRates))
-        for k := range response.UsedRates { keys = append(keys, k) }
-        for i := 1; i < len(keys); i++ { j:=i; for j>0 && keys[j-1] > keys[j] { keys[j-1], keys[j] = keys[j], keys[j-1]; j-- } }
-        result += "\n🔁Rates:"
-        for _, k := range keys {
+        // Display consistently as: 1 BASE per X OTHER
+        type rateItem struct{ other string; value float64 }
+        items := make([]rateItem, 0, len(response.UsedRates))
+        base := response.UsedBase
+        for k, v := range response.UsedRates {
             parts := strings.Split(k, "2")
-            if len(parts) == 2 {
-                result += fmt.Sprintf(" 1 %s per %0.5f %s,", parts[1], response.UsedRates[k], parts[0])
-            } else {
-                result += fmt.Sprintf(" %s=%0.2f,", k, response.UsedRates[k])
+            if len(parts) != 2 { continue }
+            a, b := parts[0], parts[1]
+            if a == base {
+                items = append(items, rateItem{other: b, value: v})
+            } else if b == base {
+                if v != 0 {
+                    items = append(items, rateItem{other: a, value: 1 / v})
+                }
             }
         }
-        result = result[:len(result)-1]
+        // Sort by OTHER currency code
+        for i := 1; i < len(items); i++ { j:=i; for j>0 && items[j-1].other > items[j].other { items[j-1], items[j] = items[j], items[j-1]; j-- } }
+        if len(items) > 0 {
+            result += "\n🔁Rates:"
+            for _, it := range items {
+                result += fmt.Sprintf(" 1 %s per %s %s,", base, formatFloatUpTo5(it.value), it.other)
+            }
+            result = result[:len(result)-1]
+        }
     }
 
     // Monthly breakdown if available
@@ -592,4 +614,15 @@ func (c *TelegramController) formatCreditResponse(response *appdto.CreditRespons
     }
 
     return result
+}
+
+// formatFloatUpTo5 formats a float with up to 5 decimals, trimming trailing zeros
+func formatFloatUpTo5(v float64) string {
+    s := fmt.Sprintf("%.5f", v)
+    s = strings.TrimRight(s, "0")
+    s = strings.TrimRight(s, ".")
+    if s == "" {
+        return "0"
+    }
+    return s
 }
