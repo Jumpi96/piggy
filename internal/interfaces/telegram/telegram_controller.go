@@ -274,14 +274,15 @@ func (c *TelegramController) handleSetCommand(message string) string {
 		return "❓ Usage: /set <parameter> <value> or /set SYMBOL <currency> <symbol>"
 	}
 
-    parameter := parts[1]
+    originalParameter := parts[1]
+    parameter := strings.ToUpper(originalParameter)
     
     // Handle symbol setting: /set SYMBOL ARS AR$
     if parameter == "SYMBOL" {
         if len(parts) < 4 {
             return "❓ Usage: /set SYMBOL <currency> <symbol>"
         }
-        currency := parts[2]
+        currency := strings.ToUpper(parts[2])
         symbol := parts[3]
         err := c.parameterUseCase.SetCurrencySymbol(currency, symbol)
         if err != nil {
@@ -294,19 +295,52 @@ func (c *TelegramController) handleSetCommand(message string) string {
     var err error
     if parameter == "CURRENCY" {
         // Accept string values for CURRENCY
-        err = c.parameterUseCase.SetStringParameter(parameter, valueStr)
+        err = c.parameterUseCase.SetStringParameter(parameter, strings.ToUpper(valueStr))
     } else {
         value, convErr := strconv.ParseFloat(valueStr, 64)
         if convErr != nil {
             return "❓ Invalid value. Please provide a numeric value."
         }
+
+        // Normalize currency pair keys of the form AAA2BBB
+        rConv := regexp.MustCompile(`^[A-Z]{3}2[A-Z]{3}$`)
+        if rConv.MatchString(parameter) {
+            partsPair := strings.SplitN(parameter, "2", 2)
+            a, b := partsPair[0], partsPair[1]
+            // Canonicalize by sorting currencies alphabetically
+            canonicalA, canonicalB := a, b
+            if a > b {
+                canonicalA, canonicalB = b, a
+            }
+            canonicalKey := fmt.Sprintf("%s2%s", canonicalA, canonicalB)
+
+            // If user-provided key differs from canonical, invert the value
+            if parameter != canonicalKey {
+                if value == 0 {
+                    return "❓ Invalid value. Inverse requires a non-zero number."
+                }
+                value = 1 / value
+            }
+            // Store under canonical key
+            err = c.parameterUseCase.SetParameter(canonicalKey, value)
+            if err != nil {
+                return fmt.Sprintf("❌ Error setting parameter: %v", err)
+            }
+            // Inform user, keeping original parameter in the message
+            if parameter != canonicalKey {
+                return fmt.Sprintf("✅ Parameter %s set to %v (stored as %s=%0.6f)", originalParameter, valueStr, canonicalKey, value)
+            }
+            return fmt.Sprintf("✅ Parameter %s set to %v", originalParameter, valueStr)
+        }
+
+        // Non-currency-pair numeric parameter
         err = c.parameterUseCase.SetParameter(parameter, value)
     }
-	if err != nil {
-		return fmt.Sprintf("❌ Error setting parameter: %v", err)
-	}
+    if err != nil {
+        return fmt.Sprintf("❌ Error setting parameter: %v", err)
+    }
 
-    return fmt.Sprintf("✅ Parameter %s set to %v", parameter, valueStr)
+    return fmt.Sprintf("✅ Parameter %s set to %v", originalParameter, valueStr)
 }
 
 // handleAdjustCommand handles the /adjust command
