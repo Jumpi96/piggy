@@ -23,6 +23,7 @@ import (
 // Use case interfaces for dependency inversion
 type CreditUseCaseInterface interface {
 	GetCreditStatus(request appdto.CreditRequest) (*appdto.CreditResponse, error)
+	PayCredit(request appdto.CreditRequest) error
 }
 
 type StatusUseCaseInterface interface {
@@ -258,12 +259,27 @@ func (c *TelegramController) handleCreditCommand(message string, isPay bool) str
         CountryCode: countryCode,
     }
 
-	response, err := c.creditUseCase.GetCreditStatus(request)
-	if err != nil {
-		return fmt.Sprintf("❌ Error getting credit status: %v", err)
-	}
+    if isPay {
+        // Handle payment: mark entries as paid and return confirmation
+        err := c.creditUseCase.PayCredit(request)
+        if err != nil {
+            return fmt.Sprintf("❌ Error processing payment: %v", err)
+        }
 
-    return c.formatCreditResponse(response, isPay, request)
+        // Get updated status to show payment confirmation
+        response, err := c.creditUseCase.GetCreditStatus(request)
+        if err != nil {
+            return fmt.Sprintf("✅ Payment processed successfully")
+        }
+        return c.formatCreditResponse(response, isPay, request)
+    } else {
+        // Handle regular credit status
+        response, err := c.creditUseCase.GetCreditStatus(request)
+        if err != nil {
+            return fmt.Sprintf("❌ Error getting credit status: %v", err)
+        }
+        return c.formatCreditResponse(response, isPay, request)
+    }
 }
 
 // handleSetCommand handles the /set command
@@ -581,7 +597,10 @@ func (c *TelegramController) formatCreditResponse(response *appdto.CreditRespons
 
     var header string
     if isPay {
-        header = fmt.Sprintf("\n💳PAYING YOUR %sCREDIT CARD%s", flag, flag)
+        if len(response.Items) == 0 {
+            return fmt.Sprintf("\n✅ No outstanding credit card payments for %s %s", flag, response.Period)
+        }
+        header = fmt.Sprintf("\n✅ PAID %sCREDIT CARD%s", flag, flag)
     } else {
         header = "\n💳CREDIT REPORT"
     }
