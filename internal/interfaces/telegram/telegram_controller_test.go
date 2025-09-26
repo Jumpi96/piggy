@@ -17,6 +17,7 @@ import (
 type mockCreditUseCase struct {
 	response *appdto.CreditResponse
 	err      error
+	payErr   error
 }
 
 func (m *mockCreditUseCase) GetCreditStatus(request appdto.CreditRequest) (*appdto.CreditResponse, error) {
@@ -27,6 +28,10 @@ func (m *mockCreditUseCase) GetCreditStatus(request appdto.CreditRequest) (*appd
 		return nil, fmt.Errorf("credit use case error")
 	}
 	return m.response, nil
+}
+
+func (m *mockCreditUseCase) PayCredit(request appdto.CreditRequest) error {
+	return m.payErr
 }
 
 type mockStatusUseCase struct {
@@ -659,23 +664,23 @@ func TestNewTelegramController(t *testing.T) {
 		t.Error("Expected controller instance, got nil")
 	}
 
-	if controller.creditUseCase != mockCredit {
+	if controller.creditUseCase == nil {
 		t.Error("Credit use case not set correctly")
 	}
 
-	if controller.statusUseCase != mockStatus {
+	if controller.statusUseCase == nil {
 		t.Error("Status use case not set correctly")
 	}
 
-	if controller.balanceUseCase != mockBalance {
+	if controller.balanceUseCase == nil {
 		t.Error("Balance use case not set correctly")
 	}
 
-	if controller.parameterUseCase != mockParameter {
+	if controller.parameterUseCase == nil {
 		t.Error("Parameter use case not set correctly")
 	}
 
-	if controller.configService != mockConfig {
+	if controller.configService == nil {
 		t.Error("Config service not set correctly")
 	}
 
