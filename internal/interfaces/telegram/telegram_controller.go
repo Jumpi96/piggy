@@ -292,7 +292,12 @@ func (c *TelegramController) handleSetCommand(message string) string {
 
     originalParameter := parts[1]
     parameter := strings.ToUpper(originalParameter)
-    
+
+    // Special case for ApD to preserve case sensitivity
+    if strings.ToUpper(originalParameter) == "APD" {
+        parameter = "ApD"
+    }
+
     // Handle symbol setting: /set SYMBOL ARS AR$
     if parameter == "SYMBOL" {
         if len(parts) < 4 {
