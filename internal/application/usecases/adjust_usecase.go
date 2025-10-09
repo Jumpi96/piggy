@@ -2,6 +2,8 @@ package usecases
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 
 	"piggy/internal/application/dto"
 	"piggy/internal/domain/entities"
@@ -43,15 +45,28 @@ func (a *AdjustUseCase) AdjustCurrencyRates(request dto.AdjustRequest) (*dto.Adj
 		return nil, fmt.Errorf("failed to retrieve entries: %w", err)
 	}
 
-	updatedCount := 0
+	rateCache := make(map[string]float64)
+	toUpdate := make([]entities.MinimalEntry, 0, len(entries))
+
 	for _, entry := range entries {
 		// Skip if entry is already in base currency
 		if entry.Currency.Code == baseCurrency {
 			continue
 		}
 
-		// Get the conversion rate from parameter store
-		newRate, err := a.getConversionRate(entry.Currency.Code, baseCurrency)
+		// Get the conversion rate from cache or parameter store
+		newRate, err := func(currency string) (float64, error) {
+			if rate, ok := rateCache[currency]; ok {
+				return rate, nil
+			}
+
+			rate, getErr := a.getConversionRate(currency, baseCurrency)
+			if getErr != nil {
+				return 0, getErr
+			}
+			rateCache[currency] = rate
+			return rate, nil
+		}(entry.Currency.Code)
 		if err != nil {
 			// Skip entries we can't convert
 			continue
@@ -59,13 +74,48 @@ func (a *AdjustUseCase) AdjustCurrencyRates(request dto.AdjustRequest) (*dto.Adj
 
 		// Update the entry's currency rate if it's different
 		if entry.Currency.Rate != newRate {
-			updatedEntry := a.createUpdatedEntry(entry, newRate)
-			if err := a.entryRepo.Update(updatedEntry); err != nil {
-				return nil, fmt.Errorf("failed to update entry %s: %w", entry.ID, err)
-			}
-			updatedCount++
+			toUpdate = append(toUpdate, a.createUpdatedEntry(entry, newRate))
 		}
 	}
+
+	const maxParallelUpdates = 5
+	sem := make(chan struct{}, maxParallelUpdates)
+
+	var (
+		wg        sync.WaitGroup
+		errMu     sync.Mutex
+		firstErr  error
+		updateSum int64
+	)
+
+	for _, entry := range toUpdate {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(e entities.MinimalEntry) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if err := a.entryRepo.Update(e); err != nil {
+				errMu.Lock()
+				if firstErr == nil {
+					firstErr = fmt.Errorf("failed to update entry %s: %w", e.ID, err)
+				}
+				errMu.Unlock()
+				return
+			}
+
+			atomic.AddInt64(&updateSum, 1)
+		}(entry)
+	}
+
+	wg.Wait()
+
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	updatedCount := int(updateSum)
 
 	return &dto.AdjustResponse{
 		Period:       request.MonthYear.Format("2006-01"),
@@ -97,13 +147,13 @@ func (a *AdjustUseCase) getConversionRate(fromCurrency, baseCurrency string) (fl
 // createUpdatedEntry creates a minimal entry with updated currency rate
 func (a *AdjustUseCase) createUpdatedEntry(entry entities.Entry, newRate float64) entities.MinimalEntry {
 	return entities.MinimalEntry{
-		ID:       entry.ID,
-		Amount:   entry.Amount,
+		ID:     entry.ID,
+		Amount: entry.Amount,
 		Currency: entities.Currency{
 			Code:     entry.Currency.Code,
 			Rate:     newRate,
 			MainRate: entry.Currency.MainRate, // Keep original MainRate
-			Fixed:    true,                     // Set to true to force Toshl to use our rate
+			Fixed:    true,                    // Set to true to force Toshl to use our rate
 		},
 		Date:      entry.Date,
 		Account:   entry.Account,
