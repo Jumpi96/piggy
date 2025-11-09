@@ -102,10 +102,11 @@ func (m *mockParameterRepository) GetCreditCardTags(cardCode string) ([]string, 
 }
 
 type mockConfigService struct {
-	creditTags  map[string][]string
-	balanceTags []string
-	telegramUser string
-	timeZone    string
+	creditTags     map[string][]string
+	balanceTags    []string
+	telegramUser   string
+	timeZone       string
+	requestTimeout time.Duration
 }
 
 func (m *mockConfigService) GetCreditTags(countryCode string) []string {
@@ -128,6 +129,13 @@ func (m *mockConfigService) GetTimeZone() string {
 		return m.timeZone
 	}
 	return "UTC"
+}
+
+func (m *mockConfigService) GetRequestTimeout() time.Duration {
+	if m.requestTimeout == 0 {
+		return 55 * time.Second
+	}
+	return m.requestTimeout
 }
 
 func TestCreditUseCase_GetCreditStatus(t *testing.T) {
@@ -158,7 +166,7 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 					},
 				},
 				{
-					ID:     "2", 
+					ID:     "2",
 					Date:   "2023-01-20",
 					Amount: -50.0,
 					Tags:   []string{"credit", "argentina"},
@@ -171,8 +179,8 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 			mockConfigTags: map[string][]string{
 				"AR": {"credit", "argentina"},
 			},
-        expectedError: false,
-        expectedTotal: 85.1, // EUR total: 100*0.85 + 50*0.002 = 85.1
+			expectedError: false,
+			expectedTotal: 85.1, // EUR total: 100*0.85 + 50*0.002 = 85.1
 		},
 		{
 			name: "successful credit status for NL",
@@ -184,7 +192,7 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 			mockEntries: []entities.Entry{
 				{
 					ID:     "1",
-					Date:   "2023-01-15", 
+					Date:   "2023-01-15",
 					Amount: -200.0,
 					Tags:   []string{"credit", "netherlands"},
 					Currency: entities.Currency{
@@ -196,8 +204,8 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 			mockConfigTags: map[string][]string{
 				"NL": {"credit", "netherlands"},
 			},
-        expectedError: false,
-        expectedTotal: 200.0, // EUR total with sign flip
+			expectedError: false,
+			expectedTotal: 200.0, // EUR total with sign flip
 		},
 		{
 			name: "empty entries",
@@ -242,7 +250,7 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
-				
+
 				if result == nil {
 					t.Errorf("Expected result, but got nil")
 					return
@@ -252,10 +260,10 @@ func TestCreditUseCase_GetCreditStatus(t *testing.T) {
 					t.Errorf("Expected period %s, got %s", tc.request.MonthYear.Format("2006-01"), result.Period)
 				}
 
-                // Allow small floating point tolerance
-                if diff := result.Total - tc.expectedTotal; diff > 1e-6 || diff < -1e-6 {
-                    t.Errorf("Expected total %f, got %f", tc.expectedTotal, result.Total)
-                }
+				// Allow small floating point tolerance
+				if diff := result.Total - tc.expectedTotal; diff > 1e-6 || diff < -1e-6 {
+					t.Errorf("Expected total %f, got %f", tc.expectedTotal, result.Total)
+				}
 			}
 		})
 	}
@@ -290,7 +298,7 @@ func TestCreditUseCase_GetCreditStatus_ConfigServiceIntegration(t *testing.T) {
 	// Test that the use case correctly calls ConfigService.GetCreditTags
 	mockEntryRepo := &mockEntryRepository{entries: []entities.Entry{}}
 	mockParamRepo := &mockParameterRepository{parameters: make(map[string]*entities.Parameter)}
-	
+
 	// Mock config that returns specific tags for AR
 	mockConfig := &mockConfigService{
 		creditTags: map[string][]string{
@@ -415,7 +423,7 @@ func TestCreditUseCase_PayCredit(t *testing.T) {
 				parameters: make(map[string]*entities.Parameter),
 				err:        tc.mockTagsError,
 			}
-			
+
 			// Mock credit card tags response
 			if tc.mockTagsError == nil {
 				mockParamRepo.parameters["CREDIT_TAGS_"+tc.request.CountryCode] = entities.NewStringParameter("CREDIT_TAGS_"+tc.request.CountryCode, "credit-card")
@@ -442,11 +450,11 @@ func TestCreditUseCase_PayCredit(t *testing.T) {
 
 func TestCreditUseCase_ConvertToPaymentEntry(t *testing.T) {
 	testCases := []struct {
-		name               string
-		entry              entities.Entry
-		creditTags         []string
-		expectedTags       []string
-		expectedCompleted  bool
+		name              string
+		entry             entities.Entry
+		creditTags        []string
+		expectedTags      []string
+		expectedCompleted bool
 	}{
 		{
 			name: "remove credit tags from entry",

@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -59,8 +60,8 @@ func (m *mockBalanceUseCase) GetBalanceReport(request appdto.BalanceRequest) (*a
 }
 
 type mockParameterUseCase struct {
-    parameters map[string]*entities.Parameter
-    err        error
+	parameters map[string]*entities.Parameter
+	err        error
 }
 
 func (m *mockParameterUseCase) SetParameter(key string, value float64) error {
@@ -75,14 +76,14 @@ func (m *mockParameterUseCase) SetParameter(key string, value float64) error {
 }
 
 func (m *mockParameterUseCase) SetStringParameter(key string, value string) error {
-    if m.err != nil {
-        return m.err
-    }
-    if m.parameters == nil {
-        m.parameters = make(map[string]*entities.Parameter)
-    }
-    m.parameters[key] = &entities.Parameter{Key: key, StringValue: value}
-    return nil
+	if m.err != nil {
+		return m.err
+	}
+	if m.parameters == nil {
+		m.parameters = make(map[string]*entities.Parameter)
+	}
+	m.parameters[key] = &entities.Parameter{Key: key, StringValue: value}
+	return nil
 }
 
 func (m *mockParameterUseCase) GetParameter(key string) (*entities.Parameter, error) {
@@ -146,6 +147,7 @@ func (m *mockAdjustUseCase) AdjustCurrencyRates(request appdto.AdjustRequest) (*
 
 type mockConfigService struct {
 	telegramUser string
+	timeout      time.Duration
 }
 
 func (m *mockConfigService) GetCreditTags(countryCode string) []string {
@@ -162,6 +164,13 @@ func (m *mockConfigService) GetTelegramUser() string {
 
 func (m *mockConfigService) GetTimeZone() string {
 	return "UTC"
+}
+
+func (m *mockConfigService) GetRequestTimeout() time.Duration {
+	if m.timeout == 0 {
+		return 55 * time.Second
+	}
+	return m.timeout
 }
 
 func TestTelegramController_HandleWebhook(t *testing.T) {
@@ -325,15 +334,51 @@ func TestTelegramController_routeCommand(t *testing.T) {
 	}
 }
 
+func TestTelegramController_executeWithTimeout(t *testing.T) {
+	controller := &TelegramController{}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	result, err := controller.executeWithTimeout(ctx, func() string {
+		return "done"
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if result != "done" {
+		t.Fatalf("expected result 'done', got %s", result)
+	}
+
+	ctxTimeout, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancelTimeout()
+
+	_, err = controller.executeWithTimeout(ctxTimeout, func() string {
+		time.Sleep(50 * time.Millisecond)
+		return "late"
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+
+	ctxPanic := context.Background()
+	_, err = controller.executeWithTimeout(ctxPanic, func() string {
+		panic("boom")
+	})
+	if err == nil {
+		t.Fatalf("expected error from panic, got nil")
+	}
+}
+
 func TestTelegramController_handleStatusCommand(t *testing.T) {
 	testCases := []struct {
-		name              string
-		message           string
-		mockParameters    map[string]*entities.Parameter
+		name               string
+		message            string
+		mockParameters     map[string]*entities.Parameter
 		mockStatusResponse *appdto.StatusResponse
-		mockError         error
-		expectedContains  []string
-		expectError       bool
+		mockError          error
+		expectedContains   []string
+		expectError        bool
 	}{
 		{
 			name:    "successful status command",
@@ -354,19 +399,19 @@ func TestTelegramController_handleStatusCommand(t *testing.T) {
 			mockError: nil,
 			expectedContains: []string{
 				"🐷PERIOD: 2023-01",
-                "💵YOUR CURRENT SITUATION:",
-                "💰Your available cash should be:",
+				"💵YOUR CURRENT SITUATION:",
+				"💰Your available cash should be:",
 			},
 			expectError: false,
 		},
-        {
-            name:    "missing parameter",
-            message: "/status",
-            mockParameters: map[string]*entities.Parameter{}, // Controller no longer reads params
-            mockError: fmt.Errorf("amount per day not configured. Use /set ApD <amount>"),
-            expectedContains: []string{"❌", "Error getting status", "amount per day not configured"},
-            expectError: true,
-        },
+		{
+			name:             "missing parameter",
+			message:          "/status",
+			mockParameters:   map[string]*entities.Parameter{}, // Controller no longer reads params
+			mockError:        fmt.Errorf("amount per day not configured. Use /set ApD <amount>"),
+			expectedContains: []string{"❌", "Error getting status", "amount per day not configured"},
+			expectError:      true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -420,26 +465,26 @@ func TestTelegramController_handleCreditCommand(t *testing.T) {
 		expectedContains   []string
 		expectError        bool
 	}{
-        {
-            name:    "successful credit AR command",
-            message: "/creditAR",
-            isPay:   false,
-            mockParameters: map[string]*entities.Parameter{
-                "USD2ARS": entities.NewParameter("USD2ARS", 350.0),
-                "EUR2USD": entities.NewParameter("EUR2USD", 1.18),
-            },
-            mockCreditResponse: &appdto.CreditResponse{
-                Period:   "2023-01",
-                Total:    200.0,
-                Items:    []appdto.CreditItem{},
-            },
-            expectedContains: []string{
-                "💳CREDIT REPORT",
-                "🐷PERIOD: 2023-01",
-                "💰TOTAL:",
-            },
-            expectError: false,
-        },
+		{
+			name:    "successful credit AR command",
+			message: "/creditAR",
+			isPay:   false,
+			mockParameters: map[string]*entities.Parameter{
+				"USD2ARS": entities.NewParameter("USD2ARS", 350.0),
+				"EUR2USD": entities.NewParameter("EUR2USD", 1.18),
+			},
+			mockCreditResponse: &appdto.CreditResponse{
+				Period: "2023-01",
+				Total:  200.0,
+				Items:  []appdto.CreditItem{},
+			},
+			expectedContains: []string{
+				"💳CREDIT REPORT",
+				"🐷PERIOD: 2023-01",
+				"💰TOTAL:",
+			},
+			expectError: false,
+		},
 		{
 			name:             "missing country code",
 			message:          "/credit",
