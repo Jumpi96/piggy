@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { fetchCreditCards, insertCreditCard, deleteCreditCard, fetchCurrencies, fetchRatesForMonth, upsertExchangeRate } from '../lib/api';
+import { fetchCreditCards, insertCreditCard, deleteCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate } from '../lib/api';
 import type { CreditCard, Currency } from '../types';
-import { Plus, Trash2, ChevronLeft, ChevronRight, CreditCard as CardIcon, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, CreditCard as CardIcon, RefreshCw } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function SettingsPage() {
@@ -177,30 +177,23 @@ function CardsSettings() {
 }
 
 function RatesSettings() {
-    const [currentMonth, setCurrentMonth] = useState(new Date());
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [inputs, setInputs] = useState<Record<string, string>>({}); // currency_code -> rate string
     const [isLoading, setIsLoading] = useState(false);
-
-    const getMonthStr = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        return `${year}-${month}-01`;
-    };
 
     const load = async () => {
         setIsLoading(true);
         try {
             const [curData, rateData] = await Promise.all([
                 fetchCurrencies(),
-                fetchRatesForMonth(getMonthStr(currentMonth))
+                fetchLatestRates()
             ]);
 
             setCurrencies(curData);
 
             const initialInputs: Record<string, string> = {};
-            curData.forEach(c => {
-                const r = rateData.find(rd => rd.currency_code === c.code);
+            curData.forEach((c: Currency) => {
+                const r = (rateData as any[]).find((rd: any) => rd.currency_code === c.code);
                 if (r) initialInputs[c.code] = r.rate.toString();
             });
             setInputs(initialInputs);
@@ -212,13 +205,14 @@ function RatesSettings() {
         }
     };
 
-    useEffect(() => { load(); }, [currentMonth]);
+    useEffect(() => { load(); }, []);
 
     const handleSave = async (code: string) => {
         const val = inputs[code];
         if (!val) return;
         try {
-            await upsertExchangeRate(code, getMonthStr(currentMonth), parseFloat(val));
+            await insertExchangeRate(code, parseFloat(val));
+            alert(`Rate for ${code} updated! Transactions from this month onwards will now use this rate.`);
             load();
         } catch (err) {
             console.error(err);
@@ -226,43 +220,17 @@ function RatesSettings() {
         }
     };
 
-    const changeMonth = (delta: number) => {
-        const newDate = new Date(currentMonth);
-        newDate.setMonth(newDate.getMonth() + delta);
-        setCurrentMonth(newDate);
-    };
-
-    const formatMonth = (d: Date) => {
-        return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(d);
-    };
-
     // Filter out USD if base is USD
     const foreignCurrencies = currencies.filter(c => c.code !== 'USD');
 
     return (
         <div className="space-y-8">
-            {/* Header / Month Selector */}
-            <div className="flex items-center justify-between bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-700">
-                <span className="font-medium text-gray-500">Target Month</span>
-                <div className="flex items-center gap-4">
-                    <button onClick={() => changeMonth(-1)} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors">
-                        <ChevronLeft className="w-5 h-5" />
-                    </button>
-                    <span className="font-bold min-w-[140px] text-center">
-                        {formatMonth(currentMonth)}
-                    </span>
-                    <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors">
-                        <ChevronRight className="w-5 h-5" />
-                    </button>
-                </div>
-            </div>
-
             <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 dark:bg-zinc-800 border-b border-gray-100 dark:border-zinc-700">
                         <tr>
                             <th className="px-6 py-3 font-medium text-gray-500">Currency</th>
-                            <th className="px-6 py-3 font-medium text-gray-500">Rate (to USD)</th>
+                            <th className="px-6 py-3 font-medium text-gray-500">Current Rate (to USD)</th>
                             <th className="px-6 py-3 font-medium text-gray-500 text-right">Action</th>
                         </tr>
                     </thead>
@@ -287,7 +255,7 @@ function RatesSettings() {
                                         onClick={() => handleSave(c.code)}
                                         className="text-pink-600 hover:text-pink-700 font-medium text-xs uppercase tracking-wide border border-pink-200 dark:border-pink-900 px-3 py-1 rounded hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors"
                                     >
-                                        Save
+                                        Update
                                     </button>
                                 </td>
                             </tr>
@@ -303,13 +271,16 @@ function RatesSettings() {
                 </table>
             </div>
 
-            <p className="text-xs text-gray-400 text-center">
-                Rates are defined as "Units of USD per 1 Unit of Currency" (e.g. EUR = 1.10) OR "Units of Currency per 1 USD"?
-                <br />
-                Backend Logic uses `Amount / Rate`. So if you have ARS, and Rate is 1000, Result is 1/1000 USD. If Rate is 0.001, Result is 1/0.001 = 1000 USD.
-                <br />
-                Please use "Inverse Rate" (Units per USD) e.g. ARS = 1000.
-            </p>
+            <div className="bg-gray-50 dark:bg-zinc-800/50 p-6 rounded-xl border border-gray-200 dark:border-zinc-700">
+                <h4 className="font-bold mb-2">How it works</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Rates are defined as "Units of Local Currency per 1 USD" (e.g., ARS = 1000).
+                    <br /><br />
+                    When you update a rate, it is saved with the current timestamp.
+                    <strong> All transactions from the start of the current month </strong>
+                    onwards will be updated to use this new rate in your Overview and reports.
+                </p>
+            </div>
         </div>
     );
 }

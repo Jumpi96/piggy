@@ -39,8 +39,8 @@ end;
 $$;
 
 -- RPC: Repoint Exchange Rate
--- Updates all transactions of a currency in a month to use a new rate
-create or replace function repoint_exchange_rate(p_currency_code text, p_month date, p_new_rate_id uuid)
+-- Updates all transactions of a currency from a certain date onwards to use a new rate
+create or replace function repoint_exchange_rate(p_currency_code text, p_start_date date, p_new_rate_id uuid)
 returns void
 language plpgsql
 security definer
@@ -51,7 +51,7 @@ begin
       updated_at = now()
   where user_id = auth.uid()
     and currency_code = p_currency_code
-    and date_trunc('month', date) = date_trunc('month', p_month)
+    and date >= p_start_date
     and deleted_at is null;
 end;
 $$;
@@ -107,12 +107,12 @@ begin
          end if;
        end if;
 
-       -- Find exchange rate for this date
-       -- Note: This might be null if not set.
+       -- Find latest exchange rate for this currency
        select id into er_id from exchange_rates 
        where currency_code = r.currency_code 
-         and date_trunc('month', month) = date_trunc('month', next_date)
-         limit 1;
+         and user_id = auth.uid()
+       order by created_at desc
+       limit 1;
        
        -- Insert
        insert into transactions (

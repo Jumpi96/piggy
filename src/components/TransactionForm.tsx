@@ -92,7 +92,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             const dateStr = effectiveDate.toISOString().split('T')[0];
 
             // Exchange Rate
-            const exchangeRateId = await fetchExchangeRate(currencyCode, dateStr);
+            const exchangeRateId = await fetchExchangeRate(currencyCode);
 
             const transaction: TransactionInput = {
                 direction,

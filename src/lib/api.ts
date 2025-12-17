@@ -81,17 +81,13 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
     return data || [];
 }
 
-export async function fetchExchangeRate(currencyCode: string, date: string): Promise<string | null> {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const dateStr = `${year}-${month}-01`;
-
+export async function fetchExchangeRate(currencyCode: string): Promise<string | null> {
     const { data, error } = await supabase
         .from('exchange_rates')
         .select('id')
         .eq('currency_code', currencyCode)
-        .eq('month', dateStr)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
     if (error) {
@@ -149,58 +145,45 @@ export async function deleteCreditCard(id: string) {
     if (error) throw error;
 }
 
-export async function upsertExchangeRate(currencyCode: string, month: string, rate: number) {
-    // month is YYYY-MM-01
-    // We need to find if exists, or insert.
-    // Supabase upsert requires unique constraint.
-    // composite key (user_id, currency_code, month) should be unique.
-
-    // Check if rate exists first to get ID? Or just upsert?
-    // If we upsert, we need existing ID if we want to keep history?
-    // Actually exchange_rates has ID.
-    // Query by unique keys.
-    const { data: existing } = await supabase
+export async function insertExchangeRate(currencyCode: string, rate: number) {
+    const { data, error } = await supabase
         .from('exchange_rates')
-        .select('id')
-        .eq('currency_code', currencyCode)
-        .eq('month', month)
-        .maybeSingle();
+        .insert({ currency_code: currencyCode, rate })
+        .select()
+        .single();
 
-    if (existing) {
-        const { data, error } = await supabase
-            .from('exchange_rates')
-            .update({ rate })
-            .eq('id', existing.id)
-            .select()
-            .single();
-        if (error) throw error;
-        return data;
-    } else {
-        const { data, error } = await supabase
-            .from('exchange_rates')
-            .insert({ currency_code: currencyCode, month, rate })
-            .select()
-            .single();
-        if (error) throw error;
-        // RPC: Repoint transactions to this new rate
-        const { error: rpcError } = await supabase.rpc('repoint_exchange_rate', {
-            p_currency_code: currencyCode,
-            p_month: month,
-            p_new_rate_id: data.id
-        });
-        if (rpcError) console.error("Repoint failed", rpcError);
+    if (error) throw error;
 
-        return data;
-    }
+    // Repoint transactions from the start of the current month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    const dateStr = startOfMonth.toISOString().split('T')[0];
+
+    const { error: rpcError } = await supabase.rpc('repoint_exchange_rate', {
+        p_currency_code: currencyCode,
+        p_start_date: dateStr,
+        p_new_rate_id: data.id
+    });
+    if (rpcError) console.error("Repoint failed", rpcError);
+
+    return data;
 }
 
-export async function fetchRatesForMonth(month: string) {
+export async function fetchLatestRates() {
     const { data, error } = await supabase
         .from('exchange_rates')
         .select('*')
-        .eq('month', month);
+        .order('created_at', { ascending: false });
+
     if (error) throw error;
-    return data || [];
+
+    const latest: Record<string, any> = {};
+    (data || []).forEach(r => {
+        if (!latest[r.currency_code]) {
+            latest[r.currency_code] = r;
+        }
+    });
+    return Object.values(latest);
 }
 
 // Recurring Rules

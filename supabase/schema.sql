@@ -19,11 +19,8 @@ create table exchange_rates (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references auth.users(id) not null default auth.uid(),
   currency_code text references currencies(code) not null,
-  month date not null, -- stored as first day of month usually, or YYYY-MM-01
   rate numeric not null, -- 1 USD = X currency
-  created_at timestamptz default now(),
-  
-  constraint unique_rate_per_month unique (user_id, currency_code, month)
+  created_at timestamptz default now()
 );
 
 -- Credit Cards Table
