@@ -8,6 +8,7 @@ export function Overview() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
     // Derived State
     const [totalBalance, setTotalBalance] = useState(0);
@@ -24,23 +25,29 @@ export function Overview() {
     useEffect(() => {
         async function load() {
             setIsLoading(true);
+            setError(null);
             try {
+                const monthStr = getMonthStr(currentMonth);
+                console.log("Loading Overview for month:", monthStr);
+
                 const [txs, balanceData] = await Promise.all([
-                    fetchTransactions(getMonthStr(currentMonth)),
-                    computeMonthBalance(getMonthStr(currentMonth))
+                    fetchTransactions(monthStr),
+                    computeMonthBalance(monthStr)
                 ]);
+
+                console.log("Overview Data:", { txsCount: txs.length, balanceData });
 
                 setTransactions(txs);
                 setTotalIncome(balanceData.income);
                 setTotalExpense(balanceData.expense);
                 setTotalBalance(balanceData.balance);
 
-                // Calculate TBB count locally
                 const tbb = txs.filter(t => t.to_be_balanced).length;
                 setToBeBalancedCount(tbb);
 
             } catch (err) {
                 console.error("Failed to load data", err);
+                setError("Failed to load financial data. Please check your connection or settings.");
             } finally {
                 setIsLoading(false);
             }
@@ -80,6 +87,13 @@ export function Overview() {
                     </button>
                 </div>
             </div>
+
+            {/* Error Message */}
+            {error && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl text-red-800 dark:text-red-400">
+                    {error}
+                </div>
+            )}
 
             {/* Loading */}
             {isLoading ? (

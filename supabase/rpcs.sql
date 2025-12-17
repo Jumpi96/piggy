@@ -11,20 +11,20 @@ declare
   total_expense bigint;
 begin
   -- Sum income (cents / rate)
-  select coalesce(sum(t.amount_cents / er.rate), 0)
+  select coalesce(sum(t.amount_cents / coalesce(er.rate, 1)), 0)
   into total_income
   from transactions t
-  join exchange_rates er on t.exchange_rate_id = er.id
+  left join exchange_rates er on t.exchange_rate_id = er.id
   where t.user_id = auth.uid()
     and date_trunc('month', t.date) = date_trunc('month', target_month)
     and t.direction = 'income'
     and t.deleted_at is null;
 
   -- Sum expense
-  select coalesce(sum(t.amount_cents / er.rate), 0)
+  select coalesce(sum(t.amount_cents / coalesce(er.rate, 1)), 0)
   into total_expense
   from transactions t
-  join exchange_rates er on t.exchange_rate_id = er.id
+  left join exchange_rates er on t.exchange_rate_id = er.id
   where t.user_id = auth.uid()
     and date_trunc('month', t.date) = date_trunc('month', target_month)
     and t.direction = 'expense'
