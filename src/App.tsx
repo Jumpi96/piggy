@@ -12,23 +12,36 @@ import type { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 
 import type { ReactNode } from 'react';
-// ...
+
 function RequireAuth({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Initial check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      setLoading(false);
+      // Only stop loading if we have a session OR if there's no token in the URL to wait for
+      if (session || !window.location.hash.includes('access_token=')) {
+        setLoading(false);
+      }
     });
 
+    // 2. Listen for the actual login event (needed for magic links)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      setLoading(false);
+      if (session) setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // 3. Safety timeout: if we're still loading after 5s (e.g. invalid token), just show login
+    const timer = setTimeout(() => {
+      setLoading(p => p ? false : p);
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-pink-600" /></div>;
@@ -56,3 +69,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+Riverside
