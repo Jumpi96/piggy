@@ -36,6 +36,18 @@ export async function insertTransaction(transaction: TransactionInput) {
     return data;
 }
 
+export async function updateTransaction(id: string, updates: Partial<TransactionInput>) {
+    const { data, error } = await supabase
+        .from('transactions')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
 export async function fetchTransactions(monthStart: string): Promise<Transaction[]> {
     // monthStart should be YYYY-MM-01
     // Filter by date range? Or just by month?
@@ -51,7 +63,7 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
 
     const { data, error } = await supabase
         .from('transactions')
-        .select('*')
+        .select('*, exchange_rate:exchange_rates(rate)')
         .gte('date', start.toISOString().split('T')[0])
         .lt('date', end.toISOString().split('T')[0])
         .order('date', { ascending: false });

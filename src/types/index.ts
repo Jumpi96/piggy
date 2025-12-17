@@ -52,6 +52,7 @@ export interface Transaction {
     amount_cents: number;
     currency_code: string;
     exchange_rate_id?: string | null;
+    exchange_rate?: { rate: number } | null;
     category: string;
     tag: string;
     payment_method: PaymentMethod;
