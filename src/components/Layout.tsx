@@ -8,9 +8,9 @@ export function Layout() {
 
     const navItems = [
         { href: '/', icon: LayoutDashboard, label: 'Overview' },
+        { href: '/add', icon: PlusCircle, label: 'Add', special: true },
         { href: '/transactions', icon: List, label: 'Transactions' },
         { href: '/recurring', icon: Repeat, label: 'Recurring' },
-        { href: '/add', icon: PlusCircle, label: 'Add', special: true },
         { href: '/settings', icon: Settings, label: 'Settings' },
     ];
 
