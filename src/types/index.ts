@@ -58,6 +58,7 @@ export interface Transaction {
     tag: string;
     payment_method: PaymentMethod;
     credit_card_id?: string | null;
+    credit_card?: { name: string } | null;
     recurring_rule_id?: string | null;
     to_be_balanced: boolean;
     note?: string | null;

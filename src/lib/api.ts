@@ -71,7 +71,7 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
 
     const { data, error } = await supabase
         .from('transactions')
-        .select('*, exchange_rate:exchange_rates(rate)')
+        .select('*, exchange_rate:exchange_rates(rate), credit_card:credit_cards(name)')
         .is('deleted_at', null)
         .gte('date', start.toISOString().split('T')[0])
         .lt('date', end.toISOString().split('T')[0])

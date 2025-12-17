@@ -157,7 +157,9 @@ export function TransactionsList() {
                                         <div className="flex items-center justify-between md:justify-end gap-4 md:gap-6">
                                             <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                                                 {t.payment_method === 'card' ? <CreditCard className="w-4 h-4" /> : <Banknote className="w-4 h-4" />}
-                                                <span className="hidden sm:inline capitalize">{t.payment_method}</span>
+                                                <span className="hidden sm:inline">
+                                                    {t.payment_method === 'card' ? (t.credit_card?.name || 'Card') : 'Cash'}
+                                                </span>
                                             </div>
                                             <div className={cn(
                                                 "text-lg font-bold font-mono tracking-tight text-right",
