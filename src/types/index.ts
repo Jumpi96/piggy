@@ -11,7 +11,6 @@ export interface ExchangeRate {
     id: string;
     user_id: string;
     currency_code: string;
-    month: string; // YYYY-MM-DD (first of month)
     rate: number;
     created_at: string;
 }
@@ -41,6 +40,7 @@ export interface RecurringRule {
     start_date: string; // YYYY-MM-DD
     total_occurrences?: number | null;
     active: boolean;
+    note?: string | null;
     created_at: string;
     deleted_at?: string | null;
 }
@@ -60,6 +60,7 @@ export interface Transaction {
     credit_card_id?: string | null;
     recurring_rule_id?: string | null;
     to_be_balanced: boolean;
+    note?: string | null;
     created_at: string;
     updated_at: string;
     deleted_at?: string | null;

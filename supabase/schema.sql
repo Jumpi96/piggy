@@ -50,6 +50,7 @@ create table recurring_rules (
   start_date date not null,
   total_occurrences integer, -- null means infinite
   active boolean default true,
+  note text,
   created_at timestamptz default now(),
   deleted_at timestamptz
 );
@@ -69,6 +70,7 @@ create table transactions (
   credit_card_id uuid references credit_cards(id),
   recurring_rule_id uuid references recurring_rules(id),
   to_be_balanced boolean not null default false,
+  note text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   deleted_at timestamptz,

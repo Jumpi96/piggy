@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchCreditCards } from '../lib/api';
 import type { RecurringRule, Currency, CreditCard } from '../types';
-import { Plus, Trash2, Edit2, Play, Pause, RefreshCw, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, Play, Pause, RefreshCw, Loader2, Info } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CATEGORIES } from '../lib/constants';
 
-// Simplified for v1: only Monthly on Day X
 const SCHEDULE_TYPES = [
     { value: 'monthly_day', label: 'Monthly on Date' },
     { value: 'every_n_days', label: 'Every N Days' },
@@ -27,6 +26,7 @@ export function RecurringRulesPage() {
         schedule_type: 'monthly_day',
         schedule_config: { n: 1 },
         active: true,
+        note: '',
         start_date: new Date().toISOString().split('T')[0]
     });
 
@@ -56,11 +56,11 @@ export function RecurringRulesPage() {
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            // Generate until 2 months ahead
             const future = new Date();
             future.setMonth(future.getMonth() + 2);
             await ensureRecurringGenerated(future.toISOString().split('T')[0]);
             alert("Generated transactions successfully.");
+            load();
         } catch (err) {
             console.error(err);
             alert("Failed to generate.");
@@ -73,33 +73,32 @@ export function RecurringRulesPage() {
         e.preventDefault();
         try {
             const payload = { ...formData };
-            if (!payload.amount_cents) payload.amount_cents = 0; // handle empty string?
-
-            // Amount input is likely in units, convert to cents
-            // Wait, let's assuming input is handled as cents or units in form?
-            // TransactionForm used units. Let's use units in UI.
-
             if (editingId) {
                 await updateRecurringRule(editingId, payload);
             } else {
                 await insertRecurringRule(payload);
             }
             setShowForm(false);
-            setEditingId(null);
-            setFormData({
-                direction: 'expense',
-                currency_code: 'USD',
-                payment_method: 'cash',
-                schedule_type: 'monthly_day',
-                schedule_config: { n: 1 },
-                active: true,
-                start_date: new Date().toISOString().split('T')[0]
-            });
+            resetForm();
             load();
         } catch (err) {
             console.error(err);
             alert("Failed to save rule");
         }
+    };
+
+    const resetForm = () => {
+        setEditingId(null);
+        setFormData({
+            direction: 'expense',
+            currency_code: 'USD',
+            payment_method: 'cash',
+            schedule_type: 'monthly_day',
+            schedule_config: { n: 1 },
+            active: true,
+            note: '',
+            start_date: new Date().toISOString().split('T')[0]
+        });
     };
 
     const handleEdit = (rule: RecurringRule) => {
@@ -131,26 +130,28 @@ export function RecurringRulesPage() {
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Recurring Rules</h1>
+                <div>
+                    <h1 className="text-2xl font-bold">Recurring Rules</h1>
+                    <p className="text-sm text-gray-500">Automate your regular transactions</p>
+                </div>
                 <div className="flex gap-2">
                     <button
                         onClick={handleGenerate}
                         disabled={isGenerating}
-                        className="p-2 text-gray-500 hover:text-emerald-600 border rounded-lg hover:border-emerald-200"
+                        className="p-2 text-gray-500 hover:text-emerald-600 border dark:border-zinc-700 rounded-lg hover:border-emerald-200 transition-colors"
                         title="Force Generate Now"
                     >
                         <RefreshCw className={cn("w-5 h-5", isGenerating && "animate-spin")} />
                     </button>
                     <button
-                        onClick={() => { setShowForm(true); setEditingId(null); }}
-                        className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700"
+                        onClick={() => { resetForm(); setShowForm(true); }}
+                        className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-colors"
                     >
                         <Plus className="w-4 h-4" /> New Rule
                     </button>
                 </div>
             </div>
 
-            {/* List */}
             {isLoading ? (
                 <div className="flex justify-center p-12">
                     <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
@@ -158,116 +159,155 @@ export function RecurringRulesPage() {
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {rules.map(rule => (
-                        <div key={rule.id} className={cn("bg-white dark:bg-zinc-900 p-4 rounded-xl border shadow-sm relative", !rule.active && "opacity-60")}>
-                            {/* ... card content ... */}
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-bold text-lg">{rule.tag}</h3>
-                                <div className="flex gap-1">
-                                    <button onClick={() => toggleActive(rule)} className="p-1 text-gray-400 hover:text-blue-500">
+                        <div key={rule.id} className={cn(
+                            "bg-white dark:bg-zinc-900 p-5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm relative transition-all",
+                            !rule.active && "opacity-60 bg-gray-50 dark:bg-zinc-950"
+                        )}>
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="space-y-1">
+                                    <h3 className="font-bold text-lg leading-tight">{rule.tag}</h3>
+                                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{rule.category}</p>
+                                </div>
+                                <div className="flex gap-1 ml-2">
+                                    <button onClick={() => toggleActive(rule)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title={rule.active ? "Pause" : "Resume"}>
                                         {rule.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
                                     </button>
-                                    <button onClick={() => handleEdit(rule)} className="p-1 text-gray-400 hover:text-gray-600">
+                                    <button onClick={() => handleEdit(rule)} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
                                         <Edit2 className="w-4 h-4" />
                                     </button>
-                                    <button onClick={() => handleDelete(rule.id)} className="p-1 text-gray-400 hover:text-red-500">
+                                    <button onClick={() => handleDelete(rule.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
                             </div>
-                            <div className="text-sm text-gray-500 space-y-1">
-                                <p>{rule.category} • <span className={rule.direction === 'income' ? 'text-emerald-600' : 'text-red-600'}>{rule.direction}</span></p>
-                                <p className="font-mono">{rule.currency_code} {(rule.amount_cents / 100).toFixed(2)}</p>
-                                <p className="text-xs pt-2 border-t mt-2">
-                                    {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type}
-                                    {rule.total_occurrences ? ` • Limit: ${rule.total_occurrences} times` : ' • Infinite'}
-                                </p>
+
+                            <div className="space-y-2">
+                                <div className="flex items-baseline gap-2">
+                                    <span className={cn(
+                                        "text-lg font-bold font-mono",
+                                        rule.direction === 'income' ? 'text-teal-600' : 'text-pink-600'
+                                    )}>
+                                        {rule.direction === 'income' ? '+' : '-'}{rule.currency_code} {(rule.amount_cents / 100).toFixed(2)}
+                                    </span>
+                                </div>
+
+                                {rule.note && (
+                                    <div className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-lg italic">
+                                        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                        <span className="line-clamp-2">{rule.note}</span>
+                                    </div>
+                                )}
+
+                                <div className="text-[10px] text-gray-400 pt-2 border-t dark:border-zinc-800 flex justify-between items-center">
+                                    <span>
+                                        {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type.replace(/_/g, ' ')}
+                                        {rule.total_occurrences ? ` • ${rule.total_occurrences} times` : ' • Infinite'}
+                                    </span>
+                                    <span className="capitalize">{rule.payment_method}</span>
+                                </div>
                             </div>
                         </div>
                     ))}
                     {rules.length === 0 && (
-                        <div className="md:col-span-3 text-center p-12 text-gray-500 border-2 border-dashed rounded-xl">
-                            No recurring rules yet.
+                        <div className="md:col-span-3 text-center p-12 text-gray-500 border-2 border-dashed border-gray-100 dark:border-zinc-800 rounded-xl">
+                            <RefreshCw className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+                            <p>No recurring rules yet.</p>
+                            <button onClick={() => setShowForm(true)} className="mt-4 text-pink-600 font-medium hover:underline text-sm">Create your first rule</button>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Modal/Form Overlay */}
             {showForm && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-xl p-6">
-                        <h2 className="text-xl font-bold mb-4">{editingId ? 'Edit Rule' : 'New Recurring Rule'}</h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-
-                            {/* Basics */}
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-gray-100 dark:border-zinc-800 animate-in fade-in zoom-in duration-200">
+                        <div className="p-6 border-b border-gray-50 dark:border-zinc-800 flex items-center justify-between">
+                            <h2 className="text-xl font-bold">{editingId ? 'Edit Recurring Rule' : 'New Recurring Rule'}</h2>
+                            <button onClick={() => setShowForm(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                                <Plus className="w-6 h-6 text-gray-400 rotate-45" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Type</label>
                                     <select
                                         value={formData.direction}
                                         onChange={e => setFormData({ ...formData, direction: e.target.value as any })}
-                                        className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                     >
                                         <option value="expense">Expense</option>
                                         <option value="income">Income</option>
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Category</label>
                                     <select
                                         value={formData.category}
                                         onChange={e => setFormData({ ...formData, category: e.target.value })}
-                                        className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                         required
                                     >
-                                        <option value="">Select...</option>
-                                        {CATEGORIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                                        <option value="">Select category...</option>
+                                        {CATEGORIES.filter(c => c.direction === formData.direction).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                                     </select>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-medium text-gray-500 mb-1">Tag / Description</label>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Tag (Title)</label>
                                 <input
                                     type="text"
                                     value={formData.tag || ''}
                                     onChange={e => setFormData({ ...formData, tag: e.target.value })}
-                                    className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                    placeholder="e.g. Rent, Salary, Netflix..."
+                                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                     required
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Amount</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Amount</label>
                                     <input
                                         type="number" step="0.01"
                                         value={formData.amount_cents ? formData.amount_cents / 100 : ''}
-                                        onChange={e => setFormData({ ...formData, amount_cents: Math.round(parseFloat(e.target.value) * 100) })}
-                                        className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                        onChange={e => setFormData({ ...formData, amount_cents: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
+                                        placeholder="0.00"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 text-lg font-bold font-mono focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                         required
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Currency</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Currency</label>
                                     <select
                                         value={formData.currency_code}
                                         onChange={e => setFormData({ ...formData, currency_code: e.target.value })}
-                                        className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                     >
                                         {currencies.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
                                     </select>
                                 </div>
                             </div>
 
-                            {/* Payment Method */}
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Note (Optional)</label>
+                                <textarea
+                                    value={formData.note || ''}
+                                    onChange={e => setFormData({ ...formData, note: e.target.value })}
+                                    placeholder="Additional context for this rule..."
+                                    rows={2}
+                                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all resize-none"
+                                />
+                            </div>
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Method</label>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Method</label>
                                     <select
                                         value={formData.payment_method}
                                         onChange={e => setFormData({ ...formData, payment_method: e.target.value as any })}
-                                        className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                     >
                                         <option value="cash">Cash</option>
                                         <option value="card">Credit Card</option>
@@ -275,42 +315,41 @@ export function RecurringRulesPage() {
                                 </div>
                                 {formData.payment_method === 'card' && (
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Card</label>
+                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Card</label>
                                         <select
                                             value={formData.credit_card_id || ''}
                                             onChange={e => setFormData({ ...formData, credit_card_id: e.target.value })}
-                                            className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                            className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                             required
                                         >
-                                            <option value="">Select Card...</option>
+                                            <option value="">Select card...</option>
                                             {cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                         </select>
                                     </div>
                                 )}
                             </div>
 
-                            <hr className="dark:border-zinc-700" />
-
-                            {/* Schedule */}
-                            <div className="space-y-3">
-                                <h4 className="font-medium text-sm">Schedule</h4>
+                            <div className="p-4 bg-gray-50 dark:bg-zinc-800/50 rounded-xl space-y-4">
+                                <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <RefreshCw className="w-3 h-3" /> Schedule
+                                </h4>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Start Date</label>
+                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Start Date</label>
                                         <input
                                             type="date"
                                             value={formData.start_date || ''}
                                             onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                                            className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Recurrence</label>
+                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Repeat</label>
                                         <select
                                             value={formData.schedule_type}
                                             onChange={e => setFormData({ ...formData, schedule_type: e.target.value as any })}
-                                            className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                         >
                                             {SCHEDULE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                         </select>
@@ -319,31 +358,46 @@ export function RecurringRulesPage() {
 
                                 {formData.schedule_type !== 'monthly_day' && (
                                     <div>
-                                        <label className="block text-xs font-medium text-gray-500 mb-1">Every N {formData.schedule_type === 'every_n_days' ? 'Days' : 'Months'}</label>
+                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">
+                                            Every N {formData.schedule_type === 'every_n_days' ? 'Days' : 'Months'}
+                                        </label>
                                         <input
                                             type="number" min="1"
                                             value={formData.schedule_config?.n || 1}
                                             onChange={e => setFormData({ ...formData, schedule_config: { n: parseInt(e.target.value) } })}
-                                            className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                         />
                                     </div>
                                 )}
 
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-500 mb-1">Stop After (Occurrences)</label>
-                                    <input
-                                        type="number" min="1" placeholder="Infinite"
-                                        value={formData.total_occurrences || ''}
-                                        onChange={e => setFormData({ ...formData, total_occurrences: e.target.value ? parseInt(e.target.value) : null })}
-                                        className="w-full p-2 rounded border dark:bg-zinc-800 dark:border-zinc-700"
-                                    />
-                                    <p className="text-[10px] text-gray-400 mt-1">Leave empty for infinite recurrence.</p>
+                                    <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Stop After</label>
+                                    <div className="flex gap-2 items-center">
+                                        <input
+                                            type="number" min="1" placeholder="Infinite"
+                                            value={formData.total_occurrences || ''}
+                                            onChange={e => setFormData({ ...formData, total_occurrences: e.target.value ? parseInt(e.target.value) : null })}
+                                            className="w-24 p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                        />
+                                        <span className="text-[10px] text-gray-400 font-medium">occurrences</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 mt-6">
-                                <button type="button" onClick={() => setShowForm(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
-                                <button type="submit" className="px-6 py-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700">Save Rule</button>
+                            <div className="flex justify-end gap-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowForm(false)}
+                                    className="px-6 py-2.5 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-8 py-2.5 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 shadow-lg shadow-pink-500/20 active:scale-95 transition-all"
+                                >
+                                    Save Rule
+                                </button>
                             </div>
                         </form>
                     </div>

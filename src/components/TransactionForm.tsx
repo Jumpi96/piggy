@@ -27,6 +27,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || 'cash');
     const [cardId, setCardId] = useState(initialData?.credit_card_id || '');
     const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
+    const [note, setNote] = useState(initialData?.note || '');
 
     // Tag Autocomplete State
     const [showTagSuggestions, setShowTagSuggestions] = useState(false);
@@ -42,8 +43,10 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     fetchDistinctTags()
                 ]);
                 setCurrencies(curData);
-                if (curData.length > 0) setCurrencyCode(curData[0].code);
-                if (curData.some(c => c.code === 'USD')) setCurrencyCode('USD');
+                if (!initialData) {
+                    if (curData.some(c => c.code === 'USD')) setCurrencyCode('USD');
+                    else if (curData.length > 0) setCurrencyCode(curData[0].code);
+                }
 
                 setCreditCards(cardData);
                 setAllTags(tagData);
@@ -53,7 +56,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             }
         }
         loadData();
-    }, []);
+    }, [initialData]);
 
     // Close suggestions on click outside
     useEffect(() => {
@@ -105,7 +108,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                 credit_card_id: method === 'card' ? cardId : null,
                 exchange_rate_id: exchangeRateId,
                 recurring_rule_id: null,
-                to_be_balanced: toBeBalanced
+                to_be_balanced: toBeBalanced,
+                note: note || null
             };
 
             if (initialData) {
@@ -256,6 +260,18 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                         ))}
                     </div>
                 )}
+            </div>
+
+            {/* Note */}
+            <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Note (Optional)</label>
+                <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="Add extra details..."
+                    rows={2}
+                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none resize-none"
+                />
             </div>
 
             {/* Method */}
