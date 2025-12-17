@@ -26,6 +26,7 @@ export function TransactionForm() {
     const [tag, setTag] = useState('');
     const [method, setMethod] = useState<PaymentMethod>('cash');
     const [cardId, setCardId] = useState('');
+    const [toBeBalanced, setToBeBalanced] = useState(false);
 
     // Tag Autocomplete State
     const [showTagSuggestions, setShowTagSuggestions] = useState(false);
@@ -103,7 +104,8 @@ export function TransactionForm() {
                 payment_method: method,
                 credit_card_id: method === 'card' ? cardId : null,
                 exchange_rate_id: exchangeRateId,
-                recurring_rule_id: null
+                recurring_rule_id: null,
+                to_be_balanced: toBeBalanced
             };
 
             await insertTransaction(transaction);
@@ -279,6 +281,20 @@ export function TransactionForm() {
                         </select>
                     </div>
                 )}
+            </div>
+
+            {/* To Be Balanced */}
+            <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
+                <input
+                    type="checkbox"
+                    id="toBeBalanced"
+                    checked={toBeBalanced}
+                    onChange={(e) => setToBeBalanced(e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 cursor-pointer"
+                />
+                <label htmlFor="toBeBalanced" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                    Mark as "To be Balanced" <span className="text-gray-400 text-xs block sm:inline">(e.g. unexpected expense)</span>
+                </label>
             </div>
 
             {/* Error Message */}

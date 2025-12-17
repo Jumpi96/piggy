@@ -57,6 +57,7 @@ export interface Transaction {
     payment_method: PaymentMethod;
     credit_card_id?: string | null;
     recurring_rule_id?: string | null;
+    to_be_balanced: boolean;
     created_at: string;
     updated_at: string;
     deleted_at?: string | null;
