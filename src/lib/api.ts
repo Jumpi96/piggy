@@ -121,3 +121,67 @@ export async function fetchDistinctTags(): Promise<string[]> {
         .sort((a, b) => b[1] - a[1])
         .map(([tag]) => tag);
 }
+
+export async function insertCreditCard(name: string, closingDay: number, paymentDay: number) {
+    const { data, error } = await supabase
+        .from('credit_cards')
+        .insert({ name, closing_day: closingDay, payment_day: paymentDay })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteCreditCard(id: string) {
+    const { error } = await supabase
+        .from('credit_cards')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+    if (error) throw error;
+}
+
+export async function upsertExchangeRate(currencyCode: string, month: string, rate: number) {
+    // month is YYYY-MM-01
+    // We need to find if exists, or insert.
+    // Supabase upsert requires unique constraint.
+    // composite key (user_id, currency_code, month) should be unique.
+
+    // Check if rate exists first to get ID? Or just upsert?
+    // If we upsert, we need existing ID if we want to keep history?
+    // Actually exchange_rates has ID.
+    // Query by unique keys.
+    const { data: existing } = await supabase
+        .from('exchange_rates')
+        .select('id')
+        .eq('currency_code', currencyCode)
+        .eq('month', month)
+        .maybeSingle();
+
+    if (existing) {
+        const { data, error } = await supabase
+            .from('exchange_rates')
+            .update({ rate })
+            .eq('id', existing.id)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    } else {
+        const { data, error } = await supabase
+            .from('exchange_rates')
+            .insert({ currency_code: currencyCode, month, rate })
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    }
+}
+
+export async function fetchRatesForMonth(month: string) {
+    const { data, error } = await supabase
+        .from('exchange_rates')
+        .select('*')
+        .eq('month', month);
+    if (error) throw error;
+    return data || [];
+}
