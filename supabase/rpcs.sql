@@ -66,54 +66,76 @@ declare
   next_date date;
   er_id uuid;
 begin
+  -- First: Cleanup future transactions for rules that have an end_date or are inactive
   for r in (
     select * from recurring_rules 
-    where active = true 
-      and user_id = auth.uid()
+    where user_id = auth.uid()
       and deleted_at is null
   ) loop
     
-    next_date := r.start_date;
-    
-    -- Safety: don't generate more than 100 occurrences in one go
-    for i in 1..100 loop
-       exit when next_date > until_date;
-       
-       -- Check occurrence limit
-       if r.total_occurrences is not null then
-          -- This is naive, count exists?
-          -- For simplicity, let's just check if we exceed if we kept a count.
-          -- v1: just rely on the loop and idempotency
-       end if;
+    -- Soft-delete transactions that are no longer in scope for this rule
+    update transactions 
+    set deleted_at = now()
+    where recurring_rule_id = r.id
+      and deleted_at is null
+      and (
+        date < r.start_date 
+        or (r.end_date is not null and date > r.end_date)
+        or (not r.active and date > current_date) -- If inactive, stop future ones
+      );
 
-       -- Find latest exchange rate for this currency
-       select id into er_id from exchange_rates 
-       where currency_code = r.currency_code 
-         and user_id = auth.uid()
-       order by created_at desc
-       limit 1;
-       
-       -- Insert
-       insert into transactions (
-         user_id, date, direction, amount_cents, currency_code, exchange_rate_id,
-         category, tag, payment_method, credit_card_id, recurring_rule_id, to_be_balanced, note
-       ) values (
-         auth.uid(), next_date, r.direction, r.amount_cents, r.currency_code, er_id,
-         r.category, r.tag, r.payment_method, r.credit_card_id, r.id, false, r.note
-       )
-       on conflict (recurring_rule_id, date) do nothing;
+    -- Only generate for ACTIVE rules
+    if r.active then
+        next_date := r.start_date;
+        
+        for i in 1..500 loop
+           exit when next_date > until_date;
+           exit when r.end_date is not null and next_date > r.end_date;
+           
+           -- Find latest exchange rate for this currency
+           select id into er_id from exchange_rates 
+           where currency_code = r.currency_code 
+             and user_id = auth.uid()
+           order by created_at desc
+           limit 1;
+           
+           -- Insert (idempotent)
+           insert into transactions (
+             user_id, date, direction, amount_cents, currency_code, exchange_rate_id,
+             category, tag, payment_method, credit_card_id, recurring_rule_id, to_be_balanced, note
+           ) values (
+             auth.uid(), next_date, r.direction, r.amount_cents, r.currency_code, er_id,
+             r.category, r.tag, r.payment_method, r.credit_card_id, r.id, false, r.note
+           )
+           on conflict (recurring_rule_id, date) do update 
+           set 
+             amount_cents = excluded.amount_cents,
+             category = excluded.category,
+             tag = excluded.tag,
+             direction = excluded.direction,
+             payment_method = excluded.payment_method,
+             credit_card_id = excluded.credit_card_id,
+             note = excluded.note,
+             deleted_at = null
+           where (transactions.date >= current_date) -- IMPACT ONLY FUTURE (or today)
+             and (transactions.deleted_at is not null or 
+                  transactions.amount_cents != excluded.amount_cents or 
+                  transactions.category != excluded.category or 
+                  transactions.tag != excluded.tag or
+                  transactions.note is distinct from excluded.note);
 
-       -- Advance next_date
-       if r.schedule_type = 'monthly_day' then
-          next_date := next_date + interval '1 month';
-       elsif r.schedule_type = 'every_n_days' then
-          next_date := next_date + (r.schedule_config->>'n')::int * interval '1 day';
-       elsif r.schedule_type = 'every_n_months' then
-          next_date := next_date + (r.schedule_config->>'n')::int * interval '1 month';
-       else
-          exit; -- Unknown type
-       end if;
-    end loop;
+           -- Advance next_date
+           if r.schedule_type = 'monthly_day' then
+              next_date := next_date + interval '1 month';
+           elsif r.schedule_type = 'every_n_days' then
+              next_date := next_date + (r.schedule_config->>'n')::int * interval '1 day';
+           elsif r.schedule_type = 'every_n_months' then
+              next_date := next_date + (r.schedule_config->>'n')::int * interval '1 month';
+           else
+              exit;
+           end if;
+        end loop;
+    end if;
 
   end loop;
 end;

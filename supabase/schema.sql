@@ -1,4 +1,4 @@
--- Enable UUID extension if not already enabled
+-- Enable uuid-ossp extension
 create extension if not exists "uuid-ossp";
 
 -- Currencies Table
@@ -19,7 +19,7 @@ create table exchange_rates (
   id uuid primary key default uuid_generate_v4(),
   user_id uuid references auth.users(id) not null default auth.uid(),
   currency_code text references currencies(code) not null,
-  rate numeric not null, -- 1 USD = X currency
+  rate numeric not null,
   created_at timestamptz default now()
 );
 
@@ -48,7 +48,7 @@ create table recurring_rules (
   schedule_type text not null, -- monthly_day, every_n_days, every_n_months
   schedule_config jsonb not null,
   start_date date not null,
-  total_occurrences integer, -- null means infinite
+  end_date date,
   active boolean default true,
   note text,
   created_at timestamptz default now(),
@@ -63,7 +63,7 @@ create table transactions (
   direction text not null check (direction in ('income', 'expense')),
   amount_cents bigint not null,
   currency_code text references currencies(code) not null,
-  exchange_rate_id uuid references exchange_rates(id), -- nullable? The spec says transactions store exchange_rate_id. It might be null for USD or if not set yet? Assume nullable for now or strict? Spec says "Transactions store exchange_rate_id".
+  exchange_rate_id uuid references exchange_rates(id),
   category text not null,
   tag text not null,
   payment_method text not null check (payment_method in ('cash', 'card')),

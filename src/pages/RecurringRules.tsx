@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchCreditCards } from '../lib/api';
-import type { RecurringRule, Currency, CreditCard } from '../types';
-import { Plus, Trash2, Edit2, Play, Pause, RefreshCw, Loader2, Info } from 'lucide-react';
+import { calculateEndDate } from '../lib/recurrence';
+import type { RecurringRule, Currency, CreditCard, ScheduleType } from '../types';
+import { Plus, Trash2, Edit2, StopCircle, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CATEGORIES } from '../lib/constants';
 
@@ -27,8 +28,11 @@ export function RecurringRulesPage() {
         schedule_config: { n: 1 },
         active: true,
         note: '',
-        start_date: new Date().toISOString().split('T')[0]
+        start_date: new Date().toISOString().split('T')[0],
+        end_date: null
     });
+
+    const [occurrencesHelper, setOccurrencesHelper] = useState<string>('');
 
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [cards, setCards] = useState<CreditCard[]>([]);
@@ -57,9 +61,9 @@ export function RecurringRulesPage() {
         setIsGenerating(true);
         try {
             const future = new Date();
-            future.setMonth(future.getMonth() + 2);
+            future.setMonth(future.getMonth() + 24); // Generator for 24 months
             await ensureRecurringGenerated(future.toISOString().split('T')[0]);
-            alert("Generated transactions successfully.");
+            alert("Generated transactions for the next 24 months.");
             load();
         } catch (err) {
             console.error(err);
@@ -67,6 +71,20 @@ export function RecurringRulesPage() {
         } finally {
             setIsGenerating(false);
         }
+    };
+
+    const handleCalculateEndDate = () => {
+        const count = parseInt(occurrencesHelper);
+        if (isNaN(count) || count <= 0) return;
+
+        const startStr = formData.start_date || new Date().toISOString().split('T')[0];
+        const type = formData.schedule_type as ScheduleType;
+        const n = formData.schedule_config?.n || 1;
+
+        const endStr = calculateEndDate(startStr, count, type, n);
+
+        setFormData({ ...formData, end_date: endStr });
+        setOccurrencesHelper('');
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -81,6 +99,11 @@ export function RecurringRulesPage() {
             setShowForm(false);
             resetForm();
             load();
+
+            // Auto run generation to sync changes
+            const future = new Date();
+            future.setMonth(future.getMonth() + 24);
+            await ensureRecurringGenerated(future.toISOString().split('T')[0]);
         } catch (err) {
             console.error(err);
             alert("Failed to save rule");
@@ -97,8 +120,10 @@ export function RecurringRulesPage() {
             schedule_config: { n: 1 },
             active: true,
             note: '',
-            start_date: new Date().toISOString().split('T')[0]
+            start_date: new Date().toISOString().split('T')[0],
+            end_date: null
         });
+        setOccurrencesHelper('');
     };
 
     const handleEdit = (rule: RecurringRule) => {
@@ -108,7 +133,7 @@ export function RecurringRulesPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure?")) return;
+        if (!confirm("Removing the rule will stop future generations, but existing future transactions will NOT be deleted automatically. \n\nContinue?")) return;
         try {
             await deleteRecurringRule(id);
             load();
@@ -118,9 +143,17 @@ export function RecurringRulesPage() {
         }
     };
 
-    const toggleActive = async (rule: RecurringRule) => {
+    const handleStop = async (rule: RecurringRule) => {
+        if (!confirm("This will stop the rule immediately. Future transactions beyond today will be removed. \n\nContinue?")) return;
         try {
-            await updateRecurringRule(rule.id, { active: !rule.active });
+            const today = new Date().toISOString().split('T')[0];
+            await updateRecurringRule(rule.id, { active: false, end_date: today });
+
+            // Sync with RPC cleanup
+            const future = new Date();
+            future.setMonth(future.getMonth() + 24);
+            await ensureRecurringGenerated(future.toISOString().split('T')[0]);
+
             load();
         } catch (err) {
             console.error(err);
@@ -132,14 +165,14 @@ export function RecurringRulesPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold">Recurring Rules</h1>
-                    <p className="text-sm text-gray-500">Automate your regular transactions</p>
+                    <p className="text-sm text-gray-500">Automate your finances (24-month horizon)</p>
                 </div>
                 <div className="flex gap-2">
                     <button
                         onClick={handleGenerate}
                         disabled={isGenerating}
                         className="p-2 text-gray-500 hover:text-emerald-600 border dark:border-zinc-700 rounded-lg hover:border-emerald-200 transition-colors"
-                        title="Force Generate Now"
+                        title="Sync / Generate (24 Months)"
                     >
                         <RefreshCw className={cn("w-5 h-5", isGenerating && "animate-spin")} />
                     </button>
@@ -161,7 +194,7 @@ export function RecurringRulesPage() {
                     {rules.map(rule => (
                         <div key={rule.id} className={cn(
                             "bg-white dark:bg-zinc-900 p-5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm relative transition-all",
-                            !rule.active && "opacity-60 bg-gray-50 dark:bg-zinc-950"
+                            (!rule.active || (rule.end_date && rule.end_date < new Date().toISOString().split('T')[0])) && "opacity-60 bg-gray-50 dark:bg-zinc-950"
                         )}>
                             <div className="flex justify-between items-start mb-3">
                                 <div className="space-y-1">
@@ -169,13 +202,15 @@ export function RecurringRulesPage() {
                                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{rule.category}</p>
                                 </div>
                                 <div className="flex gap-1 ml-2">
-                                    <button onClick={() => toggleActive(rule)} className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors" title={rule.active ? "Pause" : "Resume"}>
-                                        {rule.active ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                                    </button>
-                                    <button onClick={() => handleEdit(rule)} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                                    {rule.active && (
+                                        <button onClick={() => handleStop(rule)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors" title="Stop Now">
+                                            <StopCircle className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                    <button onClick={() => handleEdit(rule)} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
                                         <Edit2 className="w-4 h-4" />
                                     </button>
-                                    <button onClick={() => handleDelete(rule.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                                    <button onClick={() => handleDelete(rule.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete Rule">
                                         <Trash2 className="w-4 h-4" />
                                     </button>
                                 </div>
@@ -198,19 +233,24 @@ export function RecurringRulesPage() {
                                     </div>
                                 )}
 
-                                <div className="text-[10px] text-gray-400 pt-2 border-t dark:border-zinc-800 flex justify-between items-center">
-                                    <span>
-                                        {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type.replace(/_/g, ' ')}
-                                        {rule.total_occurrences ? ` • ${rule.total_occurrences} times` : ' • Infinite'}
-                                    </span>
-                                    <span className="capitalize">{rule.payment_method}</span>
+                                <div className="text-[10px] text-gray-400 pt-2 border-t dark:border-zinc-800 flex flex-col gap-1">
+                                    <div className="flex justify-between">
+                                        <span>
+                                            {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type.replace(/_/g, ' ')}
+                                        </span>
+                                        <span className="capitalize">{rule.payment_method}</span>
+                                    </div>
+                                    <div className="flex justify-between italic">
+                                        <span>Start: {rule.start_date}</span>
+                                        {rule.end_date && <span>End: {rule.end_date}</span>}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     ))}
                     {rules.length === 0 && (
                         <div className="md:col-span-3 text-center p-12 text-gray-500 border-2 border-dashed border-gray-100 dark:border-zinc-800 rounded-xl">
-                            <RefreshCw className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+                            <Plus className="w-8 h-8 mx-auto mb-3 text-gray-300" />
                             <p>No recurring rules yet.</p>
                             <button onClick={() => setShowForm(true)} className="mt-4 text-pink-600 font-medium hover:underline text-sm">Create your first rule</button>
                         </div>
@@ -222,7 +262,7 @@ export function RecurringRulesPage() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-gray-100 dark:border-zinc-800 animate-in fade-in zoom-in duration-200">
                         <div className="p-6 border-b border-gray-50 dark:border-zinc-800 flex items-center justify-between">
-                            <h2 className="text-xl font-bold">{editingId ? 'Edit Recurring Rule' : 'New Recurring Rule'}</h2>
+                            <h2 className="text-xl font-bold">{editingId ? 'Edit Rule' : 'New Recurring Rule'}</h2>
                             <button onClick={() => setShowForm(false)} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
                                 <Plus className="w-6 h-6 text-gray-400 rotate-45" />
                             </button>
@@ -260,7 +300,7 @@ export function RecurringRulesPage() {
                                     type="text"
                                     value={formData.tag || ''}
                                     onChange={e => setFormData({ ...formData, tag: e.target.value })}
-                                    placeholder="e.g. Rent, Salary, Netflix..."
+                                    placeholder="e.g. Rent, Salary..."
                                     className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                     required
                                 />
@@ -273,8 +313,7 @@ export function RecurringRulesPage() {
                                         type="number" step="0.01"
                                         value={formData.amount_cents ? formData.amount_cents / 100 : ''}
                                         onChange={e => setFormData({ ...formData, amount_cents: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
-                                        placeholder="0.00"
-                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 text-lg font-bold font-mono focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 font-bold focus:ring-2 focus:ring-pink-500 outline-none transition-all"
                                         required
                                     />
                                 </div>
@@ -290,48 +329,9 @@ export function RecurringRulesPage() {
                                 </div>
                             </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Note (Optional)</label>
-                                <textarea
-                                    value={formData.note || ''}
-                                    onChange={e => setFormData({ ...formData, note: e.target.value })}
-                                    placeholder="Additional context for this rule..."
-                                    rows={2}
-                                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all resize-none"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Method</label>
-                                    <select
-                                        value={formData.payment_method}
-                                        onChange={e => setFormData({ ...formData, payment_method: e.target.value as any })}
-                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="card">Credit Card</option>
-                                    </select>
-                                </div>
-                                {formData.payment_method === 'card' && (
-                                    <div>
-                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Card</label>
-                                        <select
-                                            value={formData.credit_card_id || ''}
-                                            onChange={e => setFormData({ ...formData, credit_card_id: e.target.value })}
-                                            className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
-                                            required
-                                        >
-                                            <option value="">Select card...</option>
-                                            {cards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                    </div>
-                                )}
-                            </div>
-
                             <div className="p-4 bg-gray-50 dark:bg-zinc-800/50 rounded-xl space-y-4">
                                 <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <RefreshCw className="w-3 h-3" /> Schedule
+                                    <Calendar className="w-3 h-3" /> Duration & Schedule
                                 </h4>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -340,47 +340,47 @@ export function RecurringRulesPage() {
                                             type="date"
                                             value={formData.start_date || ''}
                                             onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Repeat</label>
-                                        <select
-                                            value={formData.schedule_type}
-                                            onChange={e => setFormData({ ...formData, schedule_type: e.target.value as any })}
-                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
-                                        >
-                                            {SCHEDULE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                                        </select>
+                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">End Date (Optional)</label>
+                                        <input
+                                            type="date"
+                                            value={formData.end_date || ''}
+                                            onChange={e => setFormData({ ...formData, end_date: e.target.value || null })}
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                        />
                                     </div>
                                 </div>
 
-                                {formData.schedule_type !== 'monthly_day' && (
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">
-                                            Every N {formData.schedule_type === 'every_n_days' ? 'Days' : 'Months'}
-                                        </label>
-                                        <input
-                                            type="number" min="1"
-                                            value={formData.schedule_config?.n || 1}
-                                            onChange={e => setFormData({ ...formData, schedule_config: { n: parseInt(e.target.value) } })}
-                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
-                                        />
-                                    </div>
-                                )}
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        value={occurrencesHelper}
+                                        onChange={e => setOccurrencesHelper(e.target.value)}
+                                        placeholder="N times"
+                                        className="w-24 p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleCalculateEndDate}
+                                        className="text-xs text-pink-600 font-bold hover:bg-pink-50 dark:hover:bg-pink-900/20 px-2 py-1 rounded transition-colors"
+                                    >
+                                        Calculate End Date
+                                    </button>
+                                </div>
 
                                 <div>
-                                    <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Stop After</label>
-                                    <div className="flex gap-2 items-center">
-                                        <input
-                                            type="number" min="1" placeholder="Infinite"
-                                            value={formData.total_occurrences || ''}
-                                            onChange={e => setFormData({ ...formData, total_occurrences: e.target.value ? parseInt(e.target.value) : null })}
-                                            className="w-24 p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
-                                        />
-                                        <span className="text-[10px] text-gray-400 font-medium">occurrences</span>
-                                    </div>
+                                    <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Frequency</label>
+                                    <select
+                                        value={formData.schedule_type}
+                                        onChange={e => setFormData({ ...formData, schedule_type: e.target.value as any })}
+                                        className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                    >
+                                        {SCHEDULE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                    </select>
                                 </div>
                             </div>
 
@@ -394,9 +394,9 @@ export function RecurringRulesPage() {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-8 py-2.5 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 shadow-lg shadow-pink-500/20 active:scale-95 transition-all"
+                                    className="px-8 py-2.5 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 shadow-lg shadow-pink-500/20 transition-all"
                                 >
-                                    Save Rule
+                                    Save & Sync
                                 </button>
                             </div>
                         </form>
