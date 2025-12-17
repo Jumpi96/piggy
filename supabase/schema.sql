@@ -51,6 +51,7 @@ create table recurring_rules (
   schedule_type text not null, -- monthly_day, every_n_days, every_n_months
   schedule_config jsonb not null,
   start_date date not null,
+  total_occurrences integer, -- null means infinite
   active boolean default true,
   created_at timestamptz default now(),
   deleted_at timestamptz

@@ -1,7 +1,8 @@
 -- RPC: Compute Month Balance
 -- Returns the balance in USD cents for a given month (YYYY-MM-01)
+-- Returns { "income": X, "expense": Y, "balance": Z }
 create or replace function compute_month_balance(target_month date)
-returns bigint
+returns json
 language plpgsql
 security definer
 as $$
@@ -29,7 +30,11 @@ begin
     and t.direction = 'expense'
     and t.deleted_at is null;
 
-  return total_income - total_expense;
+  return json_build_object(
+    'income', total_income,
+    'expense', total_expense,
+    'balance', total_income - total_expense
+  );
 end;
 $$;
 
@@ -52,13 +57,6 @@ end;
 $$;
 
 -- RPC: Ensure Recurring Generated
--- This is a simplified version. Full date logic is complex in SQL.
--- We will handle the actual generation logic in the Application Layer (Typescript) if possible, 
--- OR use a more advanced PL/pgSQL block. 
--- For v1, let's assume the client might call an endpoint or we just define the interface.
--- However, strict adherence to the plan says "Lazy recurring generation via Supabase RPC".
--- So we should try.
-
 create or replace function ensure_recurring_generated(until_date date)
 returns void
 language plpgsql
@@ -66,19 +64,78 @@ security definer
 as $$
 declare
   r record;
+  last_tx_date date;
   next_date date;
+  occ_count integer;
+  er_id uuid;
 begin
-  -- This is a placeholder for the complex generation logic.
-  -- Iterating through rules and inserting transactions.
-  
-  -- For each active rule
+  -- Iterate active rules
   for r in select * from recurring_rules where user_id = auth.uid() and active = true and deleted_at is null loop
-    -- Determine the last generated date for this rule
-    -- If none, start from start_date
-    -- Loop until next_date > until_date
-    -- Insert transaction
-    -- Handle constraints (idempotency)
-    null; -- TODO: Implement full recurrence logic
+    
+    -- Check total occurrences if set
+    if r.total_occurrences is not null then
+      select count(*) into occ_count from transactions where recurring_rule_id = r.id and deleted_at is null;
+      if occ_count >= r.total_occurrences then
+        continue; -- Skip this rule, quota met
+      end if;
+    end if;
+
+    -- Find last occurrence
+    select max(date) into last_tx_date from transactions where recurring_rule_id = r.id;
+    
+    if last_tx_date is null then
+      next_date := r.start_date;
+    else
+      -- Calculate next based on schedule
+      if r.schedule_type = 'monthly_day' then
+        -- Add 1 month to last date (simplified)
+        next_date := last_tx_date + interval '1 month';
+      elsif r.schedule_type = 'every_n_days' then
+        next_date := last_tx_date + (r.schedule_config->>'n')::int * interval '1 day';
+      elsif r.schedule_type = 'every_n_months' then
+        next_date := last_tx_date + (r.schedule_config->>'n')::int * interval '1 month';
+      end if;
+    end if;
+
+    -- Generate until next_date > until_date
+    while next_date <= until_date loop
+       -- Double check quota inside loop
+       if r.total_occurrences is not null then
+         select count(*) into occ_count from transactions where recurring_rule_id = r.id and deleted_at is null;
+         if occ_count >= r.total_occurrences then
+           exit; 
+         end if;
+       end if;
+
+       -- Find exchange rate for this date
+       -- Note: This might be null if not set.
+       select id into er_id from exchange_rates 
+       where currency_code = r.currency_code 
+         and date_trunc('month', month) = date_trunc('month', next_date)
+         limit 1;
+       
+       -- Insert
+       insert into transactions (
+         user_id, date, direction, amount_cents, currency_code, exchange_rate_id,
+         category, tag, payment_method, credit_card_id, recurring_rule_id, to_be_balanced
+       ) values (
+         auth.uid(), next_date, r.direction, r.amount_cents, r.currency_code, er_id,
+         r.category, r.tag, r.payment_method, r.credit_card_id, r.id, false
+       )
+       on conflict (recurring_rule_id, date) do nothing;
+
+       -- Advance next_date
+       if r.schedule_type = 'monthly_day' then
+          next_date := next_date + interval '1 month';
+       elsif r.schedule_type = 'every_n_days' then
+          next_date := next_date + (r.schedule_config->>'n')::int * interval '1 day';
+       elsif r.schedule_type = 'every_n_months' then
+          next_date := next_date + (r.schedule_config->>'n')::int * interval '1 month';
+       else
+          exit; -- Unknown type
+       end if;
+    end loop;
+
   end loop;
 end;
 $$;

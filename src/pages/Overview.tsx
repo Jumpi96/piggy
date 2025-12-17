@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchTransactions } from '../lib/api';
+import { fetchTransactions, computeMonthBalance } from '../lib/api';
 import type { Transaction } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -25,62 +25,28 @@ export function Overview() {
         async function load() {
             setIsLoading(true);
             try {
-                const data = await fetchTransactions(getMonthStr(currentMonth));
-                setTransactions(data);
-                calculate(data);
+                const [txs, balanceData] = await Promise.all([
+                    fetchTransactions(getMonthStr(currentMonth)),
+                    computeMonthBalance(getMonthStr(currentMonth))
+                ]);
+
+                setTransactions(txs);
+                setTotalIncome(balanceData.income);
+                setTotalExpense(balanceData.expense);
+                setTotalBalance(balanceData.balance);
+
+                // Calculate TBB count locally
+                const tbb = txs.filter(t => t.to_be_balanced).length;
+                setToBeBalancedCount(tbb);
+
             } catch (err) {
-                console.error("Failed to load transactions", err);
+                console.error("Failed to load data", err);
             } finally {
                 setIsLoading(false);
             }
         }
         load();
     }, [currentMonth]);
-
-    const calculate = (data: Transaction[]) => {
-        let inc = 0;
-        let exp = 0;
-        let tbb = 0;
-
-        data.forEach(t => {
-            if (t.to_be_balanced) {
-                tbb++;
-                // Should we exclude it from balance? "To be balanced" usually means "I paid it but it's not final/real expense yet"?
-                // Or "It is an expense but I need to balance it with income later"?
-                // The user said: "Expenses are unexpected... mark as To be balanced".
-                // Usually these ARE expenses, just flagged. So include in balance.
-            }
-
-            // Conversion
-            let amountUSD = 0;
-            if (t.currency_code === 'USD') {
-                amountUSD = t.amount_cents;
-            } else if (t.exchange_rate?.rate) {
-                // Rate is Units per USD? Or USD per Unit?
-                // Assuming Units per USD (e.g. 1000 ARS = 1 USD).
-                // So Amount / Rate = USD.
-                amountUSD = t.amount_cents / t.exchange_rate.rate;
-            } else {
-                // Fallback: If no rate, ignore or keep as is?
-                // For v1, let's just use amount_cents (assuming 1:1 if missing, which is wrong but better than 0).
-                // Ideally this warns.
-                console.warn(`Missing rate for ${t.currency_code} transaction ${t.id}`);
-                amountUSD = t.amount_cents;
-            }
-
-            if (t.direction === 'income') {
-                inc += amountUSD;
-            } else {
-                exp += amountUSD;
-            }
-        });
-
-        // Use Math.round to avoid float errors on display
-        setTotalIncome(inc);
-        setTotalExpense(exp);
-        setTotalBalance(inc - exp);
-        setToBeBalancedCount(tbb);
-    };
 
     const changeMonth = (delta: number) => {
         const newDate = new Date(currentMonth);

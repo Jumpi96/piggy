@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Currency, CreditCard, Transaction } from '../types';
+import type { Currency, CreditCard, Transaction, RecurringRule } from '../types';
 
 export async function fetchCurrencies(): Promise<Currency[]> {
     const { data, error } = await supabase
@@ -173,6 +173,14 @@ export async function upsertExchangeRate(currencyCode: string, month: string, ra
             .select()
             .single();
         if (error) throw error;
+        // RPC: Repoint transactions to this new rate
+        const { error: rpcError } = await supabase.rpc('repoint_exchange_rate', {
+            p_currency_code: currencyCode,
+            p_month: month,
+            p_new_rate_id: data.id
+        });
+        if (rpcError) console.error("Repoint failed", rpcError);
+
         return data;
     }
 }
@@ -184,4 +192,57 @@ export async function fetchRatesForMonth(month: string) {
         .eq('month', month);
     if (error) throw error;
     return data || [];
+}
+
+// Recurring Rules
+
+export async function fetchRecurringRules() {
+    const { data, error } = await supabase
+        .from('recurring_rules')
+        .select('*')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+}
+
+export async function insertRecurringRule(rule: Partial<RecurringRule>) {
+    const { data, error } = await supabase
+        .from('recurring_rules')
+        .insert(rule)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateRecurringRule(id: string, updates: Partial<RecurringRule>) {
+    const { data, error } = await supabase
+        .from('recurring_rules')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function deleteRecurringRule(id: string) {
+    const { error } = await supabase
+        .from('recurring_rules')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+    if (error) throw error;
+}
+
+export async function ensureRecurringGenerated(untilDate: string) {
+    const { error } = await supabase.rpc('ensure_recurring_generated', { until_date: untilDate });
+    if (error) throw error;
+}
+
+export async function computeMonthBalance(month: string) {
+    // month YYYY-MM-01
+    const { data, error } = await supabase.rpc('compute_month_balance', { target_month: month });
+    if (error) throw error;
+    return data as { income: number; expense: number; balance: number } || { income: 0, expense: 0, balance: 0 };
 }

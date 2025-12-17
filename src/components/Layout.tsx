@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { LayoutDashboard, PlusCircle, Settings, List } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Layout() {
@@ -9,6 +9,7 @@ export function Layout() {
     const navItems = [
         { href: '/', icon: LayoutDashboard, label: 'Overview' },
         { href: '/transactions', icon: List, label: 'Transactions' },
+        { href: '/recurring', icon: Repeat, label: 'Recurring' },
         { href: '/add', icon: PlusCircle, label: 'Add', special: true },
         { href: '/settings', icon: Settings, label: 'Settings' },
     ];

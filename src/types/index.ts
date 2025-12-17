@@ -39,6 +39,7 @@ export interface RecurringRule {
     schedule_type: ScheduleType;
     schedule_config: Record<string, any>; // JSON
     start_date: string; // YYYY-MM-DD
+    total_occurrences?: number | null;
     active: boolean;
     created_at: string;
     deleted_at?: string | null;
