@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
-import { fetchCurrencies, fetchCreditCards, insertTransaction, fetchExchangeRate, fetchDistinctTags, type TransactionInput } from '../lib/api';
+import { fetchCurrencies, fetchCreditCards, insertTransaction, updateTransaction, fetchExchangeRate, fetchDistinctTags, type TransactionInput } from '../lib/api';
 import { calculateCreditCardEffectiveDate } from '../lib/dates';
-import type { Currency, CreditCard, Direction, PaymentMethod } from '../types';
+import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
 import { Loader2 } from 'lucide-react';
 
-export function TransactionForm() {
+export function TransactionForm({ initialData, onSuccess, onCancel }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void }) {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -18,15 +18,15 @@ export function TransactionForm() {
     const [allTags, setAllTags] = useState<string[]>([]);
 
     // Form State
-    const [direction, setDirection] = useState<Direction>('expense');
-    const [amount, setAmount] = useState('');
-    const [currencyCode, setCurrencyCode] = useState('USD');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [category, setCategory] = useState('');
-    const [tag, setTag] = useState('');
-    const [method, setMethod] = useState<PaymentMethod>('cash');
-    const [cardId, setCardId] = useState('');
-    const [toBeBalanced, setToBeBalanced] = useState(false);
+    const [direction, setDirection] = useState<Direction>(initialData?.direction || 'expense');
+    const [amount, setAmount] = useState(initialData ? (initialData.amount_cents / 100).toString() : '');
+    const [currencyCode, setCurrencyCode] = useState(initialData?.currency_code || 'USD');
+    const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
+    const [category, setCategory] = useState(initialData?.category || '');
+    const [tag, setTag] = useState(initialData?.tag || '');
+    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || 'cash');
+    const [cardId, setCardId] = useState(initialData?.credit_card_id || '');
+    const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
 
     // Tag Autocomplete State
     const [showTagSuggestions, setShowTagSuggestions] = useState(false);
@@ -108,9 +108,17 @@ export function TransactionForm() {
                 to_be_balanced: toBeBalanced
             };
 
-            await insertTransaction(transaction);
+            if (initialData) {
+                await updateTransaction(initialData.id, transaction);
+            } else {
+                await insertTransaction(transaction);
+            }
 
-            navigate('/transactions');
+            if (onSuccess) {
+                onSuccess();
+            } else {
+                navigate('/transactions');
+            }
         } catch (err: any) {
             setError(err.message || "Failed to create transaction");
         } finally {
@@ -304,14 +312,29 @@ export function TransactionForm() {
                 </div>
             )}
 
-            {/* Submit */}
-            <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-4 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-                {isLoading ? <Loader2 className="animate-spin" /> : 'Save Transaction'}
-            </button>
+            {/* Submit & Cancel */}
+            <div className="flex gap-3">
+                {onCancel && (
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className="flex-1 py-4 bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
+                        disabled={isLoading}
+                    >
+                        Cancel
+                    </button>
+                )}
+                <button
+                    type="submit"
+                    disabled={isLoading}
+                    className={cn(
+                        "py-4 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50",
+                        onCancel ? "flex-[2]" : "w-full"
+                    )}
+                >
+                    {isLoading ? <Loader2 className="animate-spin" /> : 'Save Transaction'}
+                </button>
+            </div>
         </form>
     );
 }

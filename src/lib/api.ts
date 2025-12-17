@@ -48,10 +48,18 @@ export async function updateTransaction(id: string, updates: Partial<Transaction
     return data;
 }
 
+export async function deleteTransaction(id: string) {
+    const { error } = await supabase
+        .from('transactions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+
+    if (error) throw error;
+}
+
 export async function fetchTransactions(monthStart: string): Promise<Transaction[]> {
     // monthStart should be YYYY-MM-01
-    // Filter by date range? Or just by month?
-    // Spec says "Monthly ledger".
+    // Filter by date range and NOT deleted
     // We can filter by date >= monthStart AND date < monthStart + 1 month
 
     // Easier: client-side filter or exact match on month part?
@@ -64,6 +72,7 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
     const { data, error } = await supabase
         .from('transactions')
         .select('*, exchange_rate:exchange_rates(rate)')
+        .is('deleted_at', null)
         .gte('date', start.toISOString().split('T')[0])
         .lt('date', end.toISOString().split('T')[0])
         .order('date', { ascending: false });
