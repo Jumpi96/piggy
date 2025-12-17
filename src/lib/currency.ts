@@ -1,5 +1,5 @@
 
-import { ExchangeRate } from '../types';
+import type { ExchangeRate } from '../types';
 
 /**
  * Finds the exchange rate for a given currency and month.

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getExchangeRateForMonth, convertToUSD } from './currency';
-import { ExchangeRate } from '../types';
+import type { ExchangeRate } from '../types';
 
 describe('Currency Logic', () => {
     const mockRates: ExchangeRate[] = [
