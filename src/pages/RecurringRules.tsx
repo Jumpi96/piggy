@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchCreditCards } from '../lib/api';
+import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
-import type { RecurringRule, Currency, CreditCard, ScheduleType } from '../types';
+import type { RecurringRule, Currency, ScheduleType } from '../types';
 import { Plus, Trash2, Edit2, StopCircle, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CATEGORIES } from '../lib/constants';
@@ -35,19 +35,16 @@ export function RecurringRulesPage() {
     const [occurrencesHelper, setOccurrencesHelper] = useState<string>('');
 
     const [currencies, setCurrencies] = useState<Currency[]>([]);
-    const [cards, setCards] = useState<CreditCard[]>([]);
 
     const load = async () => {
         setIsLoading(true);
         try {
-            const [r, c, cc] = await Promise.all([
+            const [r, c] = await Promise.all([
                 fetchRecurringRules(),
-                fetchCurrencies(),
-                fetchCreditCards()
+                fetchCurrencies()
             ]);
             setRules(r);
             setCurrencies(c);
-            setCards(cc);
         } catch (err) {
             console.error(err);
         } finally {
