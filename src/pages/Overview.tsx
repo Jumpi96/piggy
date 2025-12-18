@@ -100,8 +100,9 @@ export function Overview() {
     const lastDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const remainingDays = lastDayOfMonth - dayOfMonth + 1;
 
-    // DayRemainingDiff = total - amountPerDay * (remainingDays - 1)
-    const differenceWithExpected = totalBalance - (apd * (remainingDays - 1) * 100);
+    // DayRemainingDiff = total - amountPerDay * (remainingDays - daysModifier)
+    const daysModifier = isCurrentMonth ? 1 : 0;
+    const differenceWithExpected = totalBalance - (apd * (remainingDays - daysModifier) * 100);
     const perRemainingDay = totalBalance / remainingDays;
 
     const projectionDays = [];
