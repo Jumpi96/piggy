@@ -220,12 +220,12 @@ export function RecurringRulesPage() {
 
                             <div className="space-y-2">
                                 <div className="flex items-baseline gap-2">
-                                    <div className={cn(
+                                    <span className={cn(
                                         "text-lg font-bold font-mono",
                                         rule.direction === 'income' ? "text-sky-600" : "text-red-600"
                                     )}>
-                                        {rule.direction === 'income' ? '+' : '-'}{formatCurrency(rule.amount_cents, rule.currency_code)}
-                                    </div>
+                                        {rule.direction === 'income' ? '+' : '-'}{rule.currency_code} {(rule.amount_cents / 100).toFixed(2)}
+                                    </span>
                                 </div>
 
                                 {rule.note && (

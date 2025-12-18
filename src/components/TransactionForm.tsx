@@ -146,7 +146,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     className={cn(
                         "flex-1 py-2 rounded-md text-sm font-medium transition-all",
                         direction === 'expense'
-                            ? "bg-white dark:bg-zinc-700 text-emerald-600 shadow-sm"
+                            ? "bg-white dark:bg-zinc-700 text-red-600 shadow-sm"
                             : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     )}
                 >
