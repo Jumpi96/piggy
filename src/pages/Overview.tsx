@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates } from '../lib/api';
 import type { Transaction, ExchangeRate } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 export function Overview() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -170,54 +169,77 @@ export function Overview() {
                 </div>
             ) : (
                 <>
-                    {/* Main Financial Status */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 space-y-4">
-                            <div className="space-y-1">
-                                <div className="flex items-center gap-2 text-zinc-500">
-                                    <Wallet className="w-4 h-4" />
-                                    <h3 className="text-xs font-bold uppercase tracking-wider">Your Current Situation</h3>
-                                </div>
-                                <p className={cn("text-3xl font-black", totalBalance >= 0 ? "text-zinc-900 dark:text-white" : "text-pink-600")}>
-                                    {formatUSD(totalBalance)}
-                                </p>
+                    {/* Hero Financial Status */}
+                    <div className="bg-pink-600 dark:bg-pink-700 p-8 rounded-3xl shadow-xl shadow-pink-500/20 text-white space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="space-y-2 text-center md:text-left">
+                            <div className="flex items-center justify-center md:justify-start gap-2 opacity-80">
+                                <Wallet className="w-5 h-5" />
+                                <h3 className="text-sm font-black uppercase tracking-[0.2em]">Current Situation</h3>
                             </div>
+                            <p className="text-5xl md:text-7xl font-black tracking-tighter">
+                                {formatUSD(totalBalance)}
+                            </p>
+                        </div>
 
-                            <div className="pt-4 border-t border-zinc-100 dark:border-zinc-700 space-y-3">
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-zinc-500">Comparison with expected today:</span>
-                                    <span className={cn("font-bold", differenceWithExpected >= 0 ? "text-teal-600" : "text-pink-600")}>
-                                        {formatUSD(differenceWithExpected)}
-                                    </span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-8 border-t border-white/20">
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">Expected vs Today</span>
+                                <div className="flex items-baseline gap-2">
+                                    <p className="text-2xl font-black">{formatUSD(differenceWithExpected)}</p>
+                                    <span className="text-xs opacity-60"> {differenceWithExpected >= 0 ? '↗' : '↘'}</span>
                                 </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-zinc-500">For each remaining day:</span>
-                                    <span className="font-bold text-zinc-900 dark:text-zinc-100 italic">
-                                        {formatUSD(perRemainingDay)}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span className="text-zinc-500">⚖️ Money to balance:</span>
-                                    <span className={cn("font-bold", toBeBalancedTotal >= 0 ? "text-teal-600" : "text-pink-600")}>
-                                        {formatUSD(toBeBalancedTotal)}
-                                    </span>
+                            </div>
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">Budget Per Day Left</span>
+                                <p className="text-2xl font-black">{formatUSD(perRemainingDay)}</p>
+                            </div>
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">To be Balanced</span>
+                                <div className="flex items-baseline gap-2">
+                                    <p className="text-2xl font-black">{formatUSD(toBeBalancedTotal)}</p>
+                                    <span className="text-xs opacity-60">⚖️</span>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Available Cash Card */}
-                        <div className="bg-pink-50/50 dark:bg-pink-900/10 p-6 rounded-2xl border border-pink-100 dark:border-pink-900/30 flex flex-col justify-center items-center text-center space-y-2">
-                            <div className="bg-pink-100 dark:bg-pink-900/50 p-2 rounded-full mb-2">
-                                <TrendingUp className="w-6 h-6 text-pink-600" />
+                    {/* Secondary Stats Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {/* Available Cash (Demoted) */}
+                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-pink-200 transition-colors">
+                            <div className="flex items-center gap-2 text-zinc-500 mb-2">
+                                <TrendingUp className="w-4 h-4" />
+                                <h3 className="text-[10px] font-bold uppercase tracking-wider">Available Cash Should Be</h3>
                             </div>
-                            <h3 className="text-sm font-medium text-pink-900 dark:text-pink-300">
-                                Your available cash should be:
-                            </h3>
-                            <p className="text-4xl font-black text-pink-600">
-                                {formatUSD(availableCash)}
+                            <div>
+                                <p className="text-xl font-bold text-zinc-900 dark:text-white">
+                                    {formatUSD(availableCash)}
+                                </p>
+                                <p className="text-[10px] text-zinc-400 mt-1">
+                                    (Until today)
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Income */}
+                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-teal-200 transition-colors">
+                            <div className="flex items-center gap-2 text-teal-600 mb-2">
+                                <TrendingUp className="w-4 h-4" />
+                                <h3 className="text-[10px] font-bold uppercase tracking-wider">Monthly Income</h3>
+                            </div>
+                            <p className="text-xl font-bold text-zinc-900 dark:text-white">
+                                {formatUSD(totalIncome)}
                             </p>
-                            <p className="text-xs text-pink-700/60 dark:text-pink-400/60 max-w-[200px]">
-                                (Total income + expenses until today)
+                        </div>
+
+                        {/* Expense */}
+                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-pink-200 transition-colors">
+                            <div className="flex items-center gap-2 text-pink-600 mb-2">
+                                <TrendingDown className="w-4 h-4" />
+                                <h3 className="text-[10px] font-bold uppercase tracking-wider">Monthly Expense</h3>
+                            </div>
+                            <p className="text-xl font-bold text-zinc-900 dark:text-white">
+                                {formatUSD(totalExpense)}
                             </p>
                         </div>
                     </div>
@@ -226,44 +248,19 @@ export function Overview() {
                     <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-700 flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-zinc-400" />
-                            <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Daily Projection</h3>
+                            <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Daily Projection</h3>
                         </div>
                         <div className="p-6">
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                                 {projectionDays.map(pd => (
-                                    <div key={pd.day} className="flex flex-col p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800">
-                                        <span className="text-[10px] font-bold text-zinc-400 uppercase">Day {pd.day}</span>
+                                    <div key={pd.day} className="flex flex-col p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 hover:border-pink-200 transition-colors">
+                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Day {pd.day}</span>
                                         <span className="text-sm font-bold font-mono text-zinc-600 dark:text-zinc-300 mt-1">
                                             {formatUSD(pd.value)}
                                         </span>
                                     </div>
                                 ))}
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Original Cards (Hidden or moved to details?) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 opacity-80">
-                        {/* Income */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-700">
-                            <div className="flex items-center gap-3 mb-2 text-teal-600 dark:text-teal-400">
-                                <TrendingUp className="w-5 h-5" />
-                                <h3 className="text-sm font-medium uppercase tracking-wide">Monthly Income</h3>
-                            </div>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                {formatUSD(totalIncome)}
-                            </p>
-                        </div>
-
-                        {/* Expense */}
-                        <div className="bg-white dark:bg-zinc-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-700">
-                            <div className="flex items-center gap-3 mb-2 text-pink-600 dark:text-pink-400">
-                                <TrendingDown className="w-5 h-5" />
-                                <h3 className="text-sm font-medium uppercase tracking-wide">Monthly Expense</h3>
-                            </div>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                {formatUSD(totalExpense)}
-                            </p>
                         </div>
                     </div>
 
