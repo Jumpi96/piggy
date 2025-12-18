@@ -37,16 +37,20 @@ export function calculateCreditCardEffectiveDate(
     closingDay: number,
     paymentDay: number
 ): Date {
-    // Logic: 
-    // If transaction day < closing_day 
-    //   -> effective date = payment_day of next month
-    // Else 
-    //   -> effective date = payment_day of month + 2
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const tDay = transactionDate.getDate();
+    const tDate = new Date(transactionDate);
+    tDate.setHours(0, 0, 0, 0);
 
-    // Create start of next month
-    let targetMonth = new Date(transactionDate.getFullYear(), transactionDate.getMonth() + 1, 1);
+    // If transaction date is in the future and is already a payment day, keep it
+    if (tDate > today && tDate.getDate() === paymentDay) {
+        return tDate;
+    }
+
+    // Otherwise, calculate the next payment day from the transaction date
+    const tDay = tDate.getDate();
+    let targetMonth = new Date(tDate.getFullYear(), tDate.getMonth() + 1, 1);
 
     if (tDay < closingDay) {
         // Next month
@@ -55,5 +59,13 @@ export function calculateCreditCardEffectiveDate(
         targetMonth.setMonth(targetMonth.getMonth() + 1);
     }
 
-    return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
+    const nextPaymentDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
+
+    // If today is a payment day, move to the next payment day
+    if (today.getDate() === paymentDay && nextPaymentDate.getTime() === today.getTime()) {
+        targetMonth.setMonth(targetMonth.getMonth() + 1);
+        return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
+    }
+
+    return nextPaymentDate;
 }

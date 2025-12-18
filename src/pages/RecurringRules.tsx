@@ -379,7 +379,26 @@ export function RecurringRulesPage() {
                                         <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Card</label>
                                         <select
                                             value={formData.credit_card_id || ''}
-                                            onChange={e => setFormData({ ...formData, credit_card_id: e.target.value })}
+                                            onChange={e => {
+                                                const selectedCard = creditCards.find(c => c.id === e.target.value);
+                                                if (selectedCard && !editingId) {
+                                                    // Calculate next payment day
+                                                    const today = new Date();
+                                                    const tDay = today.getDate();
+                                                    let targetMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+
+                                                    if (tDay >= selectedCard.closing_day) {
+                                                        targetMonth.setMonth(targetMonth.getMonth() + 1);
+                                                    }
+
+                                                    const nextPayment = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), selectedCard.payment_day);
+                                                    const nextPaymentStr = formatLocalDate(nextPayment);
+
+                                                    setFormData({ ...formData, credit_card_id: e.target.value, start_date: nextPaymentStr });
+                                                } else {
+                                                    setFormData({ ...formData, credit_card_id: e.target.value });
+                                                }
+                                            }}
                                             className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                             required
                                         >
@@ -424,6 +443,7 @@ export function RecurringRulesPage() {
                                             type="date"
                                             value={formData.start_date || ''}
                                             onChange={e => setFormData({ ...formData, start_date: e.target.value })}
+                                            min={getTodayLocalDate()}
                                             className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                             required
                                         />
