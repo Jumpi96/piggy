@@ -19,7 +19,9 @@ export function TransactionsList() {
     async function loadTransactions() {
         setIsLoading(true);
         try {
-            const monthStr = currentMonth.toISOString().slice(0, 7) + "-01";
+            const year = currentMonth.getFullYear();
+            const month = String(currentMonth.getMonth() + 1).padStart(2, '0');
+            const monthStr = `${year}-${month}-01`;
             const data = await fetchTransactions(monthStr);
             setTransactions(data);
         } catch (err) {
@@ -30,14 +32,12 @@ export function TransactionsList() {
     }
 
     const nextMonth = () => {
-        const next = new Date(currentMonth);
-        next.setMonth(next.getMonth() + 1);
+        const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
         setCurrentMonth(next);
     };
 
     const prevMonth = () => {
-        const prev = new Date(currentMonth);
-        prev.setMonth(prev.getMonth() - 1);
+        const prev = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
         setCurrentMonth(prev);
     };
 

@@ -65,16 +65,19 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
     // Easier: client-side filter or exact match on month part?
     // Let's do simple range query.
 
-    const start = new Date(monthStart);
+    const start = new Date(monthStart + 'T00:00:00Z');
     const end = new Date(start);
-    end.setMonth(end.getMonth() + 1);
+    end.setUTCMonth(end.getUTCMonth() + 1);
+
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
 
     const { data, error } = await supabase
         .from('transactions')
         .select('*, exchange_rate:exchange_rates(rate), credit_card:credit_cards(name)')
         .is('deleted_at', null)
-        .gte('date', start.toISOString().split('T')[0])
-        .lt('date', end.toISOString().split('T')[0])
+        .gte('date', startStr)
+        .lt('date', endStr)
         .order('date', { ascending: false });
 
     if (error) throw error;
