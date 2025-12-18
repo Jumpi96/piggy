@@ -65,24 +65,47 @@ declare
   r record;
   next_date date;
   er_id uuid;
+  valid_dates date[];
 begin
-  -- First: Cleanup future transactions for rules that have an end_date or are inactive
+  -- First: Cleanup and regenerate for all rules
   for r in (
-    select * from recurring_rules 
+    select * from recurring_rules
     where user_id = auth.uid()
       and deleted_at is null
   ) loop
-    
-    -- Soft-delete transactions that are no longer in scope for this rule
-    update transactions 
+
+    -- Build array of valid dates for this rule
+    valid_dates := array[]::date[];
+
+    if r.active then
+        next_date := r.start_date;
+
+        for i in 1..500 loop
+           exit when next_date > until_date;
+           exit when r.end_date is not null and next_date > r.end_date;
+
+           valid_dates := valid_dates || next_date;
+
+           -- Advance next_date
+           if r.schedule_type = 'monthly_day' then
+              next_date := next_date + interval '1 month';
+           elsif r.schedule_type = 'every_n_days' then
+              next_date := next_date + (r.schedule_config->>'n')::int * interval '1 day';
+           elsif r.schedule_type = 'every_n_months' then
+              next_date := next_date + (r.schedule_config->>'n')::int * interval '1 month';
+           else
+              exit;
+           end if;
+        end loop;
+    end if;
+
+    -- Delete all future transactions that are NOT in the valid_dates array
+    update transactions
     set deleted_at = now()
     where recurring_rule_id = r.id
       and deleted_at is null
-      and (
-        date < r.start_date 
-        or (r.end_date is not null and date > r.end_date)
-        or (not r.active and date > current_date) -- If inactive, stop future ones
-      );
+      and date >= current_date
+      and not (date = any(valid_dates));
 
     -- Only generate for ACTIVE rules
     if r.active then

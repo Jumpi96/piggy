@@ -460,12 +460,35 @@ export function RecurringRulesPage() {
                                     <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">Frequency</label>
                                     <select
                                         value={formData.schedule_type}
-                                        onChange={e => setFormData({ ...formData, schedule_type: e.target.value as any })}
+                                        onChange={e => setFormData({
+                                            ...formData,
+                                            schedule_type: e.target.value as any,
+                                            schedule_config: { n: formData.schedule_config?.n || 1 }
+                                        })}
                                         className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                     >
                                         {SCHEDULE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                     </select>
                                 </div>
+
+                                {(formData.schedule_type === 'every_n_days' || formData.schedule_type === 'every_n_months') && (
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase">
+                                            {formData.schedule_type === 'every_n_days' ? 'Every N Days' : 'Every N Months'}
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            value={formData.schedule_config?.n || 1}
+                                            onChange={e => setFormData({
+                                                ...formData,
+                                                schedule_config: { ...formData.schedule_config, n: parseInt(e.target.value) || 1 }
+                                            })}
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            required
+                                        />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="flex justify-end gap-3 pt-4">
