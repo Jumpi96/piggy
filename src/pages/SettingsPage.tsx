@@ -189,8 +189,7 @@ function RatesSettings() {
                 fetchLatestRates()
             ]);
 
-            setCurrencies(curData);
-
+            setCurrencies(curData.sort((a, b) => a.code.localeCompare(b.code)));
             const initialInputs: Record<string, string> = {};
             curData.forEach((c: Currency) => {
                 const r = (rateData as any[]).find((rd: any) => rd.currency_code === c.code);

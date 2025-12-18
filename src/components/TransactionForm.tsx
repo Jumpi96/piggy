@@ -42,12 +42,12 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     fetchCreditCards(),
                     fetchDistinctTags()
                 ]);
-                setCurrencies(curData);
-                if (!initialData) {
-                    if (curData.some(c => c.code === 'USD')) setCurrencyCode('USD');
-                    else if (curData.length > 0) setCurrencyCode(curData[0].code);
-                }
+                const sortedCurrencies = curData.sort((a, b) => a.code.localeCompare(b.code));
+                setCurrencies(sortedCurrencies);
 
+                if (!initialData && sortedCurrencies.length > 0) {
+                    setCurrencyCode(sortedCurrencies[0].code);
+                }
                 setCreditCards(cardData);
                 setAllTags(tagData);
             } catch (err) {

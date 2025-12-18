@@ -44,7 +44,11 @@ export function RecurringRulesPage() {
                 fetchCurrencies()
             ]);
             setRules(r);
-            setCurrencies(c);
+            const sortedCurrencies = c.sort((a, b) => a.code.localeCompare(b.code));
+            setCurrencies(sortedCurrencies);
+            if (sortedCurrencies.length > 0 && !formData.id) {
+                setFormData(prev => ({ ...prev, currency_code: sortedCurrencies[0].code }));
+            }
         } catch (err) {
             console.error(err);
         } finally {
