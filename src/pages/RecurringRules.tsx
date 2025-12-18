@@ -5,7 +5,7 @@ import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import { cn } from '../lib/utils';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
-import { Plus, Trash2, Edit2, StopCircle, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
+import { Plus, Trash2, Edit2, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
 
 const SCHEDULE_TYPES = [
     { value: 'monthly_day', label: 'Monthly on Date' },
@@ -158,23 +158,11 @@ export function RecurringRulesPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Removing the rule will stop future generations, but existing future transactions will NOT be deleted automatically. \n\nContinue?")) return;
+        if (!confirm("Deleting this rule will remove all future transactions. Past transactions will remain unchanged.\n\nContinue?")) return;
         try {
             await deleteRecurringRule(id);
-            load();
-        } catch (err) {
-            console.error(err);
-            alert("Failed to delete");
-        }
-    };
 
-    const handleStop = async (rule: RecurringRule) => {
-        if (!confirm("This will stop the rule immediately. Future transactions beyond today will be removed. \n\nContinue?")) return;
-        try {
-            const today = getTodayLocalDate();
-            await updateRecurringRule(rule.id, { active: false, end_date: today });
-
-            // Sync with RPC cleanup
+            // Regenerate to clean up future transactions
             const future = new Date();
             future.setMonth(future.getMonth() + 24);
             await ensureRecurringGenerated(formatLocalDate(future));
@@ -182,8 +170,10 @@ export function RecurringRulesPage() {
             load();
         } catch (err) {
             console.error(err);
+            alert("Failed to delete");
         }
     };
+
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -191,6 +181,9 @@ export function RecurringRulesPage() {
                 <div>
                     <h1 className="text-2xl font-bold">Recurring Rules</h1>
                     <p className="text-sm text-gray-500">Automate your finances (24-month horizon)</p>
+                    <p className="text-xs text-gray-400 mt-1 max-w-2xl">
+                        Rules control future transactions. Edit/delete a rule to update/remove all future transactions. Past transactions remain unchanged.
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <button
@@ -227,11 +220,6 @@ export function RecurringRulesPage() {
                                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{rule.category}</p>
                                 </div>
                                 <div className="flex gap-1 ml-2">
-                                    {rule.active && (
-                                        <button onClick={() => handleStop(rule)} className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors" title="Stop Now">
-                                            <StopCircle className="w-4 h-4" />
-                                        </button>
-                                    )}
                                     <button onClick={() => handleEdit(rule)} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
                                         <Edit2 className="w-4 h-4" />
                                     </button>
