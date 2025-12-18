@@ -46,27 +46,29 @@ export function Layout() {
             </main>
 
             {/* Bottom Nav (Mobile) */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-950 border-t border-gray-200 dark:border-zinc-800 flex justify-around p-2 z-50 safe-area-bottom">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-950 border-t border-gray-200 dark:border-zinc-800 flex items-center overflow-x-auto flex-nowrap z-50 safe-area-bottom scrollbar-none pt-4 pb-1">
                 {navItems.map((item) => (
                     <Link
                         key={item.href}
                         to={item.href}
                         className={cn(
-                            "flex flex-col items-center justify-center p-2 rounded-lg w-full",
-                            item.special ? "-mt-8" : "",
+                            "flex flex-col items-center justify-center px-1 py-1 rounded-lg min-w-[72px] shrink-0 transition-transform active:scale-95",
+                            item.special ? "relative -top-4" : "",
                             location.pathname === item.href
                                 ? "text-pink-600 dark:text-pink-400"
                                 : "text-gray-500 dark:text-gray-400"
                         )}
                     >
                         {item.special ? (
-                            <div className="bg-pink-600 text-white p-3 rounded-full shadow-lg">
+                            <div className="bg-pink-600 text-white p-3 rounded-full shadow-lg ring-4 ring-white dark:ring-zinc-950">
                                 <item.icon className="w-6 h-6" />
                             </div>
                         ) : (
-                            <item.icon className="w-6 h-6" />
+                            <>
+                                <item.icon className="w-6 h-6" />
+                                <span className="text-[10px] mt-1 font-medium">{item.label}</span>
+                            </>
                         )}
-                        {!item.special && <span className="text-[10px] mt-1">{item.label}</span>}
                     </Link>
                 ))}
             </nav>
