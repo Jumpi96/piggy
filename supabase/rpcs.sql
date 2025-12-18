@@ -130,21 +130,28 @@ begin
              auth.uid(), next_date, r.direction, r.amount_cents, r.currency_code, er_id,
              r.category, r.tag, r.payment_method, r.credit_card_id, r.id, false, r.note
            )
-           on conflict (recurring_rule_id, date) do update 
-           set 
+           on conflict (recurring_rule_id, date) do update
+           set
              amount_cents = excluded.amount_cents,
              category = excluded.category,
              tag = excluded.tag,
              direction = excluded.direction,
              payment_method = excluded.payment_method,
              credit_card_id = excluded.credit_card_id,
+             currency_code = excluded.currency_code,
+             exchange_rate_id = excluded.exchange_rate_id,
              note = excluded.note,
              deleted_at = null
            where (transactions.date >= current_date) -- IMPACT ONLY FUTURE (or today)
-             and (transactions.deleted_at is not null or 
-                  transactions.amount_cents != excluded.amount_cents or 
-                  transactions.category != excluded.category or 
+             and (transactions.deleted_at is not null or
+                  transactions.amount_cents != excluded.amount_cents or
+                  transactions.category != excluded.category or
                   transactions.tag != excluded.tag or
+                  transactions.currency_code != excluded.currency_code or
+                  transactions.exchange_rate_id is distinct from excluded.exchange_rate_id or
+                  transactions.direction != excluded.direction or
+                  transactions.payment_method != excluded.payment_method or
+                  transactions.credit_card_id is distinct from excluded.credit_card_id or
                   transactions.note is distinct from excluded.note);
 
            -- Advance next_date
