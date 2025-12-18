@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchDistinctTags } from '../lib/api';
+import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchDistinctTags, fetchCreditCards } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
 import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
-import type { RecurringRule, Currency, ScheduleType } from '../types';
-import { Plus, Trash2, Edit2, StopCircle, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { CATEGORIES } from '../lib/constants';
+import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
+import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
+import { Plus, Trash2, Edit2, StopCircle, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
 
 const SCHEDULE_TYPES = [
     { value: 'monthly_day', label: 'Monthly on Date' },
@@ -42,18 +42,21 @@ export function RecurringRulesPage() {
     const [occurrencesHelper, setOccurrencesHelper] = useState<string>('');
 
     const [currencies, setCurrencies] = useState<Currency[]>([]);
+    const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
 
     const load = async () => {
         setIsLoading(true);
         try {
-            const [r, c, t] = await Promise.all([
+            const [r, c, t, cards] = await Promise.all([
                 fetchRecurringRules(),
                 fetchCurrencies(),
-                fetchDistinctTags()
+                fetchDistinctTags(),
+                fetchCreditCards()
             ]);
             setRules(r);
             const sortedCurrencies = c.sort((a, b) => a.code.localeCompare(b.code));
             setCurrencies(sortedCurrencies);
+            setCreditCards(cards);
             if (sortedCurrencies.length > 0 && !formData.id) {
                 setFormData(prev => ({ ...prev, currency_code: sortedCurrencies[0].code }));
             }
@@ -260,7 +263,11 @@ export function RecurringRulesPage() {
                                         <span>
                                             {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type.replace(/_/g, ' ')}
                                         </span>
-                                        <span className="capitalize">{rule.payment_method}</span>
+                                        <span className="capitalize">
+                                            {rule.payment_method === 'card'
+                                                ? (creditCards.find(c => c.id === rule.credit_card_id)?.name || 'Card')
+                                                : 'Cash'}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between italic">
                                         <span>Start: {rule.start_date}</span>
@@ -353,6 +360,44 @@ export function RecurringRulesPage() {
                                                     {suggestion}
                                                 </button>
                                             ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Note (Optional)</label>
+                                <textarea
+                                    value={formData.note || ''}
+                                    onChange={e => setFormData({ ...formData, note: e.target.value })}
+                                    placeholder="Add extra details..."
+                                    rows={2}
+                                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all resize-none"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Payment Method</label>
+                                    <select
+                                        value={formData.payment_method}
+                                        onChange={e => setFormData({ ...formData, payment_method: e.target.value as any })}
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                    >
+                                        {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                                    </select>
+                                </div>
+                                {formData.payment_method === 'card' && (
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Card</label>
+                                        <select
+                                            value={formData.credit_card_id || ''}
+                                            onChange={e => setFormData({ ...formData, credit_card_id: e.target.value })}
+                                            className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                            required
+                                        >
+                                            <option value="" disabled>Select card</option>
+                                            {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                        </select>
                                     </div>
                                 )}
                             </div>
