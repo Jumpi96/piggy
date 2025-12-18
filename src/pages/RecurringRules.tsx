@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies } from '../lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchDistinctTags } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
 import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import type { RecurringRule, Currency, ScheduleType } from '../types';
@@ -33,6 +33,12 @@ export function RecurringRulesPage() {
         end_date: null
     });
 
+    // Autocomplete State
+    const [allTags, setAllTags] = useState<string[]>([]);
+    const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+    const tagInputRef = useRef<HTMLInputElement>(null);
+    const suggestionsRef = useRef<HTMLDivElement>(null);
+
     const [occurrencesHelper, setOccurrencesHelper] = useState<string>('');
 
     const [currencies, setCurrencies] = useState<Currency[]>([]);
@@ -40,9 +46,10 @@ export function RecurringRulesPage() {
     const load = async () => {
         setIsLoading(true);
         try {
-            const [r, c] = await Promise.all([
+            const [r, c, t] = await Promise.all([
                 fetchRecurringRules(),
-                fetchCurrencies()
+                fetchCurrencies(),
+                fetchDistinctTags()
             ]);
             setRules(r);
             const sortedCurrencies = c.sort((a, b) => a.code.localeCompare(b.code));
@@ -50,12 +57,25 @@ export function RecurringRulesPage() {
             if (sortedCurrencies.length > 0 && !formData.id) {
                 setFormData(prev => ({ ...prev, currency_code: sortedCurrencies[0].code }));
             }
+            setAllTags(t);
         } catch (err) {
             console.error(err);
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Close suggestions on click outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (suggestionsRef.current && !suggestionsRef.current.contains(event.target as Node) &&
+                tagInputRef.current && !tagInputRef.current.contains(event.target as Node)) {
+                setShowTagSuggestions(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
 
     useEffect(() => { load(); }, []);
 
@@ -296,16 +316,45 @@ export function RecurringRulesPage() {
                                 </div>
                             </div>
 
-                            <div>
+                            <div className="space-y-2 relative">
                                 <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Tag (Title)</label>
                                 <input
+                                    ref={tagInputRef}
                                     type="text"
                                     value={formData.tag || ''}
-                                    onChange={e => setFormData({ ...formData, tag: e.target.value })}
+                                    onFocus={() => setShowTagSuggestions(true)}
+                                    onChange={e => {
+                                        setFormData({ ...formData, tag: e.target.value });
+                                        setShowTagSuggestions(true);
+                                    }}
                                     placeholder="e.g. Rent, Salary..."
                                     className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                     required
+                                    autoComplete="off"
                                 />
+
+                                {showTagSuggestions && allTags.filter(t => t.toLowerCase().includes((formData.tag || '').toLowerCase())).length > 0 && (
+                                    <div
+                                        ref={suggestionsRef}
+                                        className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+                                    >
+                                        {allTags
+                                            .filter(t => t.toLowerCase().includes((formData.tag || '').toLowerCase()))
+                                            .map((suggestion) => (
+                                                <button
+                                                    key={suggestion}
+                                                    type="button"
+                                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-zinc-700 transition-colors"
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, tag: suggestion });
+                                                        setShowTagSuggestions(false);
+                                                    }}
+                                                >
+                                                    {suggestion}
+                                                </button>
+                                            ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
