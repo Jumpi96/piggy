@@ -81,6 +81,20 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
     return data || [];
 }
 
+export async function fetchTransactionsRange(startDate: string, endDate: string): Promise<Transaction[]> {
+    // startDate, endDate should be YYYY-MM-DD
+    const { data, error } = await supabase
+        .from('transactions')
+        .select('*, exchange_rate:exchange_rates(rate), credit_card:credit_cards(name)')
+        .is('deleted_at', null)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+}
+
 export async function fetchExchangeRate(currencyCode: string): Promise<string | null> {
     const { data, error } = await supabase
         .from('exchange_rates')

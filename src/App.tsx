@@ -6,6 +6,7 @@ import { TransactionsList } from './pages/TransactionsList';
 import { RecurringRulesPage } from './pages/RecurringRules';
 import { AddTransaction } from './pages/AddTransaction';
 import { SettingsPage } from './pages/SettingsPage';
+import { Balance } from './pages/Balance';
 import { Login } from './pages/Login';
 import { supabase } from './lib/supabase';
 import type { Session } from '@supabase/supabase-js';
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="recurring" element={<RecurringRulesPage />} />
           <Route path="add" element={<AddTransaction />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="balance" element={<Balance />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
