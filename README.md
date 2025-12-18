@@ -1,6 +1,6 @@
-# 🐽 Piggy - Personal Finance PWA
+# 🐽 piggy - Personal Finance PWA
 
-Piggy is a modern, mobile-first Personal Finance Progressive Web App (PWA) designed to track expenses, income, and manage multi-currency finances with ease. It features intelligent credit card date handling, monthly exchange rate balancing, and a sleek, responsive UI.
+piggy is a modern, mobile-first Personal Finance Progressive Web App (PWA) designed to track expenses, income, and manage multi-currency finances with ease. It features intelligent credit card date handling, monthly exchange rate balancing, and a sleek, responsive UI.
 
 ## ✨ Features
 

@@ -19,7 +19,7 @@ export function Layout() {
         <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
             {/* Sidebar (Desktop) */}
             <aside className="hidden md:flex flex-col w-64 border-r border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
-                <h1 className="text-2xl font-bold mb-8 px-4 text-pink-600 dark:text-pink-400">Piggy 🐷</h1>
+                <h1 className="text-2xl font-bold mb-8 px-4 text-pink-600 dark:text-pink-400">🐷 piggy</h1>
                 <nav className="flex-1 space-y-2">
                     {navItems.map((item) => (
                         <Link
