@@ -162,7 +162,7 @@ export function Balance() {
 
             {isLoading ? (
                 <div className="flex justify-center p-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
                 </div>
             ) : (
                 <>
@@ -178,11 +178,11 @@ export function Balance() {
                                     <div className="flex items-center gap-4">
                                         <div className="w-32 h-1.5 bg-gray-100 dark:bg-zinc-700 rounded-full overflow-hidden hidden sm:block">
                                             <div
-                                                className={cn("h-full rounded-full", item.value >= 0 ? "bg-teal-500" : "bg-pink-500")}
+                                                className={cn("h-full rounded-full", item.value >= 0 ? "bg-sky-500" : "bg-red-500")}
                                                 style={{ width: `${Math.min(100, (Math.abs(item.value) / 500000) * 100)}%` }} // Arbitrary 5k scale for visual
                                             />
                                         </div>
-                                        <span className={cn("font-bold text-sm min-w-[100px] text-right", item.value >= 0 ? "text-teal-600" : "text-pink-600")}>
+                                        <span className={cn("font-bold text-sm min-w-[100px] text-right", item.value >= 0 ? "text-sky-600" : "text-red-600")}>
                                             {formatUSD(item.value)}
                                         </span>
                                     </div>
@@ -198,20 +198,20 @@ export function Balance() {
                                     <Wallet className="w-4 h-4" />
                                     <h3 className="text-xs font-bold uppercase tracking-wider">Your Current Situation</h3>
                                 </div>
-                                <p className={cn("text-3xl font-black", totalBalanceCents >= 0 ? "text-zinc-900 dark:text-white" : "text-pink-600")}>
+                                <p className={cn("text-3xl font-black", totalBalanceCents >= 0 ? "text-zinc-900 dark:text-white" : "text-red-600")}>
                                     {formatUSD(totalBalanceCents)}
                                 </p>
                             </div>
                         </div>
 
-                        <div className="bg-pink-50/50 dark:bg-pink-900/10 p-6 rounded-2xl border border-pink-100 dark:border-pink-900/30 flex flex-col justify-center items-center text-center space-y-2">
-                            <h3 className="text-sm font-medium text-pink-900 dark:text-pink-300">
+                        <div className="bg-emerald-50/50 dark:bg-emerald-900/10 p-6 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 flex flex-col justify-center items-center text-center space-y-2">
+                            <h3 className="text-sm font-medium text-emerald-900 dark:text-emerald-300">
                                 Comparing with what you expected to have:
                             </h3>
-                            <p className={cn("text-4xl font-black", expectedDiff >= 0 ? "text-teal-600" : "text-pink-600")}>
+                            <p className={cn("text-4xl font-black", expectedDiff >= 0 ? "text-sky-600" : "text-red-600")}>
                                 {formatUSD(expectedDiff)}
                             </p>
-                            <p className="text-xs text-pink-700/60 dark:text-pink-400/60 max-w-[200px]">
+                            <p className="text-xs text-emerald-700/60 dark:text-emerald-400/60 max-w-[200px]">
                                 (Total balance - (ApD * Total Days))
                             </p>
                         </div>

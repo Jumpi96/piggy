@@ -18,7 +18,7 @@ export function SettingsPage() {
                     className={cn(
                         "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
                         activeTab === 'cards'
-                            ? "border-pink-500 text-pink-600 dark:text-pink-400"
+                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     )}
                 >
@@ -30,7 +30,7 @@ export function SettingsPage() {
                     className={cn(
                         "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
                         activeTab === 'rates'
-                            ? "border-pink-500 text-pink-600 dark:text-pink-400"
+                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     )}
                 >
@@ -42,7 +42,7 @@ export function SettingsPage() {
                     className={cn(
                         "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
                         activeTab === 'general'
-                            ? "border-pink-500 text-pink-600 dark:text-pink-400"
+                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     )}
                 >
@@ -117,7 +117,7 @@ function GeneralSettings() {
                     <button
                         type="submit"
                         disabled={isLoading}
-                        className="px-6 py-2 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-colors disabled:opacity-50"
+                        className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
                     >
                         Save Settings
                     </button>
@@ -250,7 +250,7 @@ function CardsSettings() {
                             required
                         />
                     </div>
-                    <button type="submit" className="w-full md:w-auto px-6 py-2 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-colors flex items-center justify-center gap-2">
+                    <button type="submit" className="w-full md:w-auto px-6 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
                         <Plus className="w-4 h-4" /> Add
                     </button>
                 </form>
@@ -335,7 +335,7 @@ function RatesSettings() {
                                 <td className="px-6 py-3 text-right">
                                     <button
                                         onClick={() => handleSave(c.code)}
-                                        className="text-pink-600 hover:text-pink-700 font-medium text-xs uppercase tracking-wide border border-pink-200 dark:border-pink-900 px-3 py-1 rounded hover:bg-pink-50 dark:hover:bg-pink-900/20 transition-colors"
+                                        className="text-emerald-600 hover:text-emerald-700 font-medium text-xs uppercase tracking-wide border border-emerald-200 dark:border-emerald-900 px-3 py-1 rounded hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
                                     >
                                         Update
                                     </button>

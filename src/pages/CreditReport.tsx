@@ -103,7 +103,7 @@ export function CreditReport() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold flex items-center gap-2">
-                        <CardIcon className="w-6 h-6 text-pink-500" />
+                        <CardIcon className="w-6 h-6 text-emerald-500" />
                         Credit Report
                     </h1>
                     <p className="text-sm text-gray-500 font-mono">
@@ -136,7 +136,7 @@ export function CreditReport() {
 
                     <button
                         onClick={() => { setEditingTransaction(undefined); setIsFormOpen(true); }}
-                        className="p-2 bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition-colors shadow-lg shadow-pink-500/20"
+                        className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-500/20"
                     >
                         <Plus className="w-5 h-5" />
                     </button>
@@ -166,7 +166,7 @@ export function CreditReport() {
             <div className="space-y-3">
                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-2">Credit Items Review</h3>
                 {isLoading ? (
-                    <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-pink-500" /></div>
+                    <div className="flex justify-center p-12"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
                 ) : (
                     <div className="space-y-2">
                         {transactions.map(t => (
@@ -176,20 +176,20 @@ export function CreditReport() {
                                     "group flex items-center gap-4 p-4 rounded-xl border transition-all",
                                     checkedItems.has(t.id)
                                         ? "bg-gray-50 dark:bg-zinc-800/50 border-gray-100 dark:border-zinc-800/50 opacity-60"
-                                        : "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:border-pink-200 dark:hover:border-pink-900"
+                                        : "bg-white dark:bg-zinc-900 border-gray-100 dark:border-zinc-800 hover:border-emerald-200 dark:hover:border-emerald-900"
                                 )}
                             >
                                 <button onClick={() => toggleCheck(t.id)} className="shrink-0">
                                     {checkedItems.has(t.id)
-                                        ? <CheckCircle2 className="w-6 h-6 text-teal-500" />
-                                        : <Circle className="w-6 h-6 text-gray-300 dark:text-zinc-700 group-hover:text-pink-400 transition-colors" />
+                                        ? <CheckCircle2 className="w-6 h-6 text-sky-500" />
+                                        : <Circle className="w-6 h-6 text-gray-300 dark:text-zinc-700 group-hover:text-emerald-400 transition-colors" />
                                     }
                                 </button>
 
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center justify-between gap-2">
                                         <h4 className="font-bold text-sm truncate">{t.tag}</h4>
-                                        <span className={cn("font-mono text-sm font-bold", t.direction === 'income' ? "text-teal-600" : "text-gray-900 dark:text-white")}>
+                                        <span className={cn("font-mono text-sm font-bold", t.direction === 'income' ? "text-sky-600" : "text-gray-900 dark:text-white")}>
                                             {formatUSD(t.amount_cents, t.currency_code)}
                                         </span>
                                     </div>
@@ -206,7 +206,7 @@ export function CreditReport() {
                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                         onClick={() => { setEditingTransaction(t); setIsFormOpen(true); }}
-                                        className="p-2 hover:bg-pink-50 dark:hover:bg-pink-900/20 text-gray-400 hover:text-pink-600 rounded-lg transition-colors"
+                                        className="p-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-gray-400 hover:text-emerald-600 rounded-lg transition-colors"
                                     >
                                         <Edit2 className="w-4 h-4" />
                                     </button>

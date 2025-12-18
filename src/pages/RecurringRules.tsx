@@ -180,7 +180,7 @@ export function RecurringRulesPage() {
                     </button>
                     <button
                         onClick={() => { resetForm(); setShowForm(true); }}
-                        className="flex items-center gap-2 px-4 py-2 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
                     >
                         <Plus className="w-4 h-4" /> New Rule
                     </button>
@@ -189,7 +189,7 @@ export function RecurringRulesPage() {
 
             {isLoading ? (
                 <div className="flex justify-center p-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
                 </div>
             ) : (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -220,12 +220,12 @@ export function RecurringRulesPage() {
 
                             <div className="space-y-2">
                                 <div className="flex items-baseline gap-2">
-                                    <span className={cn(
+                                    <div className={cn(
                                         "text-lg font-bold font-mono",
-                                        rule.direction === 'income' ? 'text-teal-600' : 'text-pink-600'
+                                        rule.direction === 'income' ? "text-sky-600" : "text-red-600"
                                     )}>
-                                        {rule.direction === 'income' ? '+' : '-'}{rule.currency_code} {(rule.amount_cents / 100).toFixed(2)}
-                                    </span>
+                                        {rule.direction === 'income' ? '+' : '-'}{formatCurrency(rule.amount_cents, rule.currency_code)}
+                                    </div>
                                 </div>
 
                                 {rule.note && (
@@ -254,7 +254,7 @@ export function RecurringRulesPage() {
                         <div className="md:col-span-3 text-center p-12 text-gray-500 border-2 border-dashed border-gray-100 dark:border-zinc-800 rounded-xl">
                             <Plus className="w-8 h-8 mx-auto mb-3 text-gray-300" />
                             <p>No recurring rules yet.</p>
-                            <button onClick={() => setShowForm(true)} className="mt-4 text-pink-600 font-medium hover:underline text-sm">Create your first rule</button>
+                            <button onClick={() => setShowForm(true)} className="mt-4 text-emerald-600 font-medium hover:underline text-sm">Create your first rule</button>
                         </div>
                     )}
                 </div>
@@ -276,7 +276,7 @@ export function RecurringRulesPage() {
                                     <select
                                         value={formData.direction}
                                         onChange={e => setFormData({ ...formData, direction: e.target.value as any })}
-                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                     >
                                         <option value="expense">Expense</option>
                                         <option value="income">Income</option>
@@ -287,7 +287,7 @@ export function RecurringRulesPage() {
                                     <select
                                         value={formData.category}
                                         onChange={e => setFormData({ ...formData, category: e.target.value })}
-                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                         required
                                     >
                                         <option value="">Select category...</option>
@@ -303,7 +303,7 @@ export function RecurringRulesPage() {
                                     value={formData.tag || ''}
                                     onChange={e => setFormData({ ...formData, tag: e.target.value })}
                                     placeholder="e.g. Rent, Salary..."
-                                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                     required
                                 />
                             </div>
@@ -315,7 +315,7 @@ export function RecurringRulesPage() {
                                         type="number" step="0.01"
                                         value={formData.amount_cents ? formData.amount_cents / 100 : ''}
                                         onChange={e => setFormData({ ...formData, amount_cents: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
-                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 font-bold focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                         required
                                     />
                                 </div>
@@ -324,7 +324,7 @@ export function RecurringRulesPage() {
                                     <select
                                         value={formData.currency_code}
                                         onChange={e => setFormData({ ...formData, currency_code: e.target.value })}
-                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-pink-500 outline-none transition-all"
+                                        className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                     >
                                         {currencies.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
                                     </select>
@@ -342,7 +342,7 @@ export function RecurringRulesPage() {
                                             type="date"
                                             value={formData.start_date || ''}
                                             onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                             required
                                         />
                                     </div>
@@ -352,7 +352,7 @@ export function RecurringRulesPage() {
                                             type="date"
                                             value={formData.end_date || ''}
                                             onChange={e => setFormData({ ...formData, end_date: e.target.value || null })}
-                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>
                                 </div>
@@ -363,12 +363,12 @@ export function RecurringRulesPage() {
                                         value={occurrencesHelper}
                                         onChange={e => setOccurrencesHelper(e.target.value)}
                                         placeholder="N times"
-                                        className="w-24 p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                        className="w-24 p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleCalculateEndDate}
-                                        className="text-xs text-pink-600 font-bold hover:bg-pink-50 dark:hover:bg-pink-900/20 px-2 py-1 rounded transition-colors"
+                                        className="text-xs text-emerald-600 font-bold hover:bg-emerald-50 dark:hover:bg-emerald-900/20 px-2 py-1 rounded transition-colors"
                                     >
                                         Calculate End Date
                                     </button>
@@ -379,7 +379,7 @@ export function RecurringRulesPage() {
                                     <select
                                         value={formData.schedule_type}
                                         onChange={e => setFormData({ ...formData, schedule_type: e.target.value as any })}
-                                        className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-pink-500 outline-none"
+                                        className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                     >
                                         {SCHEDULE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                     </select>
@@ -396,7 +396,7 @@ export function RecurringRulesPage() {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-8 py-2.5 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 shadow-lg shadow-pink-500/20 transition-all"
+                                    className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 transition-all"
                                 >
                                     Save & Sync
                                 </button>

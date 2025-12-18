@@ -132,7 +132,7 @@ export function TransactionsList() {
                 {/* List Content */}
                 {isLoading ? (
                     <div className="flex justify-center p-12">
-                        <Loader2 className="w-8 h-8 animate-spin text-pink-600" />
+                        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
                     </div>
                 ) : transactions.length === 0 ? (
                     <div className="p-12 text-center text-gray-500 dark:text-gray-400 italic bg-white dark:bg-zinc-900 rounded-xl border border-dashed border-gray-200 dark:border-zinc-800">
@@ -148,7 +148,7 @@ export function TransactionsList() {
                                     className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-zinc-800/50 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-xl transition-colors group border border-transparent hover:border-gray-200 dark:hover:border-zinc-700"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 rounded-lg">
+                                        <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg">
                                             <Calendar className="w-4 h-4" />
                                         </div>
                                         <span className="font-bold text-sm text-gray-700 dark:text-zinc-300">
@@ -240,8 +240,8 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                     <div className={cn(
                         "p-3 rounded-xl",
                         t.direction === 'income'
-                            ? "bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400"
-                            : "bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400"
+                            ? "bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400"
+                            : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
                     )}>
                         {t.direction === 'income' ? <UpIcon className="w-6 h-6" /> : <DownIcon className="w-6 h-6" />}
                     </div>
@@ -290,24 +290,24 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                     </div>
                     <div className={cn(
                         "text-lg font-bold font-mono tracking-tight text-right",
-                        t.direction === 'income' ? "text-teal-600 dark:text-teal-400" : "text-pink-600 dark:text-pink-400"
+                        t.direction === 'income' ? "text-sky-600 dark:text-sky-400" : "text-red-600 dark:text-red-400"
                     )}>
                         {t.direction === 'income' ? '+' : '-'}{formatCurrency(t.amount_cents, t.currency_code)}
                     </div>
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => setEditingTransaction(t)}
-                            className="p-2 text-gray-400 hover:text-pink-600 dark:hover:text-pink-400 hover:bg-pink-50 dark:hover:bg-pink-900/20 rounded-lg transition-all"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => handleDelete(t.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
-                    </div>
+                </div>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => setEditingTransaction(t)}
+                        className="p-2 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-all"
+                    >
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(t.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </button>
                 </div>
             </div>
         </div>

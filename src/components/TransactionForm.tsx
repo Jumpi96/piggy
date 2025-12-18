@@ -146,7 +146,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     className={cn(
                         "flex-1 py-2 rounded-md text-sm font-medium transition-all",
                         direction === 'expense'
-                            ? "bg-white dark:bg-zinc-700 text-pink-600 shadow-sm"
+                            ? "bg-white dark:bg-zinc-700 text-emerald-600 shadow-sm"
                             : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     )}
                 >
@@ -158,7 +158,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     className={cn(
                         "flex-1 py-2 rounded-md text-sm font-medium transition-all",
                         direction === 'income'
-                            ? "bg-white dark:bg-zinc-700 text-teal-600 shadow-sm"
+                            ? "bg-white dark:bg-zinc-700 text-sky-600 shadow-sm"
                             : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                     )}
                 >
@@ -176,7 +176,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         placeholder="0.00"
-                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-xl font-bold focus:ring-2 focus:ring-pink-500 outline-none"
+                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-xl font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
                         required
                     />
                 </div>
@@ -185,7 +185,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     <select
                         value={currencyCode}
                         onChange={(e) => setCurrencyCode(e.target.value)}
-                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-lg focus:ring-2 focus:ring-pink-500 outline-none"
+                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                         {currencies.map(c => (
                             <option key={c.code} value={c.code}>{c.code}</option>
@@ -201,7 +201,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none"
+                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
                 />
             </div>
@@ -212,7 +212,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                 <select
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none"
+                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
                 >
                     <option value="" disabled>Select category</option>
@@ -235,7 +235,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                         setShowTagSuggestions(true);
                     }}
                     placeholder="Lunch, Groceries, etc."
-                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none"
+                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"
                     required
                     autoComplete="off"
                 />
@@ -270,7 +270,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="Add extra details..."
                     rows={2}
-                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none resize-none"
+                    className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
                 />
             </div>
 
@@ -281,7 +281,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     <select
                         value={method}
                         onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none"
+                        className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"
                     >
                         {PAYMENT_METHODS.map(m => (
                             <option key={m.value} value={m.value}>{m.label}</option>
@@ -295,7 +295,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                         <select
                             value={cardId}
                             onChange={(e) => setCardId(e.target.value)}
-                            className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-pink-500 outline-none"
+                            className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"
                             required
                         >
                             <option value="" disabled>Select card</option>
@@ -314,7 +314,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     id="toBeBalanced"
                     checked={toBeBalanced}
                     onChange={(e) => setToBeBalanced(e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-pink-600 focus:ring-pink-500 cursor-pointer"
+                    className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                 />
                 <label htmlFor="toBeBalanced" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                     Mark as "To be Balanced" <span className="text-gray-400 text-xs block sm:inline">(e.g. unexpected expense)</span>
@@ -344,7 +344,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     type="submit"
                     disabled={isLoading}
                     className={cn(
-                        "py-4 bg-pink-600 text-white rounded-xl font-bold hover:bg-pink-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50",
+                        "py-4 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50",
                         onCancel ? "flex-[2]" : "w-full"
                     )}
                 >

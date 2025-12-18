@@ -20,7 +20,7 @@ export function Layout() {
         <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
             {/* Sidebar (Desktop) */}
             <aside className="hidden md:flex flex-col w-64 border-r border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
-                <h1 className="text-2xl font-bold mb-8 px-4 text-pink-600 dark:text-pink-400">🐷 piggy</h1>
+                <h1 className="text-2xl font-bold mb-8 px-4 text-emerald-600 dark:text-emerald-400">🐷 piggy</h1>
                 <nav className="flex-1 space-y-2">
                     {navItems.map((item) => (
                         <Link
@@ -29,7 +29,7 @@ export function Layout() {
                             className={cn(
                                 "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors",
                                 location.pathname === item.href
-                                    ? "bg-pink-50 text-pink-700 dark:bg-pink-900/20 dark:text-pink-400"
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
                                     : "text-gray-700 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
                             )}
                         >
@@ -55,12 +55,12 @@ export function Layout() {
                             "flex flex-col items-center justify-center px-1 py-1 rounded-lg min-w-[72px] shrink-0 transition-transform active:scale-95",
                             item.special ? "relative -top-4" : "",
                             location.pathname === item.href
-                                ? "text-pink-600 dark:text-pink-400"
+                                ? "text-emerald-600 dark:text-emerald-400"
                                 : "text-gray-500 dark:text-gray-400"
                         )}
                     >
                         {item.special ? (
-                            <div className="bg-pink-600 text-white p-3 rounded-full shadow-lg ring-4 ring-white dark:ring-zinc-950">
+                            <div className="bg-emerald-600 text-white p-3 rounded-full shadow-lg ring-4 ring-white dark:ring-zinc-950">
                                 <item.icon className="w-6 h-6" />
                             </div>
                         ) : (

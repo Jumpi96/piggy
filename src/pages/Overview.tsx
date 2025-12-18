@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates } from '../lib/api';
 import type { Transaction, ExchangeRate } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 export function Overview() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -165,12 +166,12 @@ export function Overview() {
             {/* Loading */}
             {isLoading ? (
                 <div className="flex justify-center p-12">
-                    <Loader2 className="w-8 h-8 animate-spin text-pink-500" />
+                    <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
                 </div>
             ) : (
                 <>
                     {/* Hero Financial Status */}
-                    <div className="bg-pink-600 dark:bg-pink-700 p-8 rounded-3xl shadow-xl shadow-pink-500/20 text-white space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="bg-emerald-600 dark:bg-emerald-700 p-8 rounded-3xl shadow-xl shadow-emerald-500/20 text-white space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
                         <div className="space-y-2 text-center md:text-left">
                             <div className="flex items-center justify-center md:justify-start gap-2 opacity-80">
                                 <Wallet className="w-5 h-5" />
@@ -186,7 +187,9 @@ export function Overview() {
                                 <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">Expected vs Today</span>
                                 <div className="flex items-baseline gap-2">
                                     <p className="text-2xl font-black">{formatUSD(differenceWithExpected)}</p>
-                                    <span className="text-xs opacity-60"> {differenceWithExpected >= 0 ? '↗' : '↘'}</span>
+                                    <span className={cn("text-xs", differenceWithExpected >= 0 ? "opacity-60" : "text-red-200")}>
+                                        {differenceWithExpected >= 0 ? '↗' : '↘'}
+                                    </span>
                                 </div>
                             </div>
                             <div className="space-y-1">
@@ -196,7 +199,7 @@ export function Overview() {
                             <div className="space-y-1">
                                 <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">To be Balanced</span>
                                 <div className="flex items-baseline gap-2">
-                                    <p className="text-2xl font-black">{formatUSD(toBeBalancedTotal)}</p>
+                                    <p className={cn("text-2xl font-black", toBeBalancedTotal > 0 ? "text-red-200" : "text-white")}>{formatUSD(toBeBalancedTotal)}</p>
                                     <span className="text-xs opacity-60">⚖️</span>
                                 </div>
                             </div>
@@ -206,7 +209,7 @@ export function Overview() {
                     {/* Secondary Stats Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {/* Available Cash (Demoted) */}
-                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-pink-200 transition-colors">
+                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-emerald-200 transition-colors">
                             <div className="flex items-center gap-2 text-zinc-500 mb-2">
                                 <TrendingUp className="w-4 h-4" />
                                 <h3 className="text-[10px] font-bold uppercase tracking-wider">Available Cash Should Be</h3>
@@ -222,8 +225,8 @@ export function Overview() {
                         </div>
 
                         {/* Income */}
-                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-teal-200 transition-colors">
-                            <div className="flex items-center gap-2 text-teal-600 mb-2">
+                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-sky-200 transition-colors">
+                            <div className="flex items-center gap-2 text-sky-600 mb-2">
                                 <TrendingUp className="w-4 h-4" />
                                 <h3 className="text-[10px] font-bold uppercase tracking-wider">Monthly Income</h3>
                             </div>
@@ -233,8 +236,8 @@ export function Overview() {
                         </div>
 
                         {/* Expense */}
-                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-pink-200 transition-colors">
-                            <div className="flex items-center gap-2 text-pink-600 mb-2">
+                        <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-red-200 transition-colors">
+                            <div className="flex items-center gap-2 text-red-600 mb-2">
                                 <TrendingDown className="w-4 h-4" />
                                 <h3 className="text-[10px] font-bold uppercase tracking-wider">Monthly Expense</h3>
                             </div>
@@ -253,7 +256,7 @@ export function Overview() {
                         <div className="p-6">
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                                 {projectionDays.map(pd => (
-                                    <div key={pd.day} className="flex flex-col p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 hover:border-pink-200 transition-colors">
+                                    <div key={pd.day} className="flex flex-col p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 hover:border-emerald-200 transition-colors">
                                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Day {pd.day}</span>
                                         <span className="text-sm font-bold font-mono text-zinc-600 dark:text-zinc-300 mt-1">
                                             {formatUSD(pd.value)}
