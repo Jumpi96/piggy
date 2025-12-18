@@ -78,6 +78,16 @@ create table transactions (
   constraint recurrence_idempotency unique (recurring_rule_id, date)
 );
 
+-- Parameters Table
+create table parameters (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references auth.users(id) not null default auth.uid(),
+  key text not null,
+  value jsonb not null,
+  updated_at timestamptz default now(),
+  unique(user_id, key)
+);
+
 -- RLS Policies
 
 alter table currencies enable row level security;
@@ -94,3 +104,6 @@ create policy "Users can all recurring_rules" on recurring_rules for all to auth
 
 alter table transactions enable row level security;
 create policy "Users can all transactions" on transactions for all to authenticated using (user_id = auth.uid());
+
+alter table parameters enable row level security;
+create policy "Users can all parameters" on parameters for all to authenticated using (user_id = auth.uid());

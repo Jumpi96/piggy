@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { fetchCreditCards, insertCreditCard, deleteCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate } from '../lib/api';
-import type { CreditCard, Currency } from '../types';
-import { Plus, Trash2, CreditCard as CardIcon, RefreshCw } from 'lucide-react';
+import { fetchCreditCards, insertCreditCard, deleteCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
+import type { CreditCard, Currency, Parameter } from '../types';
+import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function SettingsPage() {
-    const [activeTab, setActiveTab] = useState<'cards' | 'rates'>('cards');
+    const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general'>('cards');
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -37,9 +37,92 @@ export function SettingsPage() {
                     <RefreshCw className="w-4 h-4" />
                     Exchange Rates
                 </button>
+                <button
+                    onClick={() => setActiveTab('general')}
+                    className={cn(
+                        "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
+                        activeTab === 'general'
+                            ? "border-pink-500 text-pink-600 dark:text-pink-400"
+                            : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    )}
+                >
+                    <Settings2 className="w-4 h-4" />
+                    General
+                </button>
             </div>
 
-            {activeTab === 'cards' ? <CardsSettings /> : <RatesSettings />}
+            {activeTab === 'cards' && <CardsSettings />}
+            {activeTab === 'rates' && <RatesSettings />}
+            {activeTab === 'general' && <GeneralSettings />}
+        </div>
+    );
+}
+
+function GeneralSettings() {
+    const [apd, setApd] = useState<string>('');
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        async function load() {
+            setIsLoading(true);
+            try {
+                const params: Parameter[] = await fetchParameters();
+                const apdParam = params.find(p => p.key === 'amount_per_day');
+                if (apdParam) setApd(apdParam.value.toString());
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        load();
+    }, []);
+
+    const handleSave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await upsertParameter('amount_per_day', parseFloat(apd));
+            alert("Settings saved!");
+        } catch (err) {
+            console.error(err);
+            alert("Failed to save settings");
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800">
+                <h3 className="text-lg font-bold mb-4">Financial Parameters</h3>
+                <form onSubmit={handleSave} className="space-y-4 max-w-sm">
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Amount per Day (USD)
+                        </label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={apd}
+                                onChange={(e) => setApd(e.target.value)}
+                                className="w-full pl-7 p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900"
+                                placeholder="35.00"
+                                required
+                            />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            This base value is used to calculate your expected daily balance.
+                        </p>
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="px-6 py-2 bg-pink-600 text-white rounded-lg font-medium hover:bg-pink-700 transition-colors disabled:opacity-50"
+                    >
+                        Save Settings
+                    </button>
+                </form>
+            </div>
         </div>
     );
 }

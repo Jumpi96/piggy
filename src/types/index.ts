@@ -66,3 +66,11 @@ export interface Transaction {
     updated_at: string;
     deleted_at?: string | null;
 }
+
+export interface Parameter {
+    id: string;
+    user_id: string;
+    key: string;
+    value: any;
+    updated_at: string;
+}

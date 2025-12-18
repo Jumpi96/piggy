@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { Currency, CreditCard, Transaction, RecurringRule } from '../types';
+import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
 
 export async function fetchCurrencies(): Promise<Currency[]> {
     const { data, error } = await supabase
@@ -237,4 +237,22 @@ export async function computeMonthBalance(month: string) {
     const { data, error } = await supabase.rpc('compute_month_balance', { target_month: month });
     if (error) throw error;
     return data as { income: number; expense: number; balance: number } || { income: 0, expense: 0, balance: 0 };
+}
+
+export async function fetchParameters(): Promise<Parameter[]> {
+    const { data, error } = await supabase
+        .from('parameters')
+        .select('*');
+    if (error) throw error;
+    return data || [];
+}
+
+export async function upsertParameter(key: string, value: any) {
+    const { data, error } = await supabase
+        .from('parameters')
+        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
 }
