@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import { fetchCurrencies, fetchCreditCards, insertTransaction, updateTransaction, fetchExchangeRate, fetchDistinctTags, type TransactionInput } from '../lib/api';
-import { calculateCreditCardEffectiveDate } from '../lib/dates';
+import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate } from '../lib/dates';
 import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -21,7 +21,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     const [direction, setDirection] = useState<Direction>(initialData?.direction || 'expense');
     const [amount, setAmount] = useState(initialData ? (initialData.amount_cents / 100).toString() : '');
     const [currencyCode, setCurrencyCode] = useState(initialData?.currency_code || 'USD');
-    const [date, setDate] = useState(initialData?.date || new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(initialData?.date || getTodayLocalDate());
     const [category, setCategory] = useState(initialData?.category || '');
     const [tag, setTag] = useState(initialData?.tag || '');
     const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || 'cash');
@@ -85,14 +85,14 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             const amountCents = Math.round(parseFloat(amount) * 100);
 
             // Effective Date Logic
-            let effectiveDate = new Date(date);
+            let effectiveDate = parseLocalDate(date);
             if (method === 'card') {
                 const card = creditCards.find(c => c.id === cardId);
                 if (!card) throw new Error("Selected card not found");
                 effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
             }
 
-            const dateStr = effectiveDate.toISOString().split('T')[0];
+            const dateStr = formatLocalDate(effectiveDate);
 
             // Exchange Rate
             const exchangeRateId = await fetchExchangeRate(currencyCode);

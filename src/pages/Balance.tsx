@@ -3,23 +3,9 @@ import { fetchTransactionsRange, fetchParameters, fetchLatestRates } from '../li
 import type { Transaction, Parameter, ExchangeRate } from '../types';
 import { Loader2, Calendar, Wallet } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { formatLocalDate, formatLocalMonth, parseLocalDate } from '../lib/dates';
 
 export function Balance() {
-    // Helper to format Date as YYYY-MM-DD in local time
-    const formatDate = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
-    // Helper to format Date as YYYY-MM in local time
-    const formatYearMonth = (d: Date) => {
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        return `${year}-${month}`;
-    };
-
     // Default range: next month to +12 months
     const getInitialRange = () => {
         const now = new Date();
@@ -28,8 +14,8 @@ export function Balance() {
         const lastDay = new Date(end.getFullYear(), end.getMonth() + 1, 0);
 
         return {
-            from: formatDate(start),
-            to: formatDate(lastDay)
+            from: formatLocalDate(start),
+            to: formatLocalDate(lastDay)
         };
     };
 
@@ -82,21 +68,21 @@ export function Balance() {
     });
 
     const breakdown: { month: string; value: number }[] = [];
-    const start = new Date(range.from + 'T12:00:00'); // Use mid-day to avoid TZ shifts when parsing
-    const end = new Date(range.to + 'T12:00:00');
+    const start = parseLocalDate(range.from);
+    const end = parseLocalDate(range.to);
 
     const current = new Date(start.getFullYear(), start.getMonth(), 1);
     const last = new Date(end.getFullYear(), end.getMonth(), 1);
 
     while (current <= last) {
-        const key = formatYearMonth(current);
+        const key = formatLocalMonth(current);
 
         // Calculate days in this month within the range
         const mStart = new Date(current.getFullYear(), current.getMonth(), 1);
         const mEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
 
-        const rStart = new Date(range.from + 'T12:00:00');
-        const rEnd = new Date(range.to + 'T12:00:00');
+        const rStart = parseLocalDate(range.from);
+        const rEnd = parseLocalDate(range.to);
 
         const actualStart = mStart > rStart ? mStart : rStart;
         const actualEnd = mEnd < rEnd ? mEnd : rEnd;

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
+import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import type { RecurringRule, Currency, ScheduleType } from '../types';
 import { Plus, Trash2, Edit2, StopCircle, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -28,7 +29,7 @@ export function RecurringRulesPage() {
         schedule_config: { n: 1 },
         active: true,
         note: '',
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: getTodayLocalDate(),
         end_date: null
     });
 
@@ -63,7 +64,7 @@ export function RecurringRulesPage() {
         try {
             const future = new Date();
             future.setMonth(future.getMonth() + 24); // Generator for 24 months
-            await ensureRecurringGenerated(future.toISOString().split('T')[0]);
+            await ensureRecurringGenerated(formatLocalDate(future));
             alert("Generated transactions for the next 24 months.");
             load();
         } catch (err) {
@@ -78,7 +79,7 @@ export function RecurringRulesPage() {
         const count = parseInt(occurrencesHelper);
         if (isNaN(count) || count <= 0) return;
 
-        const startStr = formData.start_date || new Date().toISOString().split('T')[0];
+        const startStr = formData.start_date || getTodayLocalDate();
         const type = formData.schedule_type as ScheduleType;
         const n = formData.schedule_config?.n || 1;
 
@@ -104,7 +105,7 @@ export function RecurringRulesPage() {
             // Auto run generation to sync changes
             const future = new Date();
             future.setMonth(future.getMonth() + 24);
-            await ensureRecurringGenerated(future.toISOString().split('T')[0]);
+            await ensureRecurringGenerated(formatLocalDate(future));
         } catch (err) {
             console.error(err);
             alert("Failed to save rule");
@@ -121,7 +122,7 @@ export function RecurringRulesPage() {
             schedule_config: { n: 1 },
             active: true,
             note: '',
-            start_date: new Date().toISOString().split('T')[0],
+            start_date: getTodayLocalDate(),
             end_date: null
         });
         setOccurrencesHelper('');
@@ -147,13 +148,13 @@ export function RecurringRulesPage() {
     const handleStop = async (rule: RecurringRule) => {
         if (!confirm("This will stop the rule immediately. Future transactions beyond today will be removed. \n\nContinue?")) return;
         try {
-            const today = new Date().toISOString().split('T')[0];
+            const today = getTodayLocalDate();
             await updateRecurringRule(rule.id, { active: false, end_date: today });
 
             // Sync with RPC cleanup
             const future = new Date();
             future.setMonth(future.getMonth() + 24);
-            await ensureRecurringGenerated(future.toISOString().split('T')[0]);
+            await ensureRecurringGenerated(formatLocalDate(future));
 
             load();
         } catch (err) {
@@ -195,7 +196,7 @@ export function RecurringRulesPage() {
                     {rules.map(rule => (
                         <div key={rule.id} className={cn(
                             "bg-white dark:bg-zinc-900 p-5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm relative transition-all",
-                            (!rule.active || (rule.end_date && rule.end_date < new Date().toISOString().split('T')[0])) && "opacity-60 bg-gray-50 dark:bg-zinc-950"
+                            (!rule.active || (rule.end_date && rule.end_date < getTodayLocalDate())) && "opacity-60 bg-gray-50 dark:bg-zinc-950"
                         )}>
                             <div className="flex justify-between items-start mb-3">
                                 <div className="space-y-1">

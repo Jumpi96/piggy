@@ -1,3 +1,37 @@
+/**
+ * Formats a Date object to YYYY-MM-DD in local time.
+ */
+export function formatLocalDate(d: Date): string {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+/**
+ * Formats a Date object to YYYY-MM in local time.
+ */
+export function formatLocalMonth(d: Date): string {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+/**
+ * Parses YYYY-MM-DD string into a local Date object (midnight).
+ */
+export function parseLocalDate(dateStr: string): Date {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+}
+
+/**
+ * Returns today's date formatted as YYYY-MM-DD in local time.
+ */
+export function getTodayLocalDate(): string {
+    return formatLocalDate(new Date());
+}
+
 export function calculateCreditCardEffectiveDate(
     transactionDate: Date,
     closingDay: number,
@@ -9,11 +43,10 @@ export function calculateCreditCardEffectiveDate(
     // Else 
     //   -> effective date = payment_day of month + 2
 
-    const tDate = new Date(transactionDate);
-    const tDay = tDate.getDate();
+    const tDay = transactionDate.getDate();
 
     // Create start of next month
-    let targetMonth = new Date(tDate.getFullYear(), tDate.getMonth() + 1, 1);
+    let targetMonth = new Date(transactionDate.getFullYear(), transactionDate.getMonth() + 1, 1);
 
     if (tDay < closingDay) {
         // Next month
@@ -22,18 +55,5 @@ export function calculateCreditCardEffectiveDate(
         targetMonth.setMonth(targetMonth.getMonth() + 1);
     }
 
-    // Set to payment day
-    // Handle edge cases where paymentDay doesn't exist in that month (e.g. 31st) - though cards usually have valid dates.
-    // JS Date autocompletes 31st Feb to March X. This might be desired or not.
-    // Standard CC logic usually implies rigid cycles.
-    // The spec says: effective date = payment_day of [next month | month+2]
-
-    // Let's set the date to existing month, then set date.
-    // If we overflow, we overflow. But for "accounting month" it might be safer to clamp?
-    // Spec doesn't specify clamping for CC dates, only for recurring.
-    // Assuming standard valid payment days (1-28 usually).
-
-    const effectiveDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
-
-    return effectiveDate;
+    return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
 }

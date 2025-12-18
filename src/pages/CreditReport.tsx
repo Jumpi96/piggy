@@ -4,6 +4,7 @@ import type { Transaction, CreditCard } from '../types';
 import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
+import { formatLocalDate } from '../lib/dates';
 
 export function CreditReport() {
     // Default logic: next month if > 15, current month if <= 15
@@ -46,17 +47,10 @@ export function CreditReport() {
         if (!selectedCardId) return;
         setIsLoading(true);
         try {
-            const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-            const end = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+            const startStr = formatLocalDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1));
+            const endStr = formatLocalDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0));
 
-            const formatDate = (d: Date) => {
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            };
-
-            const txs = await fetchCreditTransactions(selectedCardId, formatDate(start), formatDate(end));
+            const txs = await fetchCreditTransactions(selectedCardId, startStr, endStr);
             setTransactions(txs);
         } catch (err) {
             console.error(err);
@@ -100,8 +94,7 @@ export function CreditReport() {
     });
 
     const changeMonth = (delta: number) => {
-        const next = new Date(currentMonth);
-        next.setMonth(next.getMonth() + delta);
+        const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
         setCurrentMonth(next);
     };
 

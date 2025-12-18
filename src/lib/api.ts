@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
+import { formatLocalDate } from './dates';
 
 export async function fetchCurrencies(): Promise<Currency[]> {
     const { data, error } = await supabase
@@ -186,9 +187,9 @@ export async function insertExchangeRate(currencyCode: string, rate: number) {
     if (error) throw error;
 
     // Repoint transactions from the start of the current month
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    const dateStr = startOfMonth.toISOString().split('T')[0];
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const dateStr = formatLocalDate(startOfMonth);
 
     const { error: rpcError } = await supabase.rpc('repoint_exchange_rate', {
         p_currency_code: currencyCode,
