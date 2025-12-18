@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates } from '../lib/api';
-import type { Transaction, Parameter, ExchangeRate } from '../types';
+import type { Transaction, ExchangeRate } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar } from 'lucide-react';
 import { cn } from '../lib/utils';
 

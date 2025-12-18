@@ -95,6 +95,20 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
     return data || [];
 }
 
+export async function fetchCreditTransactions(cardId: string, startDate: string, endDate: string): Promise<Transaction[]> {
+    const { data, error } = await supabase
+        .from('transactions')
+        .select('*, exchange_rate:exchange_rates(rate), credit_card:credit_cards(name)')
+        .is('deleted_at', null)
+        .eq('credit_card_id', cardId)
+        .gte('date', startDate)
+        .lte('date', endDate)
+        .order('date', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+}
+
 export async function fetchExchangeRate(currencyCode: string): Promise<string | null> {
     const { data, error } = await supabase
         .from('exchange_rates')
