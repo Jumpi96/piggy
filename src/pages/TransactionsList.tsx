@@ -13,6 +13,13 @@ export function TransactionsList() {
     const [showFuture, setShowFuture] = useState(false);
 
     useEffect(() => {
+        const today = new Date();
+        const isCurrentMonth = currentMonth.getMonth() === today.getMonth() &&
+            currentMonth.getFullYear() === today.getFullYear();
+        setShowFuture(!isCurrentMonth);
+    }, [currentMonth]);
+
+    useEffect(() => {
         loadTransactions();
     }, [currentMonth]);
 
@@ -108,7 +115,7 @@ export function TransactionsList() {
 
     return (
         <Fragment>
-            <div className="max-w-4xl mx-auto space-y-6 pb-24">
+            <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6 pb-24">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
