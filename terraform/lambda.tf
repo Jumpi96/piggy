@@ -39,8 +39,8 @@ resource "aws_iam_role_policy" "s3_access" {
   })
 }
 
-# Backup Lambda
-resource "null_resource" "install_backup_deps" {
+# Backup Lambda - Build package
+resource "null_resource" "build_backup_lambda" {
   triggers = {
     requirements = filemd5("${path.module}/lambdas/backup/requirements.txt")
     lambda_code  = filemd5("${path.module}/lambdas/backup/lambda_function.py")
@@ -48,29 +48,30 @@ resource "null_resource" "install_backup_deps" {
 
   provisioner "local-exec" {
     command = <<EOF
+      set -e
       cd ${path.module}/lambdas/backup
-      rm -rf package
+      rm -rf package package.zip
       mkdir -p package
       pip install -r requirements.txt -t package/ --platform manylinux2014_x86_64 --only-binary=:all: --python-version 3.11
       cp lambda_function.py package/
+      cd package
+      zip -r ../package.zip . -x "*.pyc" -x "__pycache__/*"
     EOF
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "rm -f ${path.module}/lambdas/backup/package.zip"
   }
 }
 
-data "archive_file" "backup_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambdas/backup/package"
-  output_path = "${path.module}/backup_lambda.zip"
-  depends_on  = [null_resource.install_backup_deps]
-}
-
 resource "aws_lambda_function" "backup" {
-  filename         = data.archive_file.backup_lambda_zip.output_path
+  filename         = "${path.module}/lambdas/backup/package.zip"
   function_name    = "piggy_db_backup"
   role             = aws_iam_role.lambda_exec.arn
   handler          = "lambda_function.handler"
   runtime          = "python3.11"
-  source_code_hash = data.archive_file.backup_lambda_zip.output_base64sha256
+  source_code_hash = filebase64sha256("${path.module}/lambdas/backup/package.zip")
   timeout          = 300
   memory_size      = 512
 
@@ -80,6 +81,8 @@ resource "aws_lambda_function" "backup" {
       BACKUP_BUCKET   = aws_s3_bucket.backups.bucket
     }
   }
+
+  depends_on = [null_resource.build_backup_lambda]
 }
 
 # Recurring Generator Lambda
@@ -103,7 +106,7 @@ resource "aws_iam_role_policy_attachment" "recurring_lambda_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "null_resource" "install_recurring_deps" {
+resource "null_resource" "build_recurring_lambda" {
   triggers = {
     requirements = filemd5("${path.module}/lambdas/recurring_generator/requirements.txt")
     lambda_code  = filemd5("${path.module}/lambdas/recurring_generator/lambda_function.py")
@@ -111,29 +114,30 @@ resource "null_resource" "install_recurring_deps" {
 
   provisioner "local-exec" {
     command = <<EOF
+      set -e
       cd ${path.module}/lambdas/recurring_generator
-      rm -rf package
+      rm -rf package package.zip
       mkdir -p package
       pip install -r requirements.txt -t package/ --platform manylinux2014_x86_64 --only-binary=:all: --python-version 3.11
       cp lambda_function.py package/
+      cd package
+      zip -r ../package.zip . -x "*.pyc" -x "__pycache__/*"
     EOF
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "rm -f ${path.module}/lambdas/recurring_generator/package.zip"
   }
 }
 
-data "archive_file" "recurring_lambda_zip" {
-  type        = "zip"
-  source_dir  = "${path.module}/lambdas/recurring_generator/package"
-  output_path = "${path.module}/recurring_lambda.zip"
-  depends_on  = [null_resource.install_recurring_deps]
-}
-
 resource "aws_lambda_function" "recurring_generator" {
-  filename         = data.archive_file.recurring_lambda_zip.output_path
+  filename         = "${path.module}/lambdas/recurring_generator/package.zip"
   function_name    = "piggy_recurring_generator"
   role             = aws_iam_role.recurring_lambda_exec.arn
   handler          = "lambda_function.handler"
   runtime          = "python3.11"
-  source_code_hash = data.archive_file.recurring_lambda_zip.output_base64sha256
+  source_code_hash = filebase64sha256("${path.module}/lambdas/recurring_generator/package.zip")
   timeout          = 300
   memory_size      = 256
 
@@ -142,4 +146,6 @@ resource "aws_lambda_function" "recurring_generator" {
       SUPABASE_DB_URL = var.supabase_db_url
     }
   }
+
+  depends_on = [null_resource.build_recurring_lambda]
 }

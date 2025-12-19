@@ -7,7 +7,7 @@
 terraform.tfvars
 
 # Lambda build artifacts
-*.zip
 lambdas/**/package/
+lambdas/**/package.zip
 lambdas/**/__pycache__/
 lambdas/**/*.pyc
