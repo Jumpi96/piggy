@@ -1,0 +1,13 @@
+# Terraform files
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform.lock.hcl
+terraform.tfvars
+
+# Lambda build artifacts
+*.zip
+lambdas/**/package/
+lambdas/**/__pycache__/
+lambdas/**/*.pyc
