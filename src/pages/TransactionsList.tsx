@@ -1,7 +1,7 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useMemo } from 'react';
 import { fetchTransactions, deleteTransaction, updateTransaction } from '../lib/api';
 import type { Transaction } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
 
@@ -76,11 +76,36 @@ export function TransactionsList() {
         }
     };
 
+    const [searchTerm, setSearchTerm] = useState('');
     const todayStr = new Date().toISOString().split('T')[0];
 
+    const filteredTransactions = useMemo(() => {
+        const term = searchTerm.trim().toLowerCase();
+        if (!term) return transactions;
+
+        if (term.startsWith('tag:')) {
+            const tag = term.slice(4);
+            return transactions.filter(t => t.tag.toLowerCase() === tag);
+        }
+        if (term.startsWith('category:')) {
+            const cat = term.slice(9);
+            return transactions.filter(t => t.category.toLowerCase() === cat);
+        }
+
+        return transactions.filter(t => {
+            const paymentMethodStr = t.payment_method === 'card' ? (t.credit_card?.name || 'card') : 'cash';
+            return (
+                t.tag.toLowerCase().includes(term) ||
+                t.category.toLowerCase().includes(term) ||
+                (t.note?.toLowerCase().includes(term) ?? false) ||
+                paymentMethodStr.toLowerCase().includes(term)
+            );
+        });
+    }, [transactions, searchTerm]);
+
     // Group transactions
-    const futureTransactions = transactions.filter(t => t.date > todayStr).sort((a, b) => b.date.localeCompare(a.date));
-    const visibleTransactions = transactions.filter(t => t.date <= todayStr);
+    const futureTransactions = filteredTransactions.filter((t: Transaction) => t.date > todayStr).sort((a: Transaction, b: Transaction) => b.date.localeCompare(a.date));
+    const visibleTransactions = filteredTransactions.filter((t: Transaction) => t.date <= todayStr);
 
     const groupTransactionsByDate = (txs: Transaction[]) => {
         const groups: Record<string, Transaction[]> = {};
@@ -133,6 +158,26 @@ export function TransactionsList() {
                         <button onClick={nextMonth} className="p-2 hover:bg-gray-50 dark:hover:bg-zinc-800 rounded-md transition-colors">
                             <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                         </button>
+                    </div>
+                </div>
+
+                {/* Search and Filters */}
+                <div className="space-y-3">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Search by tag, category, note or payment method..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2 bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm"
+                        />
+                    </div>
+                    <div className="flex items-center gap-2 px-1">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pro tip:</span>
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                            Use <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">tag:NAME</code> or <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">category:NAME</code> for exact filtering.
+                        </span>
                     </div>
                 </div>
 
