@@ -170,3 +170,16 @@ begin
   end loop;
 end;
 $$;
+
+-- Fetch Distinct Tags
+create or replace function fetch_distinct_tags()
+returns table (tag text)
+language sql
+security definer
+as $$
+  select distinct tag 
+  from transactions 
+  where deleted_at is null 
+    and user_id = auth.uid()
+  order by tag;
+$$;

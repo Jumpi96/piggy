@@ -130,30 +130,35 @@ export async function fetchExchangeRate(currencyCode: string): Promise<string | 
 }
 
 export async function fetchDistinctTags(): Promise<string[]> {
-    // For v1 scale, fetching all tags and deduplicating client-side is acceptable.
-    // Ideally this should be an RPC like `select distinct tag from transactions`.
+    // 1. Try RPC for maximum efficiency (requires fetch_distinct_tags as defined in implementation plan)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('fetch_distinct_tags');
 
-    // We limit to last 500 transactions to guess "recent/frequent" usage if we don't have an RPC.
+    if (!rpcError && rpcData) {
+        return rpcData.map((r: { tag: string }) => r.tag);
+    }
+
+    // 2. Fallback: Fetch more transactions and deduplicate client-side
+    // We increase the limit significantly for the fallback to avoid missing tags
     const { data, error } = await supabase
         .from('transactions')
         .select('tag')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(2000);
 
     if (error) {
-        console.error("Error fetching tags", error);
+        console.error("Error fetching tags fallback", error);
         return [];
     }
 
     if (!data) return [];
 
-    // Count frequency
+    // Count frequency for a better UX (recent/common tags first)
     const freq: Record<string, number> = {};
     for (const row of data) {
-        freq[row.tag] = (freq[row.tag] || 0) + 1;
+        if (row.tag) freq[row.tag] = (freq[row.tag] || 0) + 1;
     }
 
-    // Sort by frequency desc
     return Object.entries(freq)
         .sort((a, b) => b[1] - a[1])
         .map(([tag]) => tag);
