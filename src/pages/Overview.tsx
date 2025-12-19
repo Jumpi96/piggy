@@ -116,24 +116,36 @@ export function Overview() {
 
     // Calculations for the new overview
     const today = new Date();
-    const isCurrentMonth = currentMonth.getMonth() === today.getMonth() && currentMonth.getFullYear() === today.getFullYear();
-    const dayOfMonth = isCurrentMonth ? today.getDate() : 1;
+    const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+    const todayMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
+    const isPastMonth = currentMonthStart < todayMonthStart;
+    const isCurrentMonth = currentMonthStart.getTime() === todayMonthStart.getTime();
+    const isFutureMonth = currentMonthStart > todayMonthStart;
+
+    const dayOfMonth = isCurrentMonth ? today.getDate() : 1;
     const lastDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
     const remainingDays = lastDayOfMonth - dayOfMonth + 1;
 
-    // DayRemainingDiff = total - amountPerDay * (remainingDays - daysModifier)
-    const daysModifier = isCurrentMonth ? 1 : 0;
-    const differenceWithExpected = totalBalance - (apd * (remainingDays - daysModifier) * 100);
-    const perRemainingDay = totalBalance / remainingDays;
+    // For "Expected vs Today", we subtract the expected spend for the remaining days of the month.
+    // For a past month, there are no remaining days, so it should equal the total balance.
+    // For the current month, we subtract days *after* today.
+    const effectiveRemainingDays = isCurrentMonth
+        ? Math.max(0, lastDayOfMonth - today.getDate())
+        : (isFutureMonth ? lastDayOfMonth : 0);
+
+    const differenceWithExpected = totalBalance - (apd * effectiveRemainingDays * 100);
+    const perRemainingDay = isPastMonth ? 0 : totalBalance / remainingDays;
 
     const projectionDays = [];
-    for (let d = dayOfMonth; d <= lastDayOfMonth; d++) {
-        const left = lastDayOfMonth - d + 1;
-        projectionDays.push({
-            day: d,
-            value: totalBalance / left
-        });
+    if (!isPastMonth) {
+        for (let d = dayOfMonth; d <= lastDayOfMonth; d++) {
+            const left = lastDayOfMonth - d + 1;
+            projectionDays.push({
+                day: d,
+                value: totalBalance / left
+            });
+        }
     }
 
     return (
@@ -382,24 +394,26 @@ export function Overview() {
                     </div>
 
                     {/* Projection Table */}
-                    <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-700 flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-zinc-400" />
-                            <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Daily Projection</h3>
-                        </div>
-                        <div className="p-6">
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                                {projectionDays.map(pd => (
-                                    <div key={pd.day} className="flex flex-col p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 hover:border-emerald-200 transition-colors">
-                                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Day {pd.day}</span>
-                                        <span className="text-sm font-bold font-mono text-zinc-600 dark:text-zinc-300 mt-1">
-                                            {formatUSD(pd.value)}
-                                        </span>
-                                    </div>
-                                ))}
+                    {projectionDays.length > 0 && (
+                        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-700 flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-zinc-400" />
+                                <h3 className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Daily Projection</h3>
+                            </div>
+                            <div className="p-6">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                                    {projectionDays.map(pd => (
+                                        <div key={pd.day} className="flex flex-col p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800 hover:border-emerald-200 transition-colors">
+                                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-tighter">Day {pd.day}</span>
+                                            <span className="text-sm font-bold font-mono text-zinc-600 dark:text-zinc-300 mt-1">
+                                                {formatUSD(pd.value)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
                     {/* Empty State */}
                     {transactions.length === 0 && (
