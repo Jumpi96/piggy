@@ -71,7 +71,7 @@ resource "aws_lambda_function" "backup" {
   role             = aws_iam_role.lambda_exec.arn
   handler          = "lambda_function.handler"
   runtime          = "python3.11"
-  source_code_hash = filebase64sha256("${path.module}/lambdas/backup/package.zip")
+  source_code_hash = null_resource.build_backup_lambda.id
   timeout          = 300
   memory_size      = 512
 
@@ -137,7 +137,7 @@ resource "aws_lambda_function" "recurring_generator" {
   role             = aws_iam_role.recurring_lambda_exec.arn
   handler          = "lambda_function.handler"
   runtime          = "python3.11"
-  source_code_hash = filebase64sha256("${path.module}/lambdas/recurring_generator/package.zip")
+  source_code_hash = null_resource.build_recurring_lambda.id
   timeout          = 300
   memory_size      = 256
 
