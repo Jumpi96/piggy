@@ -82,16 +82,28 @@ describe('api', () => {
         expect(rateId).toBe('rate-123');
     });
 
-    it('fetchDistinctTags dedups and sorts tags', async () => {
+    it('fetchDistinctTags tries RPC first', async () => {
+        const mockData = [{ tag: 'groceries' }, { tag: 'rent' }];
+        (supabase.rpc as any).mockResolvedValue({ data: mockData, error: null });
+
+        const tags = await api.fetchDistinctTags();
+        expect(tags).toEqual(['groceries', 'rent']);
+        expect(supabase.rpc).toHaveBeenCalledWith('fetch_distinct_tags');
+    });
+
+    it('fetchDistinctTags falls back and dedups tags', async () => {
+        (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error('RPC Missing') });
         const mockData = [{ tag: 'food' }, { tag: 'food' }, { tag: 'rent' }];
         (supabase.from as any).mockReturnValue({
             select: vi.fn().mockReturnThis(),
+            is: vi.fn().mockReturnThis(),
             order: vi.fn().mockReturnThis(),
             limit: vi.fn().mockResolvedValue({ data: mockData, error: null }),
         });
 
         const tags = await api.fetchDistinctTags();
         expect(tags).toEqual(['food', 'rent']);
+        expect(supabase.from).toHaveBeenCalledWith('transactions');
     });
 
     it('updateTransaction calls supabase correctly', async () => {
@@ -270,8 +282,10 @@ describe('api', () => {
 
     it('fetchDistinctTags handles error', async () => {
         const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error('Api Error') });
         (supabase.from as any).mockReturnValue({
             select: vi.fn().mockReturnThis(),
+            is: vi.fn().mockReturnThis(),
             order: vi.fn().mockReturnThis(),
             limit: vi.fn().mockResolvedValue({ data: null, error: new Error('Api Error') }),
         });
