@@ -92,7 +92,7 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
         .select('*, exchange_rate:exchange_rates(rate), credit_card:credit_cards(name)')
         .is('deleted_at', null)
         .gte('date', startDate)
-        .lte('date', endDate)
+        .lt('date', endDate) // Use lt instead of lte for month-end exclusion
         .order('date', { ascending: true });
 
     if (error) throw error;

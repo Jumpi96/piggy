@@ -8,6 +8,7 @@ import { AddTransaction } from './pages/AddTransaction';
 import { SettingsPage } from './pages/SettingsPage';
 import { Balance } from './pages/Balance';
 import { CreditReport } from './pages/CreditReport';
+import { AnnualReport } from './pages/AnnualReport';
 import { Login } from './pages/Login';
 import { supabase } from './lib/supabase';
 import type { Session } from '@supabase/supabase-js';
@@ -66,6 +67,7 @@ export default function App() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="balance" element={<Balance />} />
           <Route path="credit" element={<CreditReport />} />
+          <Route path="annual" element={<AnnualReport />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export function Layout() {
@@ -13,6 +13,7 @@ export function Layout() {
         { href: '/recurring', icon: Repeat, label: 'Recurring' },
         { href: '/balance', icon: BarChart3, label: 'Balance' },
         { href: '/credit', icon: CreditCard, label: 'Credit' },
+        { href: '/annual', icon: FileText, label: 'Annual' },
         { href: '/settings', icon: Settings, label: 'Settings' },
     ];
 
