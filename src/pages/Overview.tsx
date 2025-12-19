@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates } from '../lib/api';
 import type { Transaction, ExchangeRate } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar, PieChart as PieChartIcon, Filter } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { CategoryPieChart } from '../components/charts/CategoryPieChart';
+import { TagBarChart } from '../components/charts/TagBarChart';
+import { aggregateByCategory, aggregateByTag } from '../lib/chartUtils';
 
 export function Overview() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -20,6 +23,11 @@ export function Overview() {
     const [totalExpense, setTotalExpense] = useState(0);
     const [toBeBalancedTotal, setToBeBalancedTotal] = useState(0);
     const [availableCash, setAvailableCash] = useState(0);
+
+    // Visualization filters
+    const [visualizationMode, setVisualizationMode] = useState<'income' | 'expense'>('expense');
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [showTopTagsOnly, setShowTopTagsOnly] = useState(true);
 
     const getMonthStr = (d: Date) => {
         const year = d.getFullYear();
@@ -91,6 +99,20 @@ export function Overview() {
     const formatUSD = (cents: number, isCents = true) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((isCents ? cents / 100 : cents));
     };
+
+    // Data aggregation for charts
+    const categoryData = useMemo(() => {
+        return aggregateByCategory(transactions, visualizationMode);
+    }, [transactions, visualizationMode]);
+
+    const tagData = useMemo(() => {
+        return aggregateByTag(
+            transactions,
+            visualizationMode,
+            selectedCategory,
+            showTopTagsOnly ? 10 : undefined
+        );
+    }, [transactions, visualizationMode, selectedCategory, showTopTagsOnly]);
 
     // Calculations for the new overview
     const today = new Date();
@@ -245,6 +267,118 @@ export function Overview() {
                                 {formatUSD(totalExpense)}
                             </p>
                         </div>
+                    </div>
+
+                    {/* Spending Insights Section */}
+                    <div className="space-y-4">
+                        {/* Header with Filter Controls */}
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                                <PieChartIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-500" />
+                                <h2 className="text-lg font-bold">Spending Insights</h2>
+                                <span className="text-xs text-zinc-400 font-mono">All amounts in USD</span>
+                            </div>
+
+                            {/* Filter Controls */}
+                            <div className="flex items-center gap-3">
+                                {/* Direction Toggle */}
+                                <div className="inline-flex rounded-lg bg-zinc-100 dark:bg-zinc-800 p-1 gap-1">
+                                    <button
+                                        className={cn(
+                                            "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                                            visualizationMode === 'expense'
+                                                ? "bg-red-500 text-white shadow-sm"
+                                                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                        )}
+                                        onClick={() => setVisualizationMode('expense')}
+                                    >
+                                        Expenses
+                                    </button>
+                                    <button
+                                        className={cn(
+                                            "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                                            visualizationMode === 'income'
+                                                ? "bg-sky-500 text-white shadow-sm"
+                                                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200"
+                                        )}
+                                        onClick={() => setVisualizationMode('income')}
+                                    >
+                                        Income
+                                    </button>
+                                </div>
+
+                                {/* Top Tags Toggle */}
+                                <button
+                                    className={cn(
+                                        "p-2 rounded-lg transition-colors",
+                                        showTopTagsOnly
+                                            ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
+                                            : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300"
+                                    )}
+                                    onClick={() => setShowTopTagsOnly(!showTopTagsOnly)}
+                                    title={showTopTagsOnly ? "Show all tags" : "Show top 10 tags"}
+                                >
+                                    <Filter className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Charts Grid */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Category Chart Card */}
+                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                        By Category
+                                    </h3>
+                                    {selectedCategory && (
+                                        <button
+                                            onClick={() => setSelectedCategory(null)}
+                                            className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 font-medium transition-colors"
+                                        >
+                                            Clear filter
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="h-[300px]">
+                                    <CategoryPieChart
+                                        data={categoryData}
+                                        onSliceClick={setSelectedCategory}
+                                        selectedCategory={selectedCategory}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Tag Chart Card */}
+                            <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                        By Tag
+                                        {selectedCategory && (
+                                            <span className="ml-2 text-xs font-normal text-zinc-400">
+                                                (filtered by {selectedCategory})
+                                            </span>
+                                        )}
+                                    </h3>
+                                    <span className="text-xs text-zinc-400">
+                                        {showTopTagsOnly ? 'Top 10' : 'All tags'}
+                                    </span>
+                                </div>
+                                <div className="h-[300px]">
+                                    <TagBarChart
+                                        data={tagData}
+                                        direction={visualizationMode}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Empty State */}
+                        {categoryData.length === 0 && tagData.length === 0 && (
+                            <div className="text-center p-8 text-zinc-500 bg-zinc-50 dark:bg-zinc-900/50 rounded-2xl border-2 border-dashed border-zinc-200 dark:border-zinc-800">
+                                No transactions to visualize for this period.
+                            </div>
+                        )}
                     </div>
 
                     {/* Projection Table */}
