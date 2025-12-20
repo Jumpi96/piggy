@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import {
   aggregateExpensesByMonth,
   aggregateIncomeByCategory,
+  aggregateExpensesByCategory,
   calculateMonthlySummary,
 } from '../lib/annualReportUtils';
 import { MonthlyTrendsLineChart } from '../components/charts/MonthlyTrendsLineChart';
@@ -58,6 +59,7 @@ export function AnnualReport() {
 
   // Computed data
   const expensesByMonth = useMemo(() => aggregateExpensesByMonth(transactions, selectedYear), [transactions, selectedYear]);
+  const expensesByCategory = useMemo(() => aggregateExpensesByCategory(transactions), [transactions]);
   const incomeByCategory = useMemo(() => aggregateIncomeByCategory(transactions), [transactions]);
   const monthlySummary = useMemo(() => calculateMonthlySummary(transactions, selectedYear), [transactions, selectedYear]);
 
@@ -95,6 +97,13 @@ export function AnnualReport() {
     value: item.amount,
     count: transactions.filter(t => t.direction === 'income' && t.category === item.category).length,
     color: ['#0ea5e9', '#38bdf8', '#7dd3fc', '#0284c7'][index % 4], // sky colors
+  }));
+
+  const expenseChartData = expensesByCategory.map((item, index) => ({
+    name: item.category,
+    value: item.amount,
+    count: transactions.filter(t => t.direction === 'expense' && t.category === item.category).length,
+    color: ['#ef4444', '#f97316', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'][index % 6], // reds/warm colors
   }));
 
   return (
@@ -191,7 +200,7 @@ export function AnnualReport() {
               <h2 className="text-lg font-bold">Expenses Breakdown</h2>
               <p className="text-xs text-zinc-500 mt-1">Monthly expenses by category</p>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-8">
               {/* Expenses Table */}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -228,15 +237,27 @@ export function AnnualReport() {
                 </table>
               </div>
 
-              {/* Trends Chart */}
-              {expensesByMonth.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Monthly Trends</h3>
-                  <div className="h-[400px]">
-                    <MonthlyTrendsLineChart data={expensesByMonth} />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Trends Chart */}
+                {expensesByMonth.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Monthly Trends</h3>
+                    <div className="h-[400px]">
+                      <MonthlyTrendsLineChart data={expensesByMonth} />
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* Expenses Pie Chart */}
+                {expensesByCategory.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-3">Category Distribution</h3>
+                    <div className="h-[400px]">
+                      <CategoryPieChart data={expenseChartData} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

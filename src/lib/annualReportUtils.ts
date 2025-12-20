@@ -129,6 +129,45 @@ export function aggregateIncomeByCategory(
 }
 
 /**
+ * Aggregate expenses by category for the whole year
+ */
+export function aggregateExpensesByCategory(
+  transactions: Transaction[]
+): IncomeCategoryData[] {
+  const expenseCategories = getExpenseCategories();
+  const categoryMap = new Map<string, number>();
+
+  // Initialize all categories with 0
+  expenseCategories.forEach(cat => {
+    categoryMap.set(cat, 0);
+  });
+
+  // Filter to only expenses
+  const expenseTransactions = transactions.filter(t => t.direction === 'expense');
+
+  // Sum by category
+  expenseTransactions.forEach(t => {
+    const current = categoryMap.get(t.category) || 0;
+    categoryMap.set(t.category, current + convertToUSD(t));
+  });
+
+  // Calculate total expense for percentages
+  const totalExpense = Array.from(categoryMap.values()).reduce((sum, val) => sum + val, 0);
+
+  // Convert to array with percentages
+  const result = Array.from(categoryMap.entries())
+    .map(([category, amount]) => ({
+      category,
+      amount,
+      percentage: totalExpense > 0 ? (amount / totalExpense) * 100 : 0,
+    }))
+    .filter(item => item.amount > 0) // Only include categories with spending
+    .sort((a, b) => b.amount - a.amount); // Sort by amount descending
+
+  return result;
+}
+
+/**
  * Calculate monthly summary (income, expense, balance per month)
  */
 export function calculateMonthlySummary(
