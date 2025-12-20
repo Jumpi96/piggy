@@ -204,7 +204,7 @@ export function TransactionsList() {
                                             <Calendar className="w-4 h-4" />
                                         </div>
                                         <span className="font-bold text-sm text-gray-700 dark:text-zinc-300">
-                                            Planned for {new Date(futureTransactions[0].date + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} - {new Date(futureTransactions[futureTransactions.length - 1].date + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            Planned for {new Date(futureTransactions[futureTransactions.length - 1].date + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} - {new Date(futureTransactions[0].date + 'T12:00:00').toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-4">
