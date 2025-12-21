@@ -91,6 +91,10 @@ export function TransactionsList() {
             const cat = term.slice(9);
             return transactions.filter(t => t.category.toLowerCase() === cat);
         }
+        if (term.startsWith('balance:')) {
+            const val = term.slice(8);
+            return transactions.filter(t => String(t.to_be_balanced) === val);
+        }
 
         return transactions.filter(t => {
             const paymentMethodStr = t.payment_method === 'card' ? (t.credit_card?.name || 'card') : 'cash';
@@ -176,7 +180,7 @@ export function TransactionsList() {
                     <div className="flex items-center gap-2 px-1">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pro tip:</span>
                         <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            Use <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">tag:NAME</code> or <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">category:NAME</code> for exact filtering.
+                            Use <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">tag:NAME</code>, <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">category:NAME</code> or <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">balance:true|false</code> for exact filtering.
                         </span>
                     </div>
                 </div>
