@@ -67,7 +67,19 @@ declare
   er_id uuid;
   valid_dates date[];
 begin
-  -- First: Cleanup and regenerate for all rules
+  -- Cleanup: Remove future transactions from DELETED rules
+  -- (These are excluded from the main loop, so handle them separately)
+  update transactions
+  set deleted_at = now()
+  where recurring_rule_id in (
+      select id from recurring_rules
+      where user_id = auth.uid()
+        and deleted_at is not null
+  )
+    and transactions.deleted_at is null
+    and transactions.date >= current_date;
+
+  -- Main loop: Cleanup and regenerate for all ACTIVE rules
   for r in (
     select * from recurring_rules
     where user_id = auth.uid()
