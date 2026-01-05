@@ -171,29 +171,49 @@ export function subscribeSyncState(listener: (state: SyncState) => void): () => 
     };
 }
 
-// Periodic sync setup
-let syncInterval: ReturnType<typeof setInterval> | null = null;
-const SYNC_INTERVAL_MS = 30000; // 30 seconds
+// Sync setup - triggers on visibility change and online events
+let syncCleanup: (() => void) | null = null;
+
+function handleVisibilityChange(): void {
+    if (document.visibilityState === 'visible' && navigator.onLine && !isSyncing) {
+        console.log('[Sync] App became visible, syncing...');
+        runSync().catch(err => {
+            console.error('[Sync] Visibility sync failed:', err);
+        });
+    }
+}
+
+function handleOnline(): void {
+    if (!isSyncing) {
+        console.log('[Sync] Network restored, syncing...');
+        runSync().catch(err => {
+            console.error('[Sync] Online sync failed:', err);
+        });
+    }
+}
 
 export function startPeriodicSync(): void {
-    if (syncInterval) return;
+    if (syncCleanup) return;
 
-    syncInterval = setInterval(() => {
-        if (navigator.onLine && !isSyncing) {
-            runSync().catch(err => {
-                console.error('[Sync] Periodic sync failed:', err);
-            });
-        }
-    }, SYNC_INTERVAL_MS);
+    // Sync when app becomes visible (tab focus, PWA resume)
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    console.log(`[Sync] Started periodic sync (every ${SYNC_INTERVAL_MS / 1000}s)`);
+    // Sync when network is restored
+    window.addEventListener('online', handleOnline);
+
+    console.log('[Sync] Started visibility-based sync');
+
+    syncCleanup = () => {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('online', handleOnline);
+    };
 }
 
 export function stopPeriodicSync(): void {
-    if (syncInterval) {
-        clearInterval(syncInterval);
-        syncInterval = null;
-        console.log('[Sync] Stopped periodic sync');
+    if (syncCleanup) {
+        syncCleanup();
+        syncCleanup = null;
+        console.log('[Sync] Stopped visibility-based sync');
     }
 }
 

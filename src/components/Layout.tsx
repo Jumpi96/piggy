@@ -75,7 +75,7 @@ function SyncStatusIndicator({ compact = false }: { compact?: boolean }) {
             title={syncError || (isOnline ? `Last sync: ${formatLastSync(lastSyncAt)}` : 'Offline mode')}
         >
             {getIcon()}
-            <span className="hidden lg:inline">{getLabel()}</span>
+            <span>{getLabel()}</span>
             {pendingChanges > 0 && !compact && (
                 <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
                     {pendingChanges}
@@ -103,10 +103,10 @@ export function Layout() {
 
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-zinc-900 text-gray-900 dark:text-gray-100 flex flex-col md:flex-row">
-            {/* Sidebar (Desktop) */}
-            <aside className="hidden md:flex flex-col w-64 border-r border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
+            {/* Sidebar (Desktop) - sticky to viewport */}
+            <aside className="hidden md:flex flex-col w-64 h-screen sticky top-0 border-r border-gray-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4">
                 <h1 className="text-2xl font-bold mb-8 px-4 text-emerald-600 dark:text-emerald-400">🐷 piggy</h1>
-                <nav className="flex-1 space-y-2">
+                <nav className="flex-1 space-y-2 overflow-y-auto">
                     {navItems.map((item) => (
                         <Link
                             key={item.href}
@@ -123,7 +123,7 @@ export function Layout() {
                         </Link>
                     ))}
                 </nav>
-                <div className="border-t border-gray-200 dark:border-zinc-800 pt-4">
+                <div className="border-t border-gray-200 dark:border-zinc-800 pt-4 shrink-0">
                     <SyncStatusIndicator />
                 </div>
             </aside>

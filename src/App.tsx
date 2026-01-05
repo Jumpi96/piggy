@@ -19,6 +19,7 @@ import { Loader2 } from 'lucide-react';
 import {
   initDatabase,
   setCurrentUserId,
+  getCurrentUserId,
   getLastSyncTimestamp,
   runSync,
   startPeriodicSync,
@@ -40,8 +41,14 @@ function RequireAuth({ children }: { children: ReactNode }) {
       .then(async () => {
         console.log('[App] Database ready');
         // Check if we have local data from a previous sync
-        const lastSync = await getLastSyncTimestamp();
-        setHasLocalData(!!lastSync);
+        // Need both last_sync_at AND user_id for offline access to work
+        const [lastSync, userId] = await Promise.all([
+          getLastSyncTimestamp(),
+          getCurrentUserId()
+        ]);
+        const hasData = !!(lastSync && userId);
+        console.log('[App] Local data check:', { lastSync: !!lastSync, userId: !!userId, hasData });
+        setHasLocalData(hasData);
         setDbReady(true);
       })
       .catch(err => {

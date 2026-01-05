@@ -146,11 +146,28 @@ export async function setLastSyncTimestamp(timestamp: string): Promise<void> {
     return setSyncMeta('last_sync_at', timestamp);
 }
 
+const USER_ID_STORAGE_KEY = 'piggy_user_id';
+
 export async function getCurrentUserId(): Promise<string | null> {
-    return getSyncMeta('user_id');
+    // Try DB first, then localStorage backup
+    const dbUserId = await getSyncMeta('user_id');
+    if (dbUserId) return dbUserId;
+
+    // Fallback to localStorage (useful for PWA offline mode)
+    const storedUserId = localStorage.getItem(USER_ID_STORAGE_KEY);
+    if (storedUserId) {
+        console.log('[Offline DB] Using localStorage user_id backup');
+        // Re-sync to DB for next time
+        setSyncMeta('user_id', storedUserId).catch(() => {});
+        return storedUserId;
+    }
+
+    return null;
 }
 
 export async function setCurrentUserId(userId: string): Promise<void> {
+    // Store in both DB and localStorage for redundancy
+    localStorage.setItem(USER_ID_STORAGE_KEY, userId);
     return setSyncMeta('user_id', userId);
 }
 
