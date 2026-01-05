@@ -1,6 +1,43 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useOfflineStatus, formatLastSync } from '../lib/offline/network';
+
+function SyncStatusIndicator() {
+    const { isOnline, isSyncing, lastSyncAt, pendingChanges, syncError, manualSync } = useOfflineStatus();
+
+    return (
+        <button
+            onClick={manualSync}
+            disabled={!isOnline || isSyncing}
+            className={cn(
+                "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
+                "hover:bg-gray-100 dark:hover:bg-zinc-800",
+                !isOnline && "text-amber-600 dark:text-amber-400",
+                syncError && "text-red-600 dark:text-red-400"
+            )}
+            title={syncError || (isOnline ? `Last sync: ${formatLastSync(lastSyncAt)}` : 'Offline mode')}
+        >
+            {isSyncing ? (
+                <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : !isOnline ? (
+                <CloudOff className="w-4 h-4" />
+            ) : syncError ? (
+                <AlertCircle className="w-4 h-4" />
+            ) : (
+                <Cloud className="w-4 h-4 text-emerald-500" />
+            )}
+            <span className="hidden lg:inline">
+                {isSyncing ? 'Syncing...' : !isOnline ? 'Offline' : formatLastSync(lastSyncAt)}
+            </span>
+            {pendingChanges > 0 && (
+                <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                    {pendingChanges}
+                </span>
+            )}
+        </button>
+    );
+}
 
 export function Layout() {
     const location = useLocation();
@@ -40,6 +77,9 @@ export function Layout() {
                         </Link>
                     ))}
                 </nav>
+                <div className="border-t border-gray-200 dark:border-zinc-800 pt-4">
+                    <SyncStatusIndicator />
+                </div>
             </aside>
 
             {/* Main Content */}

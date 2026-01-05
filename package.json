@@ -11,6 +11,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.14",
     "@supabase/supabase-js": "^2.88.0",
     "@tailwindcss/vite": "^4.1.18",
     "clsx": "^2.1.1",
@@ -42,6 +43,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
+    "vite-plugin-pwa": "^1.2.0",
     "vitest": "^3.2.4"
   }
 }

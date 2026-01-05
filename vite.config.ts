@@ -2,14 +2,64 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.png'],
+      manifest: {
+        name: 'Piggy - Personal Finance',
+        short_name: 'Piggy',
+        description: 'Personal finance tracker with offline support',
+        theme_color: '#10B981',
+        background_color: '#f9fafb',
+        display: 'standalone',
+        scope: '/piggy/',
+        start_url: '/piggy/',
+        icons: [
+          {
+            src: 'favicon.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: 'favicon.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+        ],
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Don't cache API calls - we handle offline with SQLite
+        navigateFallback: '/piggy/index.html',
+        navigateFallbackDenylist: [/^\/piggy\/rest\//, /supabase/],
+      },
+    }),
   ],
   base: '/piggy/',
+  optimizeDeps: {
+    exclude: ['@electric-sql/pglite'],
+  },
+  build: {
+    target: 'esnext',
+  },
+  // Required for PGlite WASM to work properly
+  assetsInclude: ['**/*.wasm'],
+  worker: {
+    format: 'es',
+  },
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',
