@@ -76,42 +76,52 @@ function RequireAuth({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Set user ID and handle sync
+  // If we have local data, allow app access immediately (true offline-first)
+  useEffect(() => {
+    if (hasLocalData === true && !firstSyncDone) {
+      console.log('[App] Local data found, allowing immediate access');
+      setFirstSyncDone(true);
+    }
+  }, [hasLocalData, firstSyncDone]);
+
+  // Set user ID and handle sync (runs in background, doesn't block app)
   useEffect(() => {
     if (!dbReady || !session?.user?.id) return;
 
     const userId = session.user.id;
 
-    setCurrentUserId(userId).then(async () => {
-      console.log('[App] User ID set:', userId);
+    // Set user ID in background - don't block on this
+    setCurrentUserId(userId)
+      .then(() => console.log('[App] User ID set:', userId))
+      .catch(err => console.error('[App] Failed to set user ID:', err));
 
-      // If we have local data, show app immediately and sync in background
-      if (hasLocalData) {
-        setFirstSyncDone(true);
-        // Background sync - don't wait for it
-        if (navigator.onLine) {
-          runSync().catch(err => console.error('[App] Background sync failed:', err));
-        }
+    // Handle sync based on whether we have local data
+    if (hasLocalData) {
+      // Background sync - don't wait for it
+      if (navigator.onLine) {
+        runSync().catch(err => console.error('[App] Background sync failed:', err));
+      }
+    } else if (hasLocalData === false) {
+      // First time user - need to sync before showing app (only if online)
+      if (navigator.onLine) {
+        runSync()
+          .then(() => console.log('[App] Initial sync complete'))
+          .catch(err => console.error('[App] Initial sync failed:', err))
+          .finally(() => setFirstSyncDone(true));
       } else {
-        // First time - need to sync before showing app (only if online)
-        if (navigator.onLine) {
-          try {
-            await runSync();
-            console.log('[App] Initial sync complete');
-          } catch (err) {
-            console.error('[App] Initial sync failed:', err);
-          }
-        }
+        // Offline and no data - still allow access (empty state)
         setFirstSyncDone(true);
       }
-    });
+    }
 
     startPeriodicSync();
     return () => stopPeriodicSync();
   }, [dbReady, session?.user?.id, hasLocalData]);
 
   // Determine what to show
-  const isLoading = authLoading || !dbReady || hasLocalData === null;
+  // If we have local data, don't wait for auth - show app immediately (offline-first)
+  const canShowApp = hasLocalData && firstSyncDone;
+  const isLoading = !canShowApp && (authLoading || !dbReady || hasLocalData === null);
   const needsFirstSync = !hasLocalData && !firstSyncDone && session?.user?.id;
 
   if (isLoading || needsFirstSync) {
@@ -132,7 +142,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!session) return <Navigate to="/login" replace />;
+  // If we have local data, allow access even without session (offline mode)
+  if (!session && !hasLocalData) return <Navigate to="/login" replace />;
 
   return children;
 }
