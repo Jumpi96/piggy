@@ -140,9 +140,26 @@ export async function setSyncMeta(key: string, value: string): Promise<void> {
 
 const LAST_SYNC_STORAGE_KEY = 'piggy_last_sync';
 
+function safeLocalStorageGet(key: string): string | null {
+    try {
+        return localStorage.getItem(key);
+    } catch (err) {
+        console.warn(`[Offline DB] localStorage get failed for ${key}:`, err);
+        return null;
+    }
+}
+
+function safeLocalStorageSet(key: string, value: string): void {
+    try {
+        localStorage.setItem(key, value);
+    } catch (err) {
+        console.warn(`[Offline DB] localStorage set failed for ${key}:`, err);
+    }
+}
+
 export async function getLastSyncTimestamp(): Promise<string | null> {
     // Try localStorage first (fastest, most reliable for PWA)
-    const storedTimestamp = localStorage.getItem(LAST_SYNC_STORAGE_KEY);
+    const storedTimestamp = safeLocalStorageGet(LAST_SYNC_STORAGE_KEY);
     if (storedTimestamp) {
         return storedTimestamp;
     }
@@ -151,7 +168,7 @@ export async function getLastSyncTimestamp(): Promise<string | null> {
     const dbTimestamp = await getSyncMeta('last_sync_at');
     if (dbTimestamp) {
         // Backup to localStorage
-        localStorage.setItem(LAST_SYNC_STORAGE_KEY, dbTimestamp);
+        safeLocalStorageSet(LAST_SYNC_STORAGE_KEY, dbTimestamp);
         return dbTimestamp;
     }
 
@@ -159,7 +176,7 @@ export async function getLastSyncTimestamp(): Promise<string | null> {
 }
 
 export async function setLastSyncTimestamp(timestamp: string): Promise<void> {
-    localStorage.setItem(LAST_SYNC_STORAGE_KEY, timestamp);
+    safeLocalStorageSet(LAST_SYNC_STORAGE_KEY, timestamp);
     return setSyncMeta('last_sync_at', timestamp);
 }
 
@@ -167,7 +184,7 @@ const USER_ID_STORAGE_KEY = 'piggy_user_id';
 
 export async function getCurrentUserId(): Promise<string | null> {
     // Try localStorage first (fastest, most reliable for PWA)
-    const storedUserId = localStorage.getItem(USER_ID_STORAGE_KEY);
+    const storedUserId = safeLocalStorageGet(USER_ID_STORAGE_KEY);
     if (storedUserId) {
         return storedUserId;
     }
@@ -176,26 +193,30 @@ export async function getCurrentUserId(): Promise<string | null> {
     const dbUserId = await getSyncMeta('user_id');
     if (dbUserId) {
         // Backup to localStorage for next time
-        localStorage.setItem(USER_ID_STORAGE_KEY, dbUserId);
+        safeLocalStorageSet(USER_ID_STORAGE_KEY, dbUserId);
         return dbUserId;
     }
 
-    // Last resort: extract from existing transactions (for users who synced before this update)
+    // Last resort: extract from existing local tables (for users who synced before this update)
     try {
         const database = await getDatabaseAsync();
-        const result = await database.query<{ user_id: string }>(`
-            SELECT DISTINCT user_id FROM transactions LIMIT 1
-        `);
-        if (result.rows.length > 0) {
-            const userId = result.rows[0].user_id;
-            console.log('[Offline DB] Recovered user_id from transactions:', userId);
-            // Save for next time
-            localStorage.setItem(USER_ID_STORAGE_KEY, userId);
-            setSyncMeta('user_id', userId).catch(() => {});
-            return userId;
+        const tables = ['parameters', 'exchange_rates', 'credit_cards', 'recurring_rules', 'transactions'];
+
+        for (const table of tables) {
+            const result = await database.query<{ user_id: string }>(`
+                SELECT DISTINCT user_id FROM ${table} LIMIT 1
+            `);
+            if (result.rows.length > 0) {
+                const userId = result.rows[0].user_id;
+                console.log(`[Offline DB] Recovered user_id from ${table}:`, userId);
+                // Save for next time
+                safeLocalStorageSet(USER_ID_STORAGE_KEY, userId);
+                setSyncMeta('user_id', userId).catch(() => {});
+                return userId;
+            }
         }
     } catch (err) {
-        console.error('[Offline DB] Failed to recover user_id from transactions:', err);
+        console.error('[Offline DB] Failed to recover user_id from local data:', err);
     }
 
     return null;
@@ -203,7 +224,7 @@ export async function getCurrentUserId(): Promise<string | null> {
 
 export async function setCurrentUserId(userId: string): Promise<void> {
     // Store in both DB and localStorage for redundancy
-    localStorage.setItem(USER_ID_STORAGE_KEY, userId);
+    safeLocalStorageSet(USER_ID_STORAGE_KEY, userId);
     return setSyncMeta('user_id', userId);
 }
 
