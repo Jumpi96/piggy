@@ -17,6 +17,7 @@ A modern, mobile-first Progressive Web App (PWA) for personal finance management
 
 ## Features
 
+- **Offline-First Architecture**: Full functionality without internet - data syncs when back online
 - **Multi-Currency Support**: Track transactions in multiple currencies (USD, EUR, ARS, etc.) with monthly exchange rate management
 - **Credit Card Intelligence**: Automatic "Effective Date" calculation based on credit card closing and payment days
 - **Recurring Transactions**: Define rules for recurring income/expenses and automatically generate transactions up to 24 months ahead
@@ -24,51 +25,86 @@ A modern, mobile-first Progressive Web App (PWA) for personal finance management
 - **Monthly Dashboard**: Real-time overview showing net balance, income, and expenses in USD
 - **Smart Tag Autocomplete**: Frequency-based tag suggestions for faster transaction entry
 - **Credit Card Reports**: View monthly credit card statements with proper date calculations
+- **Progressive Web App (PWA)**: Install on any device, works offline like a native app
 - **Mobile-First Design**: Optimized responsive UI for mobile devices
 - **Secure Authentication**: Email/password and magic link authentication via Supabase
 - **Automated Backups**: Weekly database backups to AWS S3 with 30-day retention
-- **Real-time Sync**: Instant data synchronization across devices
+- **Background Sync**: Automatic data synchronization when online with conflict resolution
 
 ## Architecture
 
-Piggy follows a three-tier architecture:
+Piggy follows an **offline-first architecture** where all reads and writes go through a local SQLite database first, with background synchronization to the cloud:
 
 ```
-┌─────────────────────────────────────────┐
-│         Frontend (React SPA)            │
-│  - React 19 + TypeScript                │
-│  - Vite build tool                      │
-│  - Tailwind CSS                         │
-│  - Deployed on GitHub Pages             │
-└──────────────┬──────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                   Frontend (React PWA)                       │
+│  - React 19 + TypeScript + Vite                             │
+│  - Tailwind CSS                                              │
+│  - Service Worker for offline caching                        │
+│  - Deployed on GitHub Pages                                  │
+└──────────────┬──────────────────────────────────────────────┘
                │
                ▼
-┌─────────────────────────────────────────┐
-│      Backend (Supabase)                 │
-│  - PostgreSQL database                  │
-│  - Row Level Security (RLS)             │
-│  - Authentication                       │
-│  - Real-time subscriptions              │
-│  - PL/pgSQL stored procedures           │
-└──────────────┬──────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│              Local Database (PGlite/SQLite)                  │
+│  - PostgreSQL-compatible WASM database                       │
+│  - IndexedDB persistence (survives refresh)                  │
+│  - All reads/writes happen here first                        │
+│  - Pending changes queue for sync                            │
+└──────────────┬──────────────────────────────────────────────┘
+               │ Background Sync (when online)
+               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Backend (Supabase)                        │
+│  - PostgreSQL database (source of truth)                     │
+│  - Row Level Security (RLS)                                  │
+│  - Authentication                                            │
+│  - PL/pgSQL stored procedures                                │
+└──────────────┬──────────────────────────────────────────────┘
                │
                ▼
-┌─────────────────────────────────────────┐
-│   AWS Infrastructure (Terraform)        │
-│  - Lambda: Database backups (weekly)    │
-│  - Lambda: Recurring generator (monthly)│
-│  - S3: Backup storage                   │
-│  - SNS: Failure alerts                  │
-│  - CloudWatch: Event scheduling         │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│              AWS Infrastructure (Terraform)                  │
+│  - Lambda: Database backups (weekly)                         │
+│  - Lambda: Recurring generator (monthly)                     │
+│  - S3: Backup storage                                        │
+│  - SNS: Failure alerts                                       │
+│  - CloudWatch: Event scheduling                              │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+### Offline-First Data Flow
+
+```
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   User       │     │  Local DB    │     │   Supabase   │
+│   Action     │────▶│  (PGlite)    │────▶│   (Cloud)    │
+└──────────────┘     └──────────────┘     └──────────────┘
+                            │                     │
+                            ▼                     │
+                     ┌──────────────┐             │
+                     │   Pending    │◀────────────┘
+                     │   Changes    │   Pull changes
+                     │   Queue      │   (incremental)
+                     └──────────────┘
+```
+
+1. **Write**: User actions write to local SQLite immediately
+2. **Queue**: Changes are queued in `_pending_changes` table
+3. **Push**: Background sync pushes changes to Supabase
+4. **Pull**: Incremental sync pulls server changes (last-write-wins)
 
 ### Key Components
 
 **Frontend (`/src/`)**
 - **Pages**: Overview dashboard, transaction list, balance view, credit reports, recurring rules, settings
-- **Components**: Shared layout, transaction form, navigation
-- **Libraries**: API client, date utilities, recurrence calculator
+- **Components**: Shared layout, transaction form, navigation, sync status indicator
+- **Libraries**: API client (offline-first), date utilities, recurrence calculator
+- **Offline Module** (`/src/lib/offline/`):
+  - `database.ts` - PGlite initialization with IndexedDB persistence
+  - `schema.ts` - Local schema mirroring Supabase
+  - `sync/` - Push/pull synchronization with conflict resolution
+  - `network.ts` - React hooks for online/offline status
 
 **Backend (`/supabase/`)**
 - **Tables**: transactions, credit_cards, currencies, exchange_rates, recurring_rules, parameters
@@ -89,10 +125,16 @@ Piggy follows a three-tier architecture:
 - **React Router** 7.10.1 - Client-side routing
 - **Tailwind CSS** 4.1.18 - Utility-first styling
 - **Lucide React** 0.561.0 - Icon library
+- **Vite PWA** 1.2.0 - Progressive Web App support
+
+### Local Database (Offline-First)
+- **PGlite** 0.3.14 - PostgreSQL compiled to WebAssembly
+- **IndexedDB** - Browser-based persistent storage
+- **Custom Sync Layer** - Push/pull with last-write-wins conflict resolution
 
 ### Backend & Database
 - **Supabase** 2.88.0 - Backend-as-a-Service
-- **PostgreSQL** - Relational database
+- **PostgreSQL** - Relational database (cloud source of truth)
 - **PL/pgSQL** - Server-side business logic
 
 ### Infrastructure & DevOps
@@ -203,7 +245,18 @@ piggy/
 ├── src/
 │   ├── components/        # Reusable UI components
 │   ├── pages/            # Page-level components
-│   ├── lib/              # Utilities and API clients
+│   ├── lib/
+│   │   ├── api.ts        # Offline-first API client
+│   │   ├── offline/      # Offline module
+│   │   │   ├── database.ts   # PGlite initialization
+│   │   │   ├── schema.ts     # Local schema
+│   │   │   ├── network.ts    # Online/offline hooks
+│   │   │   └── sync/         # Sync layer
+│   │   │       ├── pull.ts   # Pull from server
+│   │   │       ├── push.ts   # Push to server
+│   │   │       ├── queue.ts  # Pending changes queue
+│   │   │       └── conflict.ts # Conflict resolution
+│   │   └── ...           # Other utilities
 │   └── types/            # TypeScript type definitions
 ├── supabase/
 │   ├── schema.sql        # Database schema and RLS policies
@@ -287,7 +340,7 @@ npm run build
 
 ## Database Schema
 
-### Core Tables
+### Core Tables (Supabase + Local)
 
 - **transactions**: Main ledger for all financial transactions
   - Supports multiple currencies
@@ -310,6 +363,18 @@ npm run build
   - Auto-generates transactions via Lambda
 
 - **parameters**: User-specific settings and preferences
+
+### Local-Only Tables (Sync Metadata)
+
+- **_sync_meta**: Key-value store for sync state
+  - `last_sync_at` - Timestamp of last successful sync
+  - `user_id` - Current authenticated user
+  - `schema_version` - For local schema migrations
+
+- **_pending_changes**: Queue of unsynced local changes
+  - `table_name`, `record_id`, `operation` (INSERT/UPDATE/DELETE)
+  - `payload` - JSON of the change
+  - `synced_at` - Null until successfully pushed
 
 ### Key Database Functions (RPCs)
 

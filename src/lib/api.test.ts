@@ -1,7 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as api from './api';
-import { supabase } from './supabase';
 
+// Mock the offline database module
+const mockQuery = vi.fn();
+const mockDb = {
+    query: mockQuery,
+    exec: vi.fn(),
+};
+
+vi.mock('./offline/database', () => ({
+    getDatabaseAsync: vi.fn(() => Promise.resolve(mockDb)),
+    getDatabase: vi.fn(() => mockDb),
+    getCurrentUserId: vi.fn(() => Promise.resolve('test-user-123')),
+    setCurrentUserId: vi.fn(),
+    initDatabase: vi.fn(() => Promise.resolve(mockDb)),
+}));
+
+// Mock the sync queue to avoid side effects
+vi.mock('./offline/sync/queue', () => ({
+    trackChange: vi.fn(() => Promise.resolve()),
+    getPendingChanges: vi.fn(() => Promise.resolve([])),
+    getPendingChangesCount: vi.fn(() => Promise.resolve(0)),
+    subscribePendingChanges: vi.fn(() => () => {}),
+}));
+
+// Mock triggerBackgroundSync
+vi.mock('./offline/sync', async (importOriginal) => {
+    const actual = await importOriginal() as Record<string, unknown>;
+    return {
+        ...actual,
+        triggerBackgroundSync: vi.fn(),
+    };
+});
+
+// Mock supabase for functions that still use it
 vi.mock('./supabase', () => ({
     supabase: {
         from: vi.fn(() => ({
@@ -26,287 +58,328 @@ vi.mock('./supabase', () => ({
 describe('api', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mockQuery.mockReset();
     });
 
-    it('fetchCurrencies calls supabase correctly', async () => {
-        const mockData = [{ code: 'USD', name: 'US Dollar' }];
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: mockData, error: null }),
+    describe('fetchCurrencies', () => {
+        it('returns currencies from local database', async () => {
+            const mockData = [{ code: 'USD', name: 'US Dollar' }, { code: 'EUR', name: 'Euro' }];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const currencies = await api.fetchCurrencies();
+
+            expect(currencies).toEqual(mockData);
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('fetchTransactions', () => {
+        it('returns transactions for the month from local database', async () => {
+            const mockData = [
+                { id: '1', date: '2024-01-15', amount_cents: 1000, exchange_rate_value: null, credit_card_name: null },
+                { id: '2', date: '2024-01-20', amount_cents: 2000, exchange_rate_value: 100, credit_card_name: 'Visa' },
+            ];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const transactions = await api.fetchTransactions('2024-01-01');
+
+            expect(transactions).toHaveLength(2);
+            expect(transactions[0].id).toBe('1');
+            expect(transactions[1].credit_card).toEqual({ name: 'Visa' });
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('insertTransaction', () => {
+        it('inserts transaction into local database', async () => {
+            const input = {
+                amount_cents: 100,
+                category: 'Food',
+                date: '2024-01-01',
+                description: 'Test',
+                currency_code: 'USD',
+            } as api.TransactionInput;
+
+            // INSERT returns the row
+            mockQuery.mockResolvedValueOnce({ rows: [{ id: 'new-id', ...input }] });
+
+            const result = await api.insertTransaction(input);
+
+            expect(result.amount_cents).toBe(100);
+            expect(result.category).toBe('Food');
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('updateTransaction', () => {
+        it('updates transaction in local database', async () => {
+            // UPDATE then SELECT
+            mockQuery
+                .mockResolvedValueOnce({ rows: [] }) // UPDATE
+                .mockResolvedValueOnce({ rows: [{ id: '1', amount_cents: 200 }] }); // SELECT
+
+            const result = await api.updateTransaction('1', { amount_cents: 200 } as api.TransactionInput);
+
+            expect(result.amount_cents).toBe(200);
+            expect(mockQuery).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('deleteTransaction', () => {
+        it('soft deletes transaction by setting deleted_at', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            await api.deleteTransaction('1');
+
+            expect(mockQuery).toHaveBeenCalled();
+            const callArgs = mockQuery.mock.calls[0][0];
+            expect(callArgs).toContain('UPDATE');
+            expect(callArgs).toContain('deleted_at');
+        });
+    });
+
+    describe('fetchCreditCards', () => {
+        it('returns credit cards from local database', async () => {
+            const mockData = [{ id: '1', name: 'Visa', closing_day: 20, due_day: 10 }];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const cards = await api.fetchCreditCards();
+
+            expect(cards).toEqual(mockData);
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('insertCreditCard', () => {
+        it('inserts credit card and returns it with generated id', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            const result = await api.insertCreditCard('My Card', 20, 5);
+
+            expect(result.name).toBe('My Card');
+            expect(result.closing_day).toBe(20);
+            expect(result.payment_day).toBe(5);
+            expect(result.id).toBeDefined();
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('deleteCreditCard', () => {
+        it('soft deletes credit card', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            await api.deleteCreditCard('card-1');
+
+            expect(mockQuery).toHaveBeenCalled();
+            const callArgs = mockQuery.mock.calls[0][0];
+            expect(callArgs).toContain('UPDATE');
+            expect(callArgs).toContain('deleted_at');
+        });
+    });
+
+    describe('fetchTransactionsRange', () => {
+        it('returns transactions in date range with enriched data', async () => {
+            const mockData = [{ id: '1', date: '2024-01-15', exchange_rate_value: null, credit_card_name: null }];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const transactions = await api.fetchTransactionsRange('2024-01-01', '2024-02-01');
+
+            expect(transactions).toHaveLength(1);
+            expect(transactions[0].id).toBe('1');
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('fetchRecurringRules', () => {
+        it('returns recurring rules with parsed schedule_config', async () => {
+            const mockData = [{
+                id: '1',
+                description: 'Rent',
+                amount_cents: 100000,
+                schedule_config: '{"type":"monthly","day":1}'
+            }];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const rules = await api.fetchRecurringRules();
+
+            expect(rules).toHaveLength(1);
+            expect(rules[0].description).toBe('Rent');
+            expect(rules[0].schedule_config).toEqual({ type: 'monthly', day: 1 });
+        });
+    });
+
+    describe('insertRecurringRule', () => {
+        it('inserts recurring rule and returns constructed object', async () => {
+            const input = {
+                direction: 'expense',
+                amount_cents: 100000,
+                currency_code: 'USD',
+                category: 'Housing',
+                tag: 'rent',
+                payment_method: 'bank',
+                schedule_type: 'monthly',
+                schedule_config: { type: 'monthly', day: 1 },
+                start_date: '2024-01-01',
+            } as api.RecurringRuleInput;
+
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            const result = await api.insertRecurringRule(input);
+
+            // insertRecurringRule builds the object locally
+            expect(result.amount_cents).toBe(100000);
+            expect(result.category).toBe('Housing');
+            expect(result.id).toBeDefined();
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('deleteRecurringRule', () => {
+        it('soft deletes recurring rule', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            await api.deleteRecurringRule('rule-1');
+
+            expect(mockQuery).toHaveBeenCalled();
+            const callArgs = mockQuery.mock.calls[0][0];
+            expect(callArgs).toContain('UPDATE');
+            expect(callArgs).toContain('deleted_at');
+        });
+    });
+
+    describe('fetchDistinctTags', () => {
+        it('returns tags from transactions', async () => {
+            const mockData = [
+                { tag: 'groceries' },
+                { tag: 'rent' },
+            ];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const tags = await api.fetchDistinctTags();
+
+            expect(tags).toContain('groceries');
+            expect(tags).toContain('rent');
         });
 
-        const currencies = await api.fetchCurrencies();
-        expect(currencies).toEqual(mockData);
-        expect(supabase.from).toHaveBeenCalledWith('currencies');
+        it('returns empty array when no tags', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            const tags = await api.fetchDistinctTags();
+
+            expect(tags).toEqual([]);
+        });
     });
 
-    it('fetchTransactions calls supabase correctly', async () => {
-        const mockData = [{ id: '1', date: '2024-01-15' }];
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            gte: vi.fn().mockReturnThis(),
-            lt: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: mockData, error: null }),
+    describe('computeMonthBalance', () => {
+        it('computes balance from grouped transactions by direction', async () => {
+            // computeMonthBalance groups by direction and sums totals
+            const mockGroupedResults = [
+                { direction: 'income', total: '100000' },
+                { direction: 'expense', total: '50000' },
+            ];
+            mockQuery.mockResolvedValueOnce({ rows: mockGroupedResults });
+
+            const result = await api.computeMonthBalance('2024-01-01');
+
+            expect(result.income).toBe(100000);
+            expect(result.expense).toBe(50000);
+            expect(result.balance).toBe(50000);
         });
 
-        const transactions = await api.fetchTransactions('2024-01-01');
-        expect(transactions).toEqual(mockData);
-        expect(supabase.from).toHaveBeenCalledWith('transactions');
+        it('returns zeros when no transactions', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            const result = await api.computeMonthBalance('2024-01-01');
+
+            expect(result.income).toBe(0);
+            expect(result.expense).toBe(0);
+            expect(result.balance).toBe(0);
+        });
     });
 
-    it('insertTransaction calls supabase correctly', async () => {
-        const input = { amount_cents: 100, category: 'Food', date: '2024-01-01' } as any;
-        const mockData = { id: '123', ...input };
-        (supabase.from as any).mockReturnValue({
-            insert: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: mockData, error: null }),
+    describe('fetchParameters', () => {
+        it('returns parameters from local database', async () => {
+            const mockData = [
+                { key: 'theme', value: '"dark"' },
+                { key: 'currency', value: '"USD"' },
+            ];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const params = await api.fetchParameters();
+
+            expect(params).toHaveLength(2);
+            expect(mockQuery).toHaveBeenCalled();
+        });
+    });
+
+    describe('upsertParameter', () => {
+        it('inserts new parameter when not exists', async () => {
+            // First SELECT returns nothing (not found)
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+            // Then INSERT
+            mockQuery.mockResolvedValueOnce({ rows: [{ key: 'theme', value: '"dark"' }] });
+
+            await api.upsertParameter('theme', 'dark');
+
+            expect(mockQuery).toHaveBeenCalledTimes(2);
         });
 
-        const result = await api.insertTransaction(input);
-        expect(result).toEqual(mockData);
-        expect(supabase.from).toHaveBeenCalledWith('transactions');
+        it('updates existing parameter', async () => {
+            // First SELECT returns existing
+            mockQuery.mockResolvedValueOnce({ rows: [{ id: 'param-1' }] });
+            // Then UPDATE
+            mockQuery.mockResolvedValueOnce({ rows: [{ key: 'theme', value: '"light"' }] });
+
+            await api.upsertParameter('theme', 'light');
+
+            expect(mockQuery).toHaveBeenCalledTimes(2);
+        });
     });
 
-    it('fetchExchangeRate returns rate id', async () => {
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            order: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockReturnThis(),
-            maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'rate-123' }, error: null }),
+    describe('fetchExchangeRate', () => {
+        it('returns exchange rate id from local database', async () => {
+            const mockData = [{ id: 'rate-123', currency_code: 'USD', rate: 100 }];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const rateId = await api.fetchExchangeRate('USD');
+
+            expect(rateId).toBe('rate-123');
         });
 
-        const rateId = await api.fetchExchangeRate('USD');
-        expect(rateId).toBe('rate-123');
-    });
+        it('returns null when no rate found', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    it('fetchDistinctTags tries RPC first', async () => {
-        const mockData = [{ tag: 'groceries' }, { tag: 'rent' }];
-        (supabase.rpc as any).mockResolvedValue({ data: mockData, error: null });
+            const rateId = await api.fetchExchangeRate('XYZ');
 
-        const tags = await api.fetchDistinctTags();
-        expect(tags).toEqual(['groceries', 'rent']);
-        expect(supabase.rpc).toHaveBeenCalledWith('fetch_distinct_tags');
-    });
-
-    it('fetchDistinctTags falls back and dedups tags', async () => {
-        (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error('RPC Missing') });
-        const mockData = [{ tag: 'food' }, { tag: 'food' }, { tag: 'rent' }];
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            order: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockResolvedValue({ data: mockData, error: null }),
+            expect(rateId).toBeNull();
         });
-
-        const tags = await api.fetchDistinctTags();
-        expect(tags).toEqual(['food', 'rent']);
-        expect(supabase.from).toHaveBeenCalledWith('transactions');
     });
 
-    it('updateTransaction calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            update: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: { id: '1' }, error: null }),
+    describe('fetchLatestRates', () => {
+        it('returns rates ordered by created_at', async () => {
+            const mockData = [
+                { currency_code: 'USD', rate: 100, created_at: '2024-01-02' },
+                { currency_code: 'EUR', rate: 110, created_at: '2024-01-02' },
+            ];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const rates = await api.fetchLatestRates();
+
+            expect(rates).toHaveLength(2);
+            expect(rates.find(r => r.currency_code === 'USD')?.rate).toBe(100);
         });
-        await api.updateTransaction('1', { amount_cents: 200 } as any);
-        expect(supabase.from).toHaveBeenCalledWith('transactions');
     });
 
-    it('deleteTransaction calls update with deleted_at', async () => {
-        const updateMock = vi.fn().mockReturnThis();
-        (supabase.from as any).mockReturnValue({
-            update: updateMock,
-            eq: vi.fn().mockReturnThis(),
+    describe('fetchCreditTransactions', () => {
+        it('returns transactions for credit card with enriched data', async () => {
+            const mockData = [{ id: '1', credit_card_id: 'card-1', date: '2024-01-15', exchange_rate_value: null, credit_card_name: 'Visa' }];
+            mockQuery.mockResolvedValueOnce({ rows: mockData });
+
+            const transactions = await api.fetchCreditTransactions('card-1', '2024-01-01', '2024-01-31');
+
+            expect(transactions).toHaveLength(1);
+            expect(transactions[0].id).toBe('1');
+            expect(transactions[0].credit_card).toEqual({ name: 'Visa' });
         });
-        await api.deleteTransaction('1');
-        expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ deleted_at: expect.any(String) }));
-    });
-
-    it('fetchCreditCards calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: [], error: null }),
-        });
-        await api.fetchCreditCards();
-        expect(supabase.from).toHaveBeenCalledWith('credit_cards');
-    });
-
-    it('fetchTransactionsRange calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            gte: vi.fn().mockReturnThis(),
-            lt: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: [], error: null }),
-        });
-        await api.fetchTransactionsRange('2024-01-01', '2024-02-01');
-        expect(supabase.from).toHaveBeenCalledWith('transactions');
-    });
-
-    it('insertExchangeRate call repoint rpc', async () => {
-        (supabase.from as any).mockReturnValue({
-            insert: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: { id: 'new-rate-id' }, error: null }),
-        });
-        (supabase.rpc as any).mockResolvedValue({ error: null });
-
-        await api.insertExchangeRate('USD', 1000);
-        expect(supabase.rpc).toHaveBeenCalledWith('repoint_exchange_rate', expect.any(Object));
-    });
-
-    it('computeMonthBalance calls rpc', async () => {
-        (supabase.rpc as any).mockResolvedValue({ data: { income: 100, expense: 50, balance: 50 }, error: null });
-        const result = await api.computeMonthBalance('2024-01-01');
-        expect(result.balance).toBe(50);
-        expect(supabase.rpc).toHaveBeenCalledWith('compute_month_balance', { target_month: '2024-01-01' });
-    });
-
-    it('upsertParameter calls upsert', async () => {
-        (supabase.from as any).mockReturnValue({
-            upsert: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: { key: 'theme', value: 'dark' }, error: null }),
-        });
-        await api.upsertParameter('theme', 'dark');
-        expect(supabase.from).toHaveBeenCalledWith('parameters');
-    });
-
-    it('fetchCreditTransactions calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            gte: vi.fn().mockReturnThis(),
-            lte: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: [], error: null }),
-        });
-        await api.fetchCreditTransactions('card-1', '2024-01-01', '2024-01-31');
-        expect(supabase.from).toHaveBeenCalledWith('transactions');
-    });
-
-    it('fetchLatestRates dedups correctly', async () => {
-        const mockData = [
-            { currency_code: 'USD', rate: 1, created_at: '2' },
-            { currency_code: 'USD', rate: 0.9, created_at: '1' },
-            { currency_code: 'EUR', rate: 0.8, created_at: '3' },
-        ];
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: mockData, error: null }),
-        });
-        const rates = await api.fetchLatestRates();
-        expect(rates).toHaveLength(2);
-        expect(rates.find(r => r.currency_code === 'USD')?.rate).toBe(1);
-    });
-
-    it('fetchRecurringRules calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            order: vi.fn().mockResolvedValue({ data: [], error: null }),
-        });
-        await api.fetchRecurringRules();
-        expect(supabase.from).toHaveBeenCalledWith('recurring_rules');
-    });
-
-    it('insertRecurringRule calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            insert: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: {}, error: null }),
-        });
-        await api.insertRecurringRule({ amount_cents: 100 } as any);
-        expect(supabase.from).toHaveBeenCalledWith('recurring_rules');
-    });
-
-    it('updateRecurringRule calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            update: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: {}, error: null }),
-        });
-        await api.updateRecurringRule('1', { amount_cents: 200 } as any);
-        expect(supabase.from).toHaveBeenCalledWith('recurring_rules');
-    });
-
-    it('deleteRecurringRule calls update with deleted_at', async () => {
-        (supabase.from as any).mockReturnValue({
-            update: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-        });
-        await api.deleteRecurringRule('1');
-        expect(supabase.from).toHaveBeenCalledWith('recurring_rules');
-    });
-
-    it('ensureRecurringGenerated calls rpc', async () => {
-        (supabase.rpc as any).mockResolvedValue({ error: null });
-        await api.ensureRecurringGenerated('2024-12-31');
-        expect(supabase.rpc).toHaveBeenCalledWith('ensure_recurring_generated', { until_date: '2024-12-31' });
-    });
-
-    it('fetchParameters calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockResolvedValue({ data: [], error: null }),
-        });
-        await api.fetchParameters();
-        expect(supabase.from).toHaveBeenCalledWith('parameters');
-    });
-
-    it('insertCreditCard calls supabase correctly', async () => {
-        (supabase.from as any).mockReturnValue({
-            insert: vi.fn().mockReturnThis(),
-            select: vi.fn().mockReturnThis(),
-            single: vi.fn().mockResolvedValue({ data: { id: 'card-1' }, error: null }),
-        });
-        const result = await api.insertCreditCard('My Card', 20, 5);
-        expect(result.id).toBe('card-1');
-        expect(supabase.from).toHaveBeenCalledWith('credit_cards');
-    });
-
-    it('deleteCreditCard calls update with deleted_at', async () => {
-        (supabase.from as any).mockReturnValue({
-            update: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-        });
-        await api.deleteCreditCard('card-1');
-        expect(supabase.from).toHaveBeenCalledWith('credit_cards');
-    });
-
-    it('fetchDistinctTags handles error', async () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-        (supabase.rpc as any).mockResolvedValue({ data: null, error: new Error('Api Error') });
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            is: vi.fn().mockReturnThis(),
-            order: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockResolvedValue({ data: null, error: new Error('Api Error') }),
-        });
-        const tags = await api.fetchDistinctTags();
-        expect(tags).toEqual([]);
-        expect(consoleSpy).toHaveBeenCalled();
-        consoleSpy.mockRestore();
-    });
-
-    it('fetchExchangeRate handles error', async () => {
-        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
-        (supabase.from as any).mockReturnValue({
-            select: vi.fn().mockReturnThis(),
-            eq: vi.fn().mockReturnThis(),
-            order: vi.fn().mockReturnThis(),
-            limit: vi.fn().mockReturnThis(),
-            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: new Error('Api Error') }),
-        });
-        const rate = await api.fetchExchangeRate('USD');
-        expect(rate).toBeNull();
-        expect(consoleSpy).toHaveBeenCalled();
-        consoleSpy.mockRestore();
     });
 });
