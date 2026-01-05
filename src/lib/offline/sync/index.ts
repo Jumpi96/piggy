@@ -198,7 +198,7 @@ export function stopPeriodicSync(): void {
 }
 
 // Export types and utilities from sub-modules
-export { trackChange, getPendingChanges, getPendingChangesCount } from './queue';
+export { trackChange, getPendingChanges, getPendingChangesCount, subscribePendingChanges } from './queue';
 export type { PendingChange, OperationType } from './queue';
 export type { PullResult } from './pull';
 export type { PushResult } from './push';

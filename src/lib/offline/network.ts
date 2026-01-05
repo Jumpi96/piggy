@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { runSync, triggerBackgroundSync, getSyncState, subscribeSyncState, type SyncState } from './sync';
+import { runSync, triggerBackgroundSync, getSyncState, subscribeSyncState, subscribePendingChanges, type SyncState } from './sync';
 
 export interface NetworkStatus {
     isOnline: boolean;
@@ -71,11 +71,19 @@ export function useSyncState(): SyncState & { refresh: () => Promise<void> } {
         refresh();
 
         // Subscribe to sync state changes
-        const unsubscribe = subscribeSyncState((newState) => {
+        const unsubscribeSyncState = subscribeSyncState((newState) => {
             setState(newState);
         });
 
-        return unsubscribe;
+        // Subscribe to pending changes updates (for real-time pending count)
+        const unsubscribePending = subscribePendingChanges((count) => {
+            setState(prev => ({ ...prev, pendingChanges: count }));
+        });
+
+        return () => {
+            unsubscribeSyncState();
+            unsubscribePending();
+        };
     }, [refresh]);
 
     return { ...state, refresh };

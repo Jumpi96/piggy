@@ -1,10 +1,67 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useOfflineStatus, formatLastSync } from '../lib/offline/network';
 
-function SyncStatusIndicator() {
+function SyncStatusIndicator({ compact = false }: { compact?: boolean }) {
     const { isOnline, isSyncing, lastSyncAt, pendingChanges, syncError, manualSync } = useOfflineStatus();
+    const [showSyncComplete, setShowSyncComplete] = useState(false);
+    const [wasSyncing, setWasSyncing] = useState(false);
+
+    // Show brief "synced" indicator when sync completes
+    useEffect(() => {
+        if (wasSyncing && !isSyncing && !syncError) {
+            setShowSyncComplete(true);
+            const timer = setTimeout(() => setShowSyncComplete(false), 2000);
+            return () => clearTimeout(timer);
+        }
+        setWasSyncing(isSyncing);
+    }, [isSyncing, syncError, wasSyncing]);
+
+    const getStatusColor = () => {
+        if (syncError) return "text-red-500";
+        if (!isOnline) return "text-amber-500";
+        if (showSyncComplete) return "text-emerald-500";
+        if (pendingChanges > 0) return "text-amber-500";
+        return "text-emerald-500";
+    };
+
+    const getIcon = () => {
+        if (isSyncing) return <RefreshCw className="w-4 h-4 animate-spin" />;
+        if (!isOnline) return <CloudOff className="w-4 h-4" />;
+        if (syncError) return <AlertCircle className="w-4 h-4" />;
+        if (showSyncComplete) return <Check className="w-4 h-4" />;
+        return <Cloud className="w-4 h-4" />;
+    };
+
+    const getLabel = () => {
+        if (isSyncing) return 'Syncing...';
+        if (!isOnline) return 'Offline';
+        if (syncError) return 'Sync error';
+        if (showSyncComplete) return 'Synced!';
+        if (pendingChanges > 0) return `${pendingChanges} pending`;
+        return formatLastSync(lastSyncAt);
+    };
+
+    if (compact) {
+        return (
+            <button
+                onClick={manualSync}
+                disabled={!isOnline || isSyncing}
+                className={cn(
+                    "flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all",
+                    getStatusColor(),
+                    isOnline && !isSyncing && "active:scale-95"
+                )}
+            >
+                {getIcon()}
+                {(isSyncing || !isOnline || syncError || pendingChanges > 0 || showSyncComplete) && (
+                    <span>{getLabel()}</span>
+                )}
+            </button>
+        );
+    }
 
     return (
         <button
@@ -13,24 +70,13 @@ function SyncStatusIndicator() {
             className={cn(
                 "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
                 "hover:bg-gray-100 dark:hover:bg-zinc-800",
-                !isOnline && "text-amber-600 dark:text-amber-400",
-                syncError && "text-red-600 dark:text-red-400"
+                getStatusColor()
             )}
             title={syncError || (isOnline ? `Last sync: ${formatLastSync(lastSyncAt)}` : 'Offline mode')}
         >
-            {isSyncing ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-            ) : !isOnline ? (
-                <CloudOff className="w-4 h-4" />
-            ) : syncError ? (
-                <AlertCircle className="w-4 h-4" />
-            ) : (
-                <Cloud className="w-4 h-4 text-emerald-500" />
-            )}
-            <span className="hidden lg:inline">
-                {isSyncing ? 'Syncing...' : !isOnline ? 'Offline' : formatLastSync(lastSyncAt)}
-            </span>
-            {pendingChanges > 0 && (
+            {getIcon()}
+            <span className="hidden lg:inline">{getLabel()}</span>
+            {pendingChanges > 0 && !compact && (
                 <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
                     {pendingChanges}
                 </span>
@@ -84,6 +130,12 @@ export function Layout() {
 
             {/* Main Content */}
             <main className="flex-1 overflow-auto pb-20 md:pb-0">
+                {/* Mobile sync indicator - floating top right */}
+                <div className="md:hidden fixed top-2 right-2 z-40">
+                    <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm rounded-full shadow-sm border border-gray-200 dark:border-zinc-700">
+                        <SyncStatusIndicator compact />
+                    </div>
+                </div>
                 <Outlet />
             </main>
 

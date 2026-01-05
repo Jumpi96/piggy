@@ -3,6 +3,22 @@ import type { SyncTableName } from '../schema';
 
 export type OperationType = 'INSERT' | 'UPDATE' | 'DELETE';
 
+// Listeners for pending changes updates
+type PendingChangesListener = (count: number) => void;
+let pendingChangesListeners: PendingChangesListener[] = [];
+
+export function subscribePendingChanges(listener: PendingChangesListener): () => void {
+    pendingChangesListeners.push(listener);
+    return () => {
+        pendingChangesListeners = pendingChangesListeners.filter(l => l !== listener);
+    };
+}
+
+async function notifyPendingChanges(): Promise<void> {
+    const count = await getPendingChangesCount();
+    pendingChangesListeners.forEach(l => l(count));
+}
+
 export interface PendingChange {
     id: number;
     table_name: SyncTableName;
@@ -28,6 +44,9 @@ export async function trackChange(
         INSERT INTO _pending_changes (table_name, record_id, operation, payload, created_at)
         VALUES ($1, $2, $3, $4, $5)
     `, [tableName, recordId, operation, JSON.stringify(payload), now]);
+
+    // Notify listeners of new pending change
+    await notifyPendingChanges();
 }
 
 export async function getPendingChanges(): Promise<PendingChange[]> {
@@ -58,6 +77,9 @@ export async function markChangeAsSynced(changeId: number): Promise<void> {
         SET synced_at = $1
         WHERE id = $2
     `, [now, changeId]);
+
+    // Notify listeners that pending count changed
+    await notifyPendingChanges();
 }
 
 export async function recordSyncError(changeId: number, error: string): Promise<void> {
