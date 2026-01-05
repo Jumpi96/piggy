@@ -88,10 +88,11 @@ export function CreditReport() {
         }).format(cents / 100);
     };
 
-    // Calculate totals per currency
+    // Calculate totals per currency (expenses add, reimbursements subtract)
     const totals: Record<string, number> = {};
     transactions.forEach(t => {
-        totals[t.currency_code] = (totals[t.currency_code] || 0) + t.amount_cents;
+        const amount = t.direction === 'income' ? -t.amount_cents : t.amount_cents;
+        totals[t.currency_code] = (totals[t.currency_code] || 0) + amount;
     });
 
     const changeMonth = (delta: number) => {
@@ -105,7 +106,8 @@ export function CreditReport() {
     const getGroupTotal = (txs: Transaction[]) => {
         const gTotals: Record<string, number> = {};
         txs.forEach(t => {
-            gTotals[t.currency_code] = (gTotals[t.currency_code] || 0) + t.amount_cents;
+            const amount = t.direction === 'income' ? -t.amount_cents : t.amount_cents;
+            gTotals[t.currency_code] = (gTotals[t.currency_code] || 0) + amount;
         });
         return Object.entries(gTotals)
             .map(([code, cents]) => formatUSD(cents, code))
