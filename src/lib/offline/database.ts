@@ -138,28 +138,64 @@ export async function setSyncMeta(key: string, value: string): Promise<void> {
     `, [key, value]);
 }
 
+const LAST_SYNC_STORAGE_KEY = 'piggy_last_sync';
+
 export async function getLastSyncTimestamp(): Promise<string | null> {
-    return getSyncMeta('last_sync_at');
+    // Try localStorage first (fastest, most reliable for PWA)
+    const storedTimestamp = localStorage.getItem(LAST_SYNC_STORAGE_KEY);
+    if (storedTimestamp) {
+        return storedTimestamp;
+    }
+
+    // Try DB
+    const dbTimestamp = await getSyncMeta('last_sync_at');
+    if (dbTimestamp) {
+        // Backup to localStorage
+        localStorage.setItem(LAST_SYNC_STORAGE_KEY, dbTimestamp);
+        return dbTimestamp;
+    }
+
+    return null;
 }
 
 export async function setLastSyncTimestamp(timestamp: string): Promise<void> {
+    localStorage.setItem(LAST_SYNC_STORAGE_KEY, timestamp);
     return setSyncMeta('last_sync_at', timestamp);
 }
 
 const USER_ID_STORAGE_KEY = 'piggy_user_id';
 
 export async function getCurrentUserId(): Promise<string | null> {
-    // Try DB first, then localStorage backup
-    const dbUserId = await getSyncMeta('user_id');
-    if (dbUserId) return dbUserId;
-
-    // Fallback to localStorage (useful for PWA offline mode)
+    // Try localStorage first (fastest, most reliable for PWA)
     const storedUserId = localStorage.getItem(USER_ID_STORAGE_KEY);
     if (storedUserId) {
-        console.log('[Offline DB] Using localStorage user_id backup');
-        // Re-sync to DB for next time
-        setSyncMeta('user_id', storedUserId).catch(() => {});
         return storedUserId;
+    }
+
+    // Try DB _sync_meta
+    const dbUserId = await getSyncMeta('user_id');
+    if (dbUserId) {
+        // Backup to localStorage for next time
+        localStorage.setItem(USER_ID_STORAGE_KEY, dbUserId);
+        return dbUserId;
+    }
+
+    // Last resort: extract from existing transactions (for users who synced before this update)
+    try {
+        const database = await getDatabaseAsync();
+        const result = await database.query<{ user_id: string }>(`
+            SELECT DISTINCT user_id FROM transactions LIMIT 1
+        `);
+        if (result.rows.length > 0) {
+            const userId = result.rows[0].user_id;
+            console.log('[Offline DB] Recovered user_id from transactions:', userId);
+            // Save for next time
+            localStorage.setItem(USER_ID_STORAGE_KEY, userId);
+            setSyncMeta('user_id', userId).catch(() => {});
+            return userId;
+        }
+    } catch (err) {
+        console.error('[Offline DB] Failed to recover user_id from transactions:', err);
     }
 
     return null;
