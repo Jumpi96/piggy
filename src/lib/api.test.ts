@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as api from './api';
+import type { RecurringRule } from '../types';
 
 // Mock the offline database module
 const mockQuery = vi.fn();
@@ -92,13 +93,16 @@ describe('api', () => {
 
     describe('insertTransaction', () => {
         it('inserts transaction into local database', async () => {
-            const input = {
-                amount_cents: 100,
-                category: 'Food',
+            const input: api.TransactionInput = {
                 date: '2024-01-01',
-                description: 'Test',
+                direction: 'expense',
+                amount_cents: 100,
                 currency_code: 'USD',
-            } as api.TransactionInput;
+                category: 'Food',
+                tag: 'groceries',
+                payment_method: 'cash',
+                to_be_balanced: false,
+            };
 
             // INSERT returns the row
             mockQuery.mockResolvedValueOnce({ rows: [{ id: 'new-id', ...input }] });
@@ -118,7 +122,7 @@ describe('api', () => {
                 .mockResolvedValueOnce({ rows: [] }) // UPDATE
                 .mockResolvedValueOnce({ rows: [{ id: '1', amount_cents: 200 }] }); // SELECT
 
-            const result = await api.updateTransaction('1', { amount_cents: 200 } as api.TransactionInput);
+            const result = await api.updateTransaction('1', { amount_cents: 200 });
 
             expect(result.amount_cents).toBe(200);
             expect(mockQuery).toHaveBeenCalledTimes(2);
@@ -194,7 +198,7 @@ describe('api', () => {
         it('returns recurring rules with parsed schedule_config', async () => {
             const mockData = [{
                 id: '1',
-                description: 'Rent',
+                category: 'Housing',
                 amount_cents: 100000,
                 schedule_config: '{"type":"monthly","day":1}'
             }];
@@ -203,24 +207,24 @@ describe('api', () => {
             const rules = await api.fetchRecurringRules();
 
             expect(rules).toHaveLength(1);
-            expect(rules[0].description).toBe('Rent');
+            expect(rules[0].category).toBe('Housing');
             expect(rules[0].schedule_config).toEqual({ type: 'monthly', day: 1 });
         });
     });
 
     describe('insertRecurringRule', () => {
         it('inserts recurring rule and returns constructed object', async () => {
-            const input = {
+            const input: Partial<RecurringRule> = {
                 direction: 'expense',
                 amount_cents: 100000,
                 currency_code: 'USD',
                 category: 'Housing',
                 tag: 'rent',
-                payment_method: 'bank',
-                schedule_type: 'monthly',
-                schedule_config: { type: 'monthly', day: 1 },
+                payment_method: 'cash',
+                schedule_type: 'monthly_day',
+                schedule_config: { day: 1 },
                 start_date: '2024-01-01',
-            } as api.RecurringRuleInput;
+            };
 
             mockQuery.mockResolvedValueOnce({ rows: [] });
 
