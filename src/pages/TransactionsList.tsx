@@ -4,6 +4,7 @@ import type { Transaction } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
+import { formatLocalDate } from '../lib/dates';
 
 export function TransactionsList() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -77,7 +78,7 @@ export function TransactionsList() {
     };
 
     const [searchTerm, setSearchTerm] = useState('');
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = formatLocalDate(new Date());
 
     const filteredTransactions = useMemo(() => {
         const term = searchTerm.trim().toLowerCase();
@@ -136,7 +137,7 @@ export function TransactionsList() {
         if (dateStr === todayStr) return 'Today';
         const yesterday = new Date();
         yesterday.setDate(yesterday.getDate() - 1);
-        const yestStr = yesterday.toISOString().split('T')[0];
+        const yestStr = formatLocalDate(yesterday);
         if (dateStr === yestStr) return 'Yesterday';
 
         return new Intl.DateTimeFormat('en-US', { weekday: 'short', day: 'numeric', month: 'long' }).format(new Date(dateStr + 'T12:00:00'));

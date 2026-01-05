@@ -1,7 +1,7 @@
 import { getDatabaseAsync, getCurrentUserId } from './offline/database';
 import { trackChange, triggerBackgroundSync } from './offline/sync';
 import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
-import { formatLocalDate } from './dates';
+import { formatLocalDate, parseLocalDate } from './dates';
 
 // Transaction Input without system fields
 export type TransactionInput = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'deleted_at'>;
@@ -500,7 +500,7 @@ export async function deleteRecurringRule(id: string): Promise<void> {
 export async function ensureRecurringGenerated(untilDate: string): Promise<void> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
-    const today = new Date().toISOString().split('T')[0];
+    const today = formatLocalDate(new Date());
 
     // Cleanup: Remove future transactions from DELETED rules
     await db.query(`
@@ -529,23 +529,24 @@ export async function ensureRecurringGenerated(untilDate: string): Promise<void>
         const validDates: string[] = [];
 
         if (rule.active) {
-            let nextDate = new Date(rule.start_date + 'T00:00:00Z');
-            const untilDateObj = new Date(untilDate + 'T00:00:00Z');
-            const endDateObj = rule.end_date ? new Date(rule.end_date + 'T00:00:00Z') : null;
+            // Use local time for date calculations
+            let nextDate = parseLocalDate(rule.start_date);
+            const untilDateObj = parseLocalDate(untilDate);
+            const endDateObj = rule.end_date ? parseLocalDate(rule.end_date) : null;
 
             for (let i = 0; i < 500; i++) {
                 if (nextDate > untilDateObj) break;
                 if (endDateObj && nextDate > endDateObj) break;
 
-                validDates.push(nextDate.toISOString().split('T')[0]);
+                validDates.push(formatLocalDate(nextDate));
 
                 // Advance next_date based on schedule type
                 if (rule.schedule_type === 'monthly_day') {
-                    nextDate.setUTCMonth(nextDate.getUTCMonth() + 1);
+                    nextDate.setMonth(nextDate.getMonth() + 1);
                 } else if (rule.schedule_type === 'every_n_days') {
-                    nextDate.setUTCDate(nextDate.getUTCDate() + (config.n || 1));
+                    nextDate.setDate(nextDate.getDate() + (config.n || 1));
                 } else if (rule.schedule_type === 'every_n_months') {
-                    nextDate.setUTCMonth(nextDate.getUTCMonth() + (config.n || 1));
+                    nextDate.setMonth(nextDate.getMonth() + (config.n || 1));
                 } else {
                     break;
                 }

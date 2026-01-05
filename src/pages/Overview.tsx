@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 import { TagBarChart } from '../components/charts/TagBarChart';
 import { aggregateByCategory, aggregateByTag } from '../lib/chartUtils';
+import { formatLocalDate } from '../lib/dates';
 
 export function Overview() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -67,7 +68,7 @@ export function Overview() {
                 setToBeBalancedTotal(tbb);
 
                 // Available cash should be (until today)
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = formatLocalDate(new Date());
                 const cashUntilToday = txs
                     .filter(t => t.date <= todayStr)
                     .reduce((acc, t) => {
