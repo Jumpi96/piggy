@@ -1,5 +1,5 @@
 // Schema version - increment when schema changes
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 4;
 
 // Tables that need to be synced with Supabase (in FK dependency order)
 export const SYNC_TABLES = [
@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS credit_cards (
     name TEXT NOT NULL,
     closing_day INTEGER NOT NULL CHECK (closing_day BETWEEN 1 AND 31),
     payment_day INTEGER NOT NULL CHECK (payment_day BETWEEN 1 AND 31),
+    enabled BOOLEAN NOT NULL DEFAULT true,
     created_at TEXT NOT NULL,
     updated_at TEXT,
     deleted_at TEXT

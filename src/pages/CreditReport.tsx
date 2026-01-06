@@ -4,11 +4,14 @@ import type { Transaction, CreditCard } from '../types';
 import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate } from '../lib/dates';
+import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 export function CreditReport() {
     // Default logic: next month if > 15, current month if <= 15
     const getInitialMonth = () => {
+        const saved = localStorage.getItem('selected_month');
+        if (saved) return getPersistentMonth();
+
         const now = new Date();
         const d = new Date(now.getFullYear(), now.getMonth(), 1);
         if (now.getDate() > 15) {
@@ -32,10 +35,14 @@ export function CreditReport() {
     useEffect(() => {
         async function loadCards() {
             try {
-                const cards = await fetchCreditCards();
-                setCreditCards(cards);
-                if (cards.length > 0 && !selectedCardId) {
-                    setSelectedCardId(cards[0].id);
+                const cards = await fetchCreditCards(true);
+                const sorted = cards.sort((a, b) => {
+                    if (a.enabled === b.enabled) return a.name.localeCompare(b.name);
+                    return a.enabled ? -1 : 1;
+                });
+                setCreditCards(sorted);
+                if (sorted.length > 0 && !selectedCardId) {
+                    setSelectedCardId(sorted[0].id);
                 }
             } catch (err) {
                 console.error(err);
@@ -98,6 +105,7 @@ export function CreditReport() {
     const changeMonth = (delta: number) => {
         const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
         setCurrentMonth(next);
+        setPersistentMonth(next);
     };
 
     const checkedTransactions = transactions.filter(t => checkedItems.has(t.id));
@@ -196,9 +204,12 @@ export function CreditReport() {
                         onChange={(e) => setSelectedCardId(e.target.value)}
                         className="bg-white dark:bg-zinc-800 border-gray-100 dark:border-zinc-700 rounded-lg text-sm font-bold shadow-sm"
                     >
-                        {creditCards.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
+                        {creditCards
+                            .filter(c => c.enabled || c.id === selectedCardId)
+                            .map(c => (
+                                <option key={c.id} value={c.id}>{c.name} {!c.enabled && '(Disabled)'}</option>
+                            ))
+                        }
                     </select>
 
                     <button
@@ -289,17 +300,19 @@ export function CreditReport() {
             </div>
 
             {/* Form Modal */}
-            {isFormOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                        <TransactionForm
-                            initialData={editingTransaction}
-                            onSuccess={() => { setIsFormOpen(false); loadTransactions(); }}
-                            onCancel={() => setIsFormOpen(false)}
-                        />
+            {
+                isFormOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                            <TransactionForm
+                                initialData={editingTransaction}
+                                onSuccess={() => { setIsFormOpen(false); loadTransactions(); }}
+                                onCancel={() => setIsFormOpen(false)}
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

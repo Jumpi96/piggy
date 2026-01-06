@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, cleanupFutureRecurring, fetchCurrencies, fetchDistinctTags, fetchCreditCards } from '../lib/api';
+import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, fetchCurrencies, fetchDistinctTags, fetchCreditCards } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
 import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import { cn } from '../lib/utils';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
-import { Plus, Trash2, Edit2, RefreshCw, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
 
 const SCHEDULE_TYPES = [
     { value: 'monthly_day', label: 'Monthly on Date' },
@@ -16,7 +16,6 @@ const SCHEDULE_TYPES = [
 export function RecurringRulesPage() {
     const [rules, setRules] = useState<RecurringRule[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [showForm, setShowForm] = useState(false);
 
     // Form State
@@ -51,7 +50,7 @@ export function RecurringRulesPage() {
                 fetchRecurringRules(),
                 fetchCurrencies(),
                 fetchDistinctTags(),
-                fetchCreditCards()
+                fetchCreditCards(true)
             ]);
             setRules(r);
             const sortedCurrencies = c.sort((a, b) => a.code.localeCompare(b.code));
@@ -82,19 +81,6 @@ export function RecurringRulesPage() {
 
     useEffect(() => { load(); }, []);
 
-    const handleGenerate = async () => {
-        setIsGenerating(true);
-        try {
-            await cleanupFutureRecurring();
-            alert("Cleaned up old pre-generated transactions. Virtualized transactions are now active.");
-            load();
-        } catch (err) {
-            console.error(err);
-            alert("Failed to cleanup.");
-        } finally {
-            setIsGenerating(false);
-        }
-    };
 
     const handleCalculateEndDate = () => {
         const count = parseInt(occurrencesHelper);
@@ -408,7 +394,7 @@ export function RecurringRulesPage() {
                                             required
                                         >
                                             <option value="" disabled>Select card</option>
-                                            {creditCards.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                            {creditCards.filter(c => c.enabled || c.id === formData.credit_card_id).map(c => <option key={c.id} value={c.id}>{c.name} {!c.enabled && '(Disabled)'}</option>)}
                                         </select>
                                     </div>
                                 )}

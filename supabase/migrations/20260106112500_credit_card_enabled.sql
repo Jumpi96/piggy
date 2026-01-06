@@ -1,0 +1,1 @@
+ALTER TABLE credit_cards ADD COLUMN enabled BOOLEAN NOT NULL DEFAULT true;

@@ -21,6 +21,7 @@ export interface CreditCard {
     name: string;
     closing_day: number;
     payment_day: number;
+    enabled: boolean;
     created_at: string;
     deleted_at?: string | null;
 }

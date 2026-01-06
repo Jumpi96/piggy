@@ -4,12 +4,12 @@ import type { Transaction } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate, parseLocalDate } from '../lib/dates';
+import { formatLocalDate, parseLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 export function TransactionsList() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(false);
-    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [currentMonth, setCurrentMonth] = useState(getPersistentMonth());
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
     const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
     const [showFuture, setShowFuture] = useState(false);
@@ -43,11 +43,13 @@ export function TransactionsList() {
     const nextMonth = () => {
         const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
         setCurrentMonth(next);
+        setPersistentMonth(next);
     };
 
     const prevMonth = () => {
         const prev = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
         setCurrentMonth(prev);
+        setPersistentMonth(prev);
     };
 
     const monthLabel = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });

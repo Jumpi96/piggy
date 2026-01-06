@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchCreditCards, insertCreditCard, deleteCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
+import { fetchCreditCards, insertCreditCard, deleteCreditCard, updateCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
 import type { CreditCard, Currency, Parameter } from '../types';
 import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2 } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -185,7 +185,7 @@ function CardsSettings() {
     const load = async () => {
         setIsLoading(true);
         try {
-            const data = await fetchCreditCards();
+            const data = await fetchCreditCards(true);
             setCards(data);
         } catch (err) {
             console.error(err);
@@ -222,6 +222,22 @@ function CardsSettings() {
         }
     };
 
+    const handleToggleEnabled = async (c: CreditCard) => {
+        // Optimistic update
+        setCards(prev => prev.map(card => card.id === c.id ? { ...card, enabled: !card.enabled } : card));
+
+        try {
+            await updateCreditCard(c.id, { enabled: !c.enabled });
+            // No need to reload, optimistic update is enough unless we want to confirm server state
+            // load(); 
+        } catch (err: any) {
+            console.error(err);
+            alert("Failed to update card status: " + err.message);
+            // Revert on error
+            setCards(prev => prev.map(card => card.id === c.id ? { ...card, enabled: c.enabled } : card));
+        }
+    };
+
     return (
         <div className="space-y-8">
             {/* List */}
@@ -230,6 +246,7 @@ function CardsSettings() {
                     <thead className="bg-gray-50 dark:bg-zinc-800 border-b border-gray-100 dark:border-zinc-700">
                         <tr>
                             <th className="px-6 py-3 font-medium text-gray-500">Name</th>
+                            <th className="px-6 py-3 font-medium text-gray-500">Status</th>
                             <th className="px-6 py-3 font-medium text-gray-500">Closing Day</th>
                             <th className="px-6 py-3 font-medium text-gray-500">Payment Day</th>
                             <th className="px-6 py-3 font-medium text-gray-500 text-right">Actions</th>
@@ -239,6 +256,26 @@ function CardsSettings() {
                         {cards.map(c => (
                             <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50">
                                 <td className="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{c.name}</td>
+                                <td className="px-6 py-3">
+                                    <button
+                                        onClick={() => handleToggleEnabled(c)}
+                                        className={cn(
+                                            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2",
+                                            c.enabled ? "bg-emerald-500" : "bg-gray-200 dark:bg-zinc-700"
+                                        )}
+                                        title={c.enabled ? "Disable card" : "Enable card"}
+                                    >
+                                        <span
+                                            className={cn(
+                                                "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                                                c.enabled ? "translate-x-6" : "translate-x-1"
+                                            )}
+                                        />
+                                    </button>
+                                    <span className="ml-2 text-xs text-gray-500 dark:text-zinc-500">
+                                        {c.enabled ? 'Active' : 'Disabled'}
+                                    </span>
+                                </td>
                                 <td className="px-6 py-3 text-gray-500">{c.closing_day}</td>
                                 <td className="px-6 py-3 text-gray-500">{c.payment_day}</td>
                                 <td className="px-6 py-3 text-right">
@@ -250,7 +287,7 @@ function CardsSettings() {
                         ))}
                         {cards.length === 0 && !isLoading && (
                             <tr>
-                                <td colSpan={4} className="px-6 py-8 text-center text-gray-400">
+                                <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
                                     No credit cards added.
                                 </td>
                             </tr>

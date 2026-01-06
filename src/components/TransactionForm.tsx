@@ -49,7 +49,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             try {
                 const [curData, cardData, tagData] = await Promise.all([
                     fetchCurrencies(),
-                    fetchCreditCards(),
+                    fetchCreditCards(true),
                     fetchDistinctTags()
                 ]);
                 const sortedCurrencies = curData.sort((a, b) => a.code.localeCompare(b.code));
@@ -385,8 +385,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                             required
                         >
                             <option value="" disabled>Select card</option>
-                            {creditCards.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
+                            {creditCards.filter(c => c.enabled || c.id === cardId).map(c => (
+                                <option key={c.id} value={c.id}>{c.name} {!c.enabled && '(Disabled)'}</option>
                             ))}
                         </select>
                     </div>

@@ -82,13 +82,15 @@ export async function fetchCurrencies(): Promise<Currency[]> {
 // Credit Cards
 // ============================================================================
 
-export async function fetchCreditCards(): Promise<CreditCard[]> {
+export async function fetchCreditCards(includeDisabled: boolean = false): Promise<CreditCard[]> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
 
+    const enabledClause = includeDisabled ? '' : 'AND enabled = true';
+
     const result = await db.query<CreditCard>(`
         SELECT * FROM credit_cards
-        WHERE user_id = $1 AND deleted_at IS NULL
+        WHERE user_id = $1 AND deleted_at IS NULL ${enabledClause}
         ORDER BY name
     `, [userId]);
 
@@ -107,14 +109,15 @@ export async function insertCreditCard(name: string, closingDay: number, payment
         name,
         closing_day: closingDay,
         payment_day: paymentDay,
+        enabled: true,
         created_at: timestamp,
         deleted_at: null
     };
 
     await db.query(`
-        INSERT INTO credit_cards (id, user_id, name, closing_day, payment_day, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
-    `, [id, userId, name, closingDay, paymentDay, timestamp]);
+        INSERT INTO credit_cards (id, user_id, name, closing_day, payment_day, enabled, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `, [id, userId, name, closingDay, paymentDay, true, timestamp]);
 
     await trackChange('credit_cards', id, 'INSERT', card);
     triggerBackgroundSync();
@@ -131,6 +134,26 @@ export async function deleteCreditCard(id: string): Promise<void> {
     `, [timestamp, id]);
 
     await trackChange('credit_cards', id, 'DELETE', { id, deleted_at: timestamp });
+    triggerBackgroundSync();
+}
+
+export async function updateCreditCard(id: string, updates: Partial<CreditCard>): Promise<void> {
+    const db = await getDatabaseAsync();
+    const timestamp = now();
+
+    const keys = Object.keys(updates).filter(k => k !== 'id' && k !== 'user_id');
+    if (keys.length === 0) return;
+
+    const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
+    const values = keys.map(k => (updates as any)[k]);
+
+    await db.query(`
+        UPDATE credit_cards 
+        SET ${setClause}, updated_at = $${keys.length + 1}
+        WHERE id = $${keys.length + 2}
+    `, [...values, timestamp, id]);
+
+    await trackChange('credit_cards', id, 'UPDATE', { ...updates, updated_at: timestamp });
     triggerBackgroundSync();
 }
 
@@ -166,9 +189,9 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
 
     const rates = await fetchLatestRates();
     const physical = result.rows.map(row => {
-        let rate: number | null | undefined = row.exchange_rate_value;
+        let rate: number | undefined = row.exchange_rate_value ?? undefined;
         if (!rate && row.currency_code !== 'USD') {
-            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || undefined;
+            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate;
         }
         return {
             ...row,
@@ -207,9 +230,9 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
 
     const rates = await fetchLatestRates();
     const physical = result.rows.map(row => {
-        let rate: number | null | undefined = row.exchange_rate_value;
+        let rate: number | undefined = row.exchange_rate_value ?? undefined;
         if (!rate && row.currency_code !== 'USD') {
-            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || undefined;
+            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate;
         }
         return {
             ...row,
@@ -251,7 +274,7 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
     const physical = result.rows.map(row => {
         let rate = row.exchange_rate_value;
         if (!rate && row.currency_code !== 'USD') {
-            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || null;
+            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || undefined;
         }
         return {
             ...row,

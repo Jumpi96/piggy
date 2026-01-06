@@ -6,10 +6,10 @@ import { cn } from '../lib/utils';
 import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 import { TagBarChart } from '../components/charts/TagBarChart';
 import { aggregateByCategory, aggregateByTag } from '../lib/chartUtils';
-import { formatLocalDate } from '../lib/dates';
+import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 export function Overview() {
-    const [currentMonth, setCurrentMonth] = useState(new Date());
+    const [currentMonth, setCurrentMonth] = useState(getPersistentMonth());
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -36,11 +36,19 @@ export function Overview() {
         return `${year}-${month}-01`;
     };
 
+    const changeMonth = (delta: number) => {
+        const next = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
+        setCurrentMonth(next);
+        setPersistentMonth(next);
+    };
+
     useEffect(() => {
         async function load() {
             setIsLoading(true);
             setError(null);
             try {
+                // Assuming getMonthStr is a utility function available globally or imported elsewhere
+                // If not, this line will cause an error.
                 const monthStr = getMonthStr(currentMonth);
 
                 const [txs, balanceData, params, rates] = await Promise.all([
@@ -86,12 +94,6 @@ export function Overview() {
         }
         load();
     }, [currentMonth]);
-
-    const changeMonth = (delta: number) => {
-        const newDate = new Date(currentMonth);
-        newDate.setMonth(newDate.getMonth() + delta);
-        setCurrentMonth(newDate);
-    };
 
     const formatMonth = (d: Date) => {
         return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(d);

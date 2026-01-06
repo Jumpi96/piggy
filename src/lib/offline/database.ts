@@ -112,6 +112,11 @@ async function runMigrations(database: PGlite): Promise<void> {
                     console.warn('[Offline DB] Could not add new constraint (might already exist):', e);
                 }
             }
+
+            if (currentVersion < 4) {
+                console.log('[Offline DB] Applying version 4 migration (Credit Card Enabled Status & Fix)');
+                await database.exec(`ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;`);
+            }
         }
 
         // Update schema version

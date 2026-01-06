@@ -22,7 +22,7 @@ vi.mock('./offline/sync/queue', () => ({
     trackChange: vi.fn(() => Promise.resolve()),
     getPendingChanges: vi.fn(() => Promise.resolve([])),
     getPendingChangesCount: vi.fn(() => Promise.resolve(0)),
-    subscribePendingChanges: vi.fn(() => () => {}),
+    subscribePendingChanges: vi.fn(() => () => { }),
 }));
 
 // Mock triggerBackgroundSync
@@ -60,6 +60,7 @@ describe('api', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockQuery.mockReset();
+        mockQuery.mockResolvedValue({ rows: [] });
     });
 
     describe('fetchCurrencies', () => {
@@ -85,8 +86,9 @@ describe('api', () => {
             const transactions = await api.fetchTransactions('2024-01-01');
 
             expect(transactions).toHaveLength(2);
-            expect(transactions[0].id).toBe('1');
-            expect(transactions[1].credit_card).toEqual({ name: 'Visa' });
+            expect(transactions[0].id).toBe('2'); // DESC order: 2024-01-20 comes first
+            expect(transactions[1].id).toBe('1');
+            expect(transactions[0].credit_card).toEqual({ name: 'Visa' });
             expect(mockQuery).toHaveBeenCalled();
         });
     });
@@ -276,12 +278,12 @@ describe('api', () => {
 
     describe('computeMonthBalance', () => {
         it('computes balance from grouped transactions by direction', async () => {
-            // computeMonthBalance groups by direction and sums totals
-            const mockGroupedResults = [
-                { direction: 'income', total: '100000' },
-                { direction: 'expense', total: '50000' },
+            // Updated to provide raw transactions since computeMonthBalance now aggregates in code
+            const mockRows = [
+                { id: '1', date: '2024-01-01', amount_cents: 100000, direction: 'income' },
+                { id: '2', date: '2024-01-02', amount_cents: 50000, direction: 'expense' },
             ];
-            mockQuery.mockResolvedValueOnce({ rows: mockGroupedResults });
+            mockQuery.mockResolvedValueOnce({ rows: mockRows });
 
             const result = await api.computeMonthBalance('2024-01-01');
 

@@ -69,3 +69,19 @@ export function calculateCreditCardEffectiveDate(
 
     return nextPaymentDate;
 }
+
+export function getPersistentMonth(): Date {
+    const saved = localStorage.getItem('selected_month');
+    if (saved) {
+        const [year, month] = saved.split('-').map(Number);
+        const d = new Date(year, month - 1, 1);
+        if (!isNaN(d.getTime())) return d;
+    }
+    return new Date();
+}
+
+export function setPersistentMonth(d: Date): void {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    localStorage.setItem('selected_month', `${year}-${month}`);
+}
