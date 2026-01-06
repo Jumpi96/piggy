@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { runSync, triggerBackgroundSync, getSyncState, subscribeSyncState, subscribePendingChanges, type SyncState } from './sync';
+import { runSync, triggerBackgroundSync, getSyncState, subscribeSyncState, subscribePendingChanges, isPeriodicSyncActive, type SyncState } from './sync';
 
 export interface NetworkStatus {
     isOnline: boolean;
@@ -24,8 +24,10 @@ export function useNetworkStatus(): NetworkStatus {
                 lastOnlineAt: new Date()
             }));
 
-            // Trigger sync when coming back online
-            triggerBackgroundSync();
+            if (!isPeriodicSyncActive()) {
+                // Fallback for contexts where periodic sync isn't running.
+                triggerBackgroundSync();
+            }
         };
 
         const handleOffline = () => {

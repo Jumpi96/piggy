@@ -3,8 +3,7 @@ import { fetchCreditCards, insertCreditCard, deleteCreditCard, fetchCurrencies, 
 import type { CreditCard, Currency, Parameter } from '../types';
 import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2 } from 'lucide-react';
 import { cn } from '../lib/utils';
-
-const DEBUG_FLAG_KEY = 'piggy_debug_ui';
+import { DEBUG_FLAG_KEY } from '../lib/debug';
 
 export function SettingsPage() {
     const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general'>('cards');

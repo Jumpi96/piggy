@@ -4,8 +4,7 @@ import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditC
 import { cn } from '../lib/utils';
 import { useOfflineStatus, formatLastSync } from '../lib/offline/network';
 import { getCurrentUserId, getLastSyncTimestamp, getDatabaseAsync, isUsingPersistence } from '../lib/offline';
-
-const DEBUG_FLAG_KEY = 'piggy_debug_ui';
+import { DEBUG_FLAG_KEY } from '../lib/debug';
 
 function readDebugFlag(): boolean {
     try {

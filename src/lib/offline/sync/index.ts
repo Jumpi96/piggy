@@ -217,6 +217,10 @@ export function stopPeriodicSync(): void {
     }
 }
 
+export function isPeriodicSyncActive(): boolean {
+    return syncCleanup !== null;
+}
+
 // Export types and utilities from sub-modules
 export { trackChange, getPendingChanges, getPendingChangesCount, subscribePendingChanges } from './queue';
 export type { PendingChange, OperationType } from './queue';
