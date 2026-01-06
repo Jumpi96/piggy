@@ -35,7 +35,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm,data}'],
+        maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         // Don't cache API calls - we handle offline with SQLite
         navigateFallback: '/piggy/index.html',
         navigateFallbackDenylist: [/^\/piggy\/rest\//, /supabase/],
@@ -50,7 +51,7 @@ export default defineConfig({
     target: 'esnext',
   },
   // Required for PGlite WASM to work properly
-  assetsInclude: ['**/*.wasm'],
+  assetsInclude: ['**/*.wasm', '**/*.data'],
   worker: {
     format: 'es',
   },
