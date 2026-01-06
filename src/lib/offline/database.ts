@@ -79,9 +79,39 @@ async function runMigrations(database: PGlite): Promise<void> {
     if (currentVersion < SCHEMA_VERSION) {
         console.log(`[Offline DB] Migrating from version ${currentVersion} to ${SCHEMA_VERSION}`);
 
-        // For fresh install or major version change, recreate schema
+        // For fresh install
         if (currentVersion === 0) {
             await database.exec(SCHEMA_SQL);
+        } else {
+            // Incremental migrations
+            if (currentVersion < 2) {
+                console.log('[Offline DB] Applying version 2 migration (Virtualized Recurring Transactions)');
+
+                // 1. Add exception_dates to recurring_rules
+                await database.exec(`ALTER TABLE recurring_rules ADD COLUMN IF NOT EXISTS exception_dates TEXT;`);
+
+                // 2. Add original_date to transactions
+                await database.exec(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS original_date TEXT;`);
+
+                // 3. Add updated_at to currencies (missing in v1 offline schema)
+                await database.exec(`ALTER TABLE currencies ADD COLUMN IF NOT EXISTS updated_at TEXT;`);
+
+                // 3. Update the unique constraint on transactions
+                // Note: Constraints might have auto-generated names. 
+                // We try to drop the common one for (recurring_rule_id, date)
+                try {
+                    await database.exec(`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_recurring_rule_id_date_key;`);
+                } catch (e) {
+                    console.warn('[Offline DB] Could not drop old constraint:', e);
+                }
+
+                try {
+                    await database.exec(`ALTER TABLE transactions ADD CONSTRAINT transactions_recurring_rule_id_original_date_key UNIQUE (recurring_rule_id, original_date);`);
+                } catch (e) {
+                    // It might already exist if the user is retrying or if SCHEMA_SQL was run by mistake
+                    console.warn('[Offline DB] Could not add new constraint (might already exist):', e);
+                }
+            }
         }
 
         // Update schema version
@@ -211,7 +241,7 @@ export async function getCurrentUserId(): Promise<string | null> {
                 console.log(`[Offline DB] Recovered user_id from ${table}:`, userId);
                 // Save for next time
                 safeLocalStorageSet(USER_ID_STORAGE_KEY, userId);
-                setSyncMeta('user_id', userId).catch(() => {});
+                setSyncMeta('user_id', userId).catch(() => { });
                 return userId;
             }
         }

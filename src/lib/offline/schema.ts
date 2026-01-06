@@ -1,5 +1,5 @@
 // Schema version - increment when schema changes
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Tables that need to be synced with Supabase (in FK dependency order)
 export const SYNC_TABLES = [
@@ -41,7 +41,8 @@ CREATE INDEX IF NOT EXISTS idx_pending_changes_synced ON _pending_changes(synced
 -- Currencies Table (reference data)
 CREATE TABLE IF NOT EXISTS currencies (
     code TEXT PRIMARY KEY,
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    updated_at TEXT
 );
 
 -- Exchange Rates Table
@@ -83,6 +84,7 @@ CREATE TABLE IF NOT EXISTS recurring_rules (
     end_date TEXT,
     active BOOLEAN DEFAULT true,
     note TEXT,
+    exception_dates TEXT, -- JSON array of YYYY-MM-DD
     created_at TEXT NOT NULL,
     updated_at TEXT,
     deleted_at TEXT
@@ -102,12 +104,13 @@ CREATE TABLE IF NOT EXISTS transactions (
     payment_method TEXT NOT NULL CHECK (payment_method IN ('cash', 'card')),
     credit_card_id TEXT REFERENCES credit_cards(id),
     recurring_rule_id TEXT REFERENCES recurring_rules(id),
+    original_date TEXT, -- YYYY-MM-DD for recurring instances
     to_be_balanced BOOLEAN NOT NULL DEFAULT false,
     note TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT,
-    UNIQUE (recurring_rule_id, date)
+    UNIQUE (recurring_rule_id, original_date)
 );
 
 -- Parameters Table
@@ -131,8 +134,8 @@ CREATE INDEX IF NOT EXISTS idx_exchange_rates_currency ON exchange_rates(currenc
 
 // Helper to check if a table supports updated_at for sync
 // Only tables that have updated_at in SUPABASE (not just local schema)
-export function tableHasUpdatedAt(table: SyncTableName): boolean {
-    return ['transactions', 'parameters'].includes(table);
+export function tableHasUpdatedAt(_table: SyncTableName): boolean {
+    return true; // All sync tables now have updated_at in Supabase
 }
 
 // Helper to check if a table supports soft delete

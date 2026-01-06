@@ -28,3 +28,6 @@ dist-ssr
 
 # Coverage
 coverage/
+
+# Supabase
+supabase/.temp

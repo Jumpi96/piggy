@@ -1,16 +1,17 @@
 import { useState, useEffect, Fragment, useMemo } from 'react';
-import { fetchTransactions, deleteTransaction, updateTransaction } from '../lib/api';
+import { fetchTransactions, deleteTransaction, updateTransaction, fetchRecurringRule, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
 import type { Transaction } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate } from '../lib/dates';
+import { formatLocalDate, parseLocalDate } from '../lib/dates';
 
 export function TransactionsList() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
     const [showFuture, setShowFuture] = useState(false);
 
     useEffect(() => {
@@ -67,10 +68,48 @@ export function TransactionsList() {
         }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this transaction?')) return;
+    const handleDelete = async (t: Transaction) => {
+        if (t.recurring_rule_id) {
+            setDeletingTransaction(t);
+        } else {
+            if (!confirm('Are you sure you want to delete this transaction?')) return;
+            try {
+                await deleteTransaction(t.id);
+                loadTransactions();
+            } catch (err) {
+                console.error(err);
+            }
+        }
+    };
+
+    const confirmDelete = async (allFuture: boolean) => {
+        if (!deletingTransaction || !deletingTransaction.recurring_rule_id) return;
+
         try {
-            await deleteTransaction(id);
+            if (!allFuture) {
+                if (deletingTransaction.id.startsWith('virtual-')) {
+                    // Add exception to rule
+                    const rule = await fetchRecurringRule(deletingTransaction.recurring_rule_id);
+                    const exceptions = [...(rule.exception_dates || []), deletingTransaction.date];
+                    await updateRecurringRule(rule.id, { exception_dates: exceptions });
+                } else {
+                    // It's a physical override, just delete it
+                    await deleteTransaction(deletingTransaction.id);
+                }
+            } else {
+                const ruleId = deletingTransaction.recurring_rule_id!;
+                const dateStr = deletingTransaction.original_date || deletingTransaction.date;
+                const originalDate = parseLocalDate(dateStr);
+                const prevDay = new Date(originalDate);
+                prevDay.setDate(prevDay.getDate() - 1);
+
+                // End the rule
+                await updateRecurringRule(ruleId, { end_date: formatLocalDate(prevDay) });
+
+                // Cleanup future physical overrides linked to this rule
+                await deleteFutureTransactionsForRule(ruleId, dateStr);
+            }
+            setDeletingTransaction(null);
             loadTransactions();
         } catch (err) {
             console.error(err);
@@ -262,7 +301,52 @@ export function TransactionsList() {
                 )}
             </div>
 
-            {/* Edit Modal */}
+            {/* Delete Modal */}
+            {deletingTransaction && deletingTransaction.recurring_rule_id && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-zinc-800 p-8 space-y-6">
+                        <div className="text-center space-y-2">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Delete Recurring</h3>
+                            <p className="text-sm text-gray-500 dark:text-zinc-400">
+                                How would you like to handle this deletion?
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-4">
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => confirmDelete(false)}
+                                    className="w-full bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 py-4 rounded-2xl text-sm font-bold transition-all active:scale-[0.98]"
+                                >
+                                    Just this one
+                                </button>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2">
+                                    Skips this specific occurrence. The rule will continue to generate future instances.
+                                </p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => confirmDelete(true)}
+                                    className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-sm font-bold transition-all shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98]"
+                                >
+                                    This and all future ones
+                                </button>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2">
+                                    Stops the series from today onwards. All future virtual and physical instances will be removed.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setDeletingTransaction(null)}
+                            className="w-full py-2 text-gray-400 dark:text-zinc-600 text-xs font-medium hover:text-gray-600 dark:hover:text-zinc-400 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
             {editingTransaction && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
                     <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 dark:border-zinc-800">
@@ -304,7 +388,12 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                     </div>
                     <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-gray-900 dark:text-white">{t.category}</h3>
+                            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                {t.category}
+                                {t.recurring_rule_id && (
+                                    <Repeat className="w-3 h-3 text-gray-400" />
+                                )}
+                            </h3>
                             {t.to_be_balanced && (
                                 <button
                                     onClick={() => toggleBalanced(t.id, t.to_be_balanced)}
@@ -360,7 +449,7 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                         <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                        onClick={() => handleDelete(t.id)}
+                        onClick={() => handleDelete(t)}
                         className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                     >
                         <Trash2 className="w-4 h-4" />

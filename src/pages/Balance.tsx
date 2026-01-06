@@ -30,8 +30,13 @@ export function Balance() {
         async function load() {
             setIsLoading(true);
             try {
+                // To ensure range.to inclusive for physical txs, we need to fetch until next day (exclusive)
+                const end = parseLocalDate(range.to);
+                const nextDay = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1);
+                const rangeEndStr = formatLocalDate(nextDay);
+
                 const [txs, params, rates] = await Promise.all([
-                    fetchTransactionsRange(range.from, range.to),
+                    fetchTransactionsRange(range.from, rangeEndStr),
                     fetchParameters() as Promise<Parameter[]>,
                     fetchLatestRates()
                 ]);
@@ -67,7 +72,7 @@ export function Balance() {
         totalBalanceCents += value;
     });
 
-    const breakdown: { month: string; value: number }[] = [];
+    const breakdown: { month: string; actual: number; budget: number; value: number }[] = [];
     const start = parseLocalDate(range.from);
     const end = parseLocalDate(range.to);
 
@@ -95,10 +100,13 @@ export function Balance() {
         const daysInRange = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
         const rawSum = monthlyData[key] || 0;
-        const adjustedValue = rawSum - (apd * daysInRange * 100);
+        const budgetCents = apd * daysInRange * 100;
+        const adjustedValue = rawSum - budgetCents;
 
         breakdown.push({
             month: key,
+            actual: rawSum,
+            budget: budgetCents,
             value: adjustedValue
         });
         current.setMonth(current.getMonth() + 1);
@@ -107,7 +115,9 @@ export function Balance() {
     // Total days in range
     const totalDiffTime = Math.max(0, end.getTime() - start.getTime());
     const totalDaysInRange = Math.ceil(totalDiffTime / (1000 * 60 * 60 * 24)) + 1;
-    const expectedDiff = totalBalanceCents - (apd * totalDaysInRange * 100);
+    const totalActual = totalBalanceCents;
+    const totalBudget = apd * totalDaysInRange * 100;
+    const expectedDiff = totalActual - totalBudget;
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -173,10 +183,16 @@ export function Balance() {
                         </div>
                         <div className="divide-y divide-gray-50 dark:divide-zinc-700/50">
                             {breakdown.map((item) => (
-                                <div key={item.month} className="px-6 py-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-zinc-700/30 transition-colors">
-                                    <span className="font-mono text-sm font-medium">{item.month}</span>
+                                <div key={item.month} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-gray-50 dark:hover:bg-zinc-700/30 transition-colors gap-4">
+                                    <div className="flex flex-col">
+                                        <span className="font-mono text-sm font-bold">{item.month}</span>
+                                        <div className="flex gap-3 text-[10px] whitespace-nowrap opacity-60 font-mono">
+                                            <span>Actual: {formatUSD(item.actual)}</span>
+                                            <span>Budget: -{formatUSD(item.budget)}</span>
+                                        </div>
+                                    </div>
                                     <div className="flex items-center gap-4">
-                                        <div className="w-32 h-1.5 bg-gray-100 dark:bg-zinc-700 rounded-full overflow-hidden hidden sm:block">
+                                        <div className="w-32 h-1.5 bg-gray-100 dark:bg-zinc-700 rounded-full overflow-hidden hidden md:block">
                                             <div
                                                 className={cn("h-full rounded-full", item.value >= 0 ? "bg-sky-500" : "bg-red-500")}
                                                 style={{ width: `${Math.min(100, (Math.abs(item.value) / 500000) * 100)}%` }} // Arbitrary 5k scale for visual
@@ -196,23 +212,24 @@ export function Balance() {
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2 text-zinc-500">
                                     <Wallet className="w-4 h-4" />
-                                    <h3 className="text-xs font-bold uppercase tracking-wider">Your Current Situation</h3>
+                                    <h3 className="text-xs font-bold uppercase tracking-wider">Projected Cashflow Total</h3>
                                 </div>
                                 <p className={cn("text-3xl font-black", totalBalanceCents >= 0 ? "text-zinc-900 dark:text-white" : "text-red-600")}>
                                     {formatUSD(totalBalanceCents)}
                                 </p>
+                                <p className="text-[10px] text-zinc-400 font-mono">Sum of all incomes and expenses in this period</p>
                             </div>
                         </div>
 
                         <div className="bg-emerald-50/50 dark:bg-emerald-900/10 p-6 rounded-2xl border border-emerald-100 dark:border-emerald-900/30 flex flex-col justify-center items-center text-center space-y-2">
                             <h3 className="text-sm font-medium text-emerald-900 dark:text-emerald-300">
-                                Comparing with what you expected to have:
+                                Adjusted vs. Your Expected Spend:
                             </h3>
                             <p className={cn("text-4xl font-black", expectedDiff >= 0 ? "text-sky-600" : "text-red-600")}>
                                 {formatUSD(expectedDiff)}
                             </p>
                             <p className="text-xs text-emerald-700/60 dark:text-emerald-400/60 max-w-[200px]">
-                                (Total balance - (ApD * Total Days))
+                                (Cashflow - (Daily Budget * Total Days))
                             </p>
                         </div>
                     </div>

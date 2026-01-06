@@ -1,7 +1,8 @@
 import { getDatabaseAsync, getCurrentUserId } from './offline/database';
 import { trackChange, triggerBackgroundSync } from './offline/sync';
 import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
-import { formatLocalDate, parseLocalDate } from './dates';
+import { formatLocalDate, getTodayLocalDate } from './dates';
+import { generateOccurrences, mergeTransactions } from './recurringUtils';
 
 // Transaction Input without system fields
 export type TransactionInput = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'deleted_at'>;
@@ -15,6 +16,46 @@ async function getUserId(): Promise<string> {
     return userId;
 }
 
+/**
+ * Migrates physical transactions from an old rule to a new rule starting from a specific date.
+ * Used when "Edit Future Ones" is selected to split a rule.
+ */
+export async function migrateFutureTransactions(oldRuleId: string, newRuleId: string, startDate: string): Promise<void> {
+    try {
+        const db = await getDatabaseAsync();
+        await db.query(`
+            UPDATE transactions 
+            SET recurring_rule_id = $1 
+            WHERE recurring_rule_id = $2 
+              AND (original_date >= $3 OR (original_date IS NULL AND date >= $3))
+              AND deleted_at IS NULL
+        `, [newRuleId, oldRuleId, startDate]);
+        console.log(`[API] Migrated future transactions from ${oldRuleId} to ${newRuleId}`);
+    } catch (err) {
+        console.error('[API] Failed to migrate future transactions:', err);
+        throw err;
+    }
+}
+
+/**
+ * Deletes physical transactions for a rule starting from a specific date.
+ */
+export async function deleteFutureTransactionsForRule(ruleId: string, startDate: string): Promise<void> {
+    try {
+        const db = await getDatabaseAsync();
+        await db.query(`
+            UPDATE transactions 
+            SET deleted_at = CURRENT_TIMESTAMP 
+            WHERE recurring_rule_id = $1 
+              AND (original_date >= $2 OR (original_date IS NULL AND date >= $2))
+              AND deleted_at IS NULL
+        `, [ruleId, startDate]);
+        console.log(`[API] Deleted future transactions for rule ${ruleId}`);
+    } catch (err) {
+        console.error('[API] Failed to delete future transactions:', err);
+        throw err;
+    }
+}
 // Helper to generate UUID
 function generateId(): string {
     return crypto.randomUUID();
@@ -123,12 +164,26 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
         ORDER BY t.date DESC
     `, [userId, startStr, endStr]);
 
-    // Transform to match expected format with nested objects
-    return result.rows.map(row => ({
-        ...row,
-        exchange_rate: row.exchange_rate_value ? { rate: row.exchange_rate_value } : null,
-        credit_card: row.credit_card_name ? { name: row.credit_card_name } : null
-    }));
+    const rates = await fetchLatestRates();
+    const physical = result.rows.map(row => {
+        let rate: number | null | undefined = row.exchange_rate_value;
+        if (!rate && row.currency_code !== 'USD') {
+            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || undefined;
+        }
+        return {
+            ...row,
+            exchange_rate: rate ? { rate: Number(rate) } : (row.currency_code === 'USD' ? { rate: 1 } : null),
+            credit_card: row.credit_card_name ? { name: row.credit_card_name } : null
+        };
+    });
+
+    const rules = await fetchRecurringRules();
+    let virtual: Transaction[] = [];
+    for (const rule of rules) {
+        virtual = virtual.concat(generateOccurrences(rule, monthStart, endStr, rates));
+    }
+
+    return mergeTransactions(virtual, physical);
 }
 
 export async function fetchTransactionsRange(startDate: string, endDate: string): Promise<Transaction[]> {
@@ -150,11 +205,26 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
         ORDER BY t.date ASC
     `, [userId, startDate, endDate]);
 
-    return result.rows.map(row => ({
-        ...row,
-        exchange_rate: row.exchange_rate_value ? { rate: row.exchange_rate_value } : null,
-        credit_card: row.credit_card_name ? { name: row.credit_card_name } : null
-    }));
+    const rates = await fetchLatestRates();
+    const physical = result.rows.map(row => {
+        let rate: number | null | undefined = row.exchange_rate_value;
+        if (!rate && row.currency_code !== 'USD') {
+            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || undefined;
+        }
+        return {
+            ...row,
+            exchange_rate: rate ? { rate: Number(rate) } : (row.currency_code === 'USD' ? { rate: 1 } : null),
+            credit_card: row.credit_card_name ? { name: row.credit_card_name } : null
+        };
+    });
+
+    const rules = await fetchRecurringRules();
+    let virtual: Transaction[] = [];
+    for (const rule of rules) {
+        virtual = virtual.concat(generateOccurrences(rule, startDate, endDate, rates));
+    }
+
+    return mergeTransactions(virtual, physical);
 }
 
 export async function fetchCreditTransactions(cardId: string, startDate: string, endDate: string): Promise<Transaction[]> {
@@ -177,11 +247,28 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
         ORDER BY t.date ASC
     `, [userId, cardId, startDate, endDate]);
 
-    return result.rows.map(row => ({
-        ...row,
-        exchange_rate: row.exchange_rate_value ? { rate: row.exchange_rate_value } : null,
-        credit_card: row.credit_card_name ? { name: row.credit_card_name } : null
-    }));
+    const rates = await fetchLatestRates();
+    const physical = result.rows.map(row => {
+        let rate = row.exchange_rate_value;
+        if (!rate && row.currency_code !== 'USD') {
+            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || null;
+        }
+        return {
+            ...row,
+            exchange_rate: rate ? { rate: Number(rate) } : (row.currency_code === 'USD' ? { rate: 1 } : null),
+            credit_card: row.credit_card_name ? { name: row.credit_card_name } : null
+        };
+    });
+
+    const rules = await fetchRecurringRules();
+    let virtual: Transaction[] = [];
+    for (const rule of rules) {
+        if (rule.credit_card_id === cardId) {
+            virtual = virtual.concat(generateOccurrences(rule, startDate, endDate, rates));
+        }
+    }
+
+    return mergeTransactions(virtual, physical);
 }
 
 export async function insertTransaction(transaction: TransactionInput): Promise<Transaction> {
@@ -203,13 +290,14 @@ export async function insertTransaction(transaction: TransactionInput): Promise<
         INSERT INTO transactions (
             id, user_id, date, direction, amount_cents, currency_code,
             exchange_rate_id, category, tag, payment_method, credit_card_id,
-            recurring_rule_id, to_be_balanced, note, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            recurring_rule_id, original_date, to_be_balanced, note, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     `, [
         id, userId, transaction.date, transaction.direction, transaction.amount_cents,
         transaction.currency_code, transaction.exchange_rate_id || null, transaction.category,
         transaction.tag, transaction.payment_method, transaction.credit_card_id || null,
-        transaction.recurring_rule_id || null, transaction.to_be_balanced, transaction.note || null,
+        transaction.recurring_rule_id || null, transaction.original_date || null,
+        transaction.to_be_balanced, transaction.note || null,
         timestamp, timestamp
     ]);
 
@@ -231,7 +319,7 @@ export async function updateTransaction(id: string, updates: Partial<Transaction
     const updateableFields = [
         'date', 'direction', 'amount_cents', 'currency_code', 'exchange_rate_id',
         'category', 'tag', 'payment_method', 'credit_card_id', 'recurring_rule_id',
-        'to_be_balanced', 'note'
+        'original_date', 'to_be_balanced', 'note'
     ];
 
     for (const field of updateableFields) {
@@ -379,8 +467,31 @@ export async function fetchRecurringRules(): Promise<RecurringRule[]> {
         ...row,
         schedule_config: typeof row.schedule_config === 'string'
             ? JSON.parse(row.schedule_config)
-            : row.schedule_config
+            : row.schedule_config,
+        exception_dates: typeof row.exception_dates === 'string'
+            ? JSON.parse(row.exception_dates)
+            : (row.exception_dates || [])
     }));
+}
+
+export async function fetchRecurringRule(id: string): Promise<RecurringRule> {
+    const db = await getDatabaseAsync();
+    const result = await db.query<RecurringRule & { schedule_config: string; exception_dates: string }>(`
+        SELECT * FROM recurring_rules WHERE id = $1
+    `, [id]);
+
+    if (result.rows.length === 0) throw new Error('Recurring rule not found');
+
+    const row = result.rows[0];
+    return {
+        ...row,
+        schedule_config: typeof row.schedule_config === 'string'
+            ? JSON.parse(row.schedule_config)
+            : row.schedule_config,
+        exception_dates: typeof row.exception_dates === 'string'
+            ? JSON.parse(row.exception_dates)
+            : (row.exception_dates || [])
+    };
 }
 
 export async function insertRecurringRule(rule: Partial<RecurringRule>): Promise<RecurringRule> {
@@ -413,18 +524,19 @@ export async function insertRecurringRule(rule: Partial<RecurringRule>): Promise
         INSERT INTO recurring_rules (
             id, user_id, direction, amount_cents, currency_code, category, tag,
             payment_method, credit_card_id, schedule_type, schedule_config,
-            start_date, end_date, active, note, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            start_date, end_date, active, note, exception_dates, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     `, [
         id, userId, newRule.direction, newRule.amount_cents, newRule.currency_code,
         newRule.category, newRule.tag, newRule.payment_method, newRule.credit_card_id,
         newRule.schedule_type, JSON.stringify(newRule.schedule_config), newRule.start_date,
-        newRule.end_date, newRule.active, newRule.note, timestamp
+        newRule.end_date, newRule.active, newRule.note, JSON.stringify(newRule.exception_dates || []), timestamp
     ]);
 
     await trackChange('recurring_rules', id, 'INSERT', {
         ...newRule,
-        schedule_config: JSON.stringify(newRule.schedule_config)
+        schedule_config: JSON.stringify(newRule.schedule_config),
+        exception_dates: JSON.stringify(newRule.exception_dates || [])
     });
     triggerBackgroundSync();
 
@@ -444,7 +556,7 @@ export async function updateRecurringRule(id: string, updates: Partial<Recurring
         if (key === 'id' || key === 'user_id' || key === 'created_at') continue;
 
         setClauses.push(`${key} = $${paramIndex}`);
-        if (key === 'schedule_config') {
+        if (key === 'schedule_config' || key === 'exception_dates') {
             values.push(JSON.stringify(value));
         } else {
             values.push(value ?? null);
@@ -469,12 +581,16 @@ export async function updateRecurringRule(id: string, updates: Partial<Recurring
         ...result.rows[0],
         schedule_config: typeof result.rows[0].schedule_config === 'string'
             ? JSON.parse(result.rows[0].schedule_config)
-            : result.rows[0].schedule_config
+            : result.rows[0].schedule_config,
+        exception_dates: typeof result.rows[0].exception_dates === 'string'
+            ? JSON.parse(result.rows[0].exception_dates)
+            : (result.rows[0].exception_dates || [])
     };
 
     await trackChange('recurring_rules', id, 'UPDATE', {
         ...updated,
-        schedule_config: JSON.stringify(updated.schedule_config)
+        schedule_config: JSON.stringify(updated.schedule_config),
+        exception_dates: JSON.stringify(updated.exception_dates)
     });
     triggerBackgroundSync();
 
@@ -497,121 +613,19 @@ export async function deleteRecurringRule(id: string): Promise<void> {
 // Recurring Generation (Local Implementation)
 // ============================================================================
 
-export async function ensureRecurringGenerated(untilDate: string): Promise<void> {
+export async function cleanupFutureRecurring(): Promise<void> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
-    const today = formatLocalDate(new Date());
+    const today = getTodayLocalDate();
 
-    // Cleanup: Remove future transactions from DELETED rules
     await db.query(`
         UPDATE transactions
         SET deleted_at = $1
-        WHERE recurring_rule_id IN (
-            SELECT id FROM recurring_rules
-            WHERE user_id = $2 AND deleted_at IS NOT NULL
-        )
-        AND deleted_at IS NULL
-        AND date >= $3
+        WHERE user_id = $2
+          AND recurring_rule_id IS NOT NULL
+          AND date >= $3
+          AND original_date IS NULL
     `, [now(), userId, today]);
-
-    // Fetch all active rules
-    const rulesResult = await db.query<RecurringRule & { schedule_config: string }>(`
-        SELECT * FROM recurring_rules
-        WHERE user_id = $1 AND deleted_at IS NULL
-    `, [userId]);
-
-    for (const rule of rulesResult.rows) {
-        const config = typeof rule.schedule_config === 'string'
-            ? JSON.parse(rule.schedule_config)
-            : rule.schedule_config;
-
-        // Build array of valid dates for this rule
-        const validDates: string[] = [];
-
-        if (rule.active) {
-            // Use local time for date calculations
-            let nextDate = parseLocalDate(rule.start_date);
-            const untilDateObj = parseLocalDate(untilDate);
-            const endDateObj = rule.end_date ? parseLocalDate(rule.end_date) : null;
-
-            for (let i = 0; i < 500; i++) {
-                if (nextDate > untilDateObj) break;
-                if (endDateObj && nextDate > endDateObj) break;
-
-                validDates.push(formatLocalDate(nextDate));
-
-                // Advance next_date based on schedule type
-                if (rule.schedule_type === 'monthly_day') {
-                    nextDate.setMonth(nextDate.getMonth() + 1);
-                } else if (rule.schedule_type === 'every_n_days') {
-                    nextDate.setDate(nextDate.getDate() + (config.n || 1));
-                } else if (rule.schedule_type === 'every_n_months') {
-                    nextDate.setMonth(nextDate.getMonth() + (config.n || 1));
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // Delete transactions NOT in valid_dates
-        if (validDates.length > 0) {
-            const placeholders = validDates.map((_, i) => `$${i + 3}`).join(', ');
-            await db.query(`
-                UPDATE transactions
-                SET deleted_at = $1
-                WHERE recurring_rule_id = $2
-                  AND deleted_at IS NULL
-                  AND date >= $3
-                  AND date NOT IN (${placeholders})
-            `, [now(), rule.id, today, ...validDates]);
-        }
-
-        // Generate transactions for valid dates
-        if (rule.active) {
-            // Get latest exchange rate for this currency
-            const rateResult = await db.query<{ id: string }>(`
-                SELECT id FROM exchange_rates
-                WHERE currency_code = $1 AND user_id = $2
-                ORDER BY created_at DESC
-                LIMIT 1
-            `, [rule.currency_code, userId]);
-            const exchangeRateId = rateResult.rows[0]?.id || null;
-
-            for (const date of validDates) {
-                const txId = generateId();
-                const timestamp = now();
-
-                // Use ON CONFLICT to handle existing transactions
-                await db.query(`
-                    INSERT INTO transactions (
-                        id, user_id, date, direction, amount_cents, currency_code,
-                        exchange_rate_id, category, tag, payment_method, credit_card_id,
-                        recurring_rule_id, to_be_balanced, note, created_at, updated_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-                    ON CONFLICT (recurring_rule_id, date) DO UPDATE
-                    SET amount_cents = EXCLUDED.amount_cents,
-                        category = EXCLUDED.category,
-                        tag = EXCLUDED.tag,
-                        direction = EXCLUDED.direction,
-                        payment_method = EXCLUDED.payment_method,
-                        credit_card_id = EXCLUDED.credit_card_id,
-                        currency_code = EXCLUDED.currency_code,
-                        exchange_rate_id = EXCLUDED.exchange_rate_id,
-                        note = EXCLUDED.note,
-                        updated_at = EXCLUDED.updated_at,
-                        deleted_at = NULL
-                    WHERE transactions.date >= $17
-                `, [
-                    txId, userId, date, rule.direction, rule.amount_cents, rule.currency_code,
-                    exchangeRateId, rule.category, rule.tag, rule.payment_method,
-                    rule.credit_card_id, rule.id, false, rule.note, timestamp, timestamp, today
-                ]);
-            }
-        }
-    }
-
-    // Note: Recurring generation changes are local-only, they'll sync via pull
-    // when server runs its own ensureRecurringGenerated
 }
 
 // ============================================================================
@@ -619,37 +633,28 @@ export async function ensureRecurringGenerated(untilDate: string): Promise<void>
 // ============================================================================
 
 export async function computeMonthBalance(month: string): Promise<{ income: number; expense: number; balance: number }> {
-    const db = await getDatabaseAsync();
-    const userId = await getUserId();
-
     // month is already YYYY-MM-01 format, use it directly
-    const startStr = month;
-    // Calculate end of month
     const [year, monthNum] = month.split('-').map(Number);
-    const endDate = new Date(year, monthNum, 1); // month is 0-indexed, so this gives us first of next month
-    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-01`;
 
-    const result = await db.query<{ direction: string; total: string }>(`
-        SELECT
-            direction,
-            COALESCE(SUM(amount_cents / COALESCE(er.rate, 1)), 0) as total
-        FROM transactions t
-        LEFT JOIN exchange_rates er ON t.exchange_rate_id = er.id
-        WHERE t.user_id = $1
-          AND t.deleted_at IS NULL
-          AND t.date >= $2
-          AND t.date < $3
-        GROUP BY direction
-    `, [userId, startStr, endStr]);
+    // We fetch a range that includes everything in the month
+    // fetchTransactionsRange uses startDate <= date <= endDate or similar? 
+    // Actually fetchTransactionsRange uses t.date < $3, so we need first of NEXT month
+    const nextMonth = monthNum === 12 ? 1 : monthNum + 1;
+    const nextYear = monthNum === 12 ? year + 1 : year;
+    const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
+
+    const txs = await fetchTransactionsRange(month, nextMonthStr);
 
     let income = 0;
     let expense = 0;
 
-    for (const row of result.rows) {
-        if (row.direction === 'income') {
-            income = parseFloat(row.total) || 0;
-        } else if (row.direction === 'expense') {
-            expense = parseFloat(row.total) || 0;
+    for (const t of txs) {
+        const rate = t.exchange_rate?.rate || 1;
+        const amount = t.amount_cents / rate;
+        if (t.direction === 'income') {
+            income += amount;
+        } else {
+            expense += amount;
         }
     }
 

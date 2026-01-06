@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
-import { fetchCurrencies, fetchCreditCards, insertTransaction, updateTransaction, fetchExchangeRate, fetchDistinctTags, type TransactionInput } from '../lib/api';
+import {
+    fetchCurrencies,
+    fetchCreditCards,
+    insertTransaction,
+    updateTransaction,
+    fetchExchangeRate,
+    fetchDistinctTags,
+    insertRecurringRule, updateRecurringRule, fetchRecurringRule, migrateFutureTransactions,
+    type TransactionInput
+} from '../lib/api';
 import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate } from '../lib/dates';
 import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -28,6 +37,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     const [cardId, setCardId] = useState(initialData?.credit_card_id || '');
     const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
     const [note, setNote] = useState(initialData?.note || '');
+    const [editType, setEditType] = useState<'this' | 'future' | null>(null);
 
     // Tag Autocomplete State
     const [showTagSuggestions, setShowTagSuggestions] = useState(false);
@@ -97,7 +107,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             // Exchange Rate
             const exchangeRateId = await fetchExchangeRate(currencyCode);
 
-            const transaction: TransactionInput = {
+            const transactionMeta = {
                 direction,
                 amount_cents: amountCents,
                 currency_code: currencyCode,
@@ -107,15 +117,58 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                 payment_method: method,
                 credit_card_id: method === 'card' ? cardId : null,
                 exchange_rate_id: exchangeRateId,
-                recurring_rule_id: null,
                 to_be_balanced: toBeBalanced,
                 note: note || null
             };
 
-            if (initialData) {
-                await updateTransaction(initialData.id, transaction);
+            if (initialData?.recurring_rule_id) {
+                if (editType === 'this' || !editType) {
+                    // Edit this instance: save as physical with original_date
+                    const tx: TransactionInput = {
+                        ...transactionMeta,
+                        recurring_rule_id: initialData.recurring_rule_id,
+                        original_date: initialData.original_date || initialData.date,
+                    };
+                    if (initialData.id.startsWith('virtual-')) {
+                        await insertTransaction(tx);
+                    } else {
+                        await updateTransaction(initialData.id, tx);
+                    }
+                } else {
+                    // Edit future ones: split rule
+                    const rule = await fetchRecurringRule(initialData.recurring_rule_id);
+                    const occurrenceDate = parseLocalDate(initialData.original_date || initialData.date);
+                    const dayBefore = new Date(occurrenceDate);
+                    dayBefore.setDate(dayBefore.getDate() - 1);
+
+                    // 1. Update existing rule to end before this occurrence
+                    await updateRecurringRule(rule.id, { end_date: formatLocalDate(dayBefore) });
+
+                    // 2. Create new rule
+                    const newRuleId = crypto.randomUUID();
+                    await insertRecurringRule({
+                        ...rule,
+                        id: newRuleId,
+                        start_date: dateStr,
+                        direction: transactionMeta.direction,
+                        amount_cents: transactionMeta.amount_cents,
+                        currency_code: transactionMeta.currency_code,
+                        category: transactionMeta.category,
+                        tag: transactionMeta.tag,
+                        payment_method: transactionMeta.payment_method,
+                        credit_card_id: transactionMeta.credit_card_id || undefined,
+                        note: transactionMeta.note,
+                        created_at: undefined, // Exclude created_at from the new rule
+                        exception_dates: [] // Start with no exceptions for the new rule
+                    } as any); // Cast to any to allow partial type match
+
+                    // Migrate future physical transactions to the new rule
+                    await migrateFutureTransactions(rule.id, newRuleId, dateStr);
+                }
+            } else if (initialData) {
+                await updateTransaction(initialData.id, { ...transactionMeta, recurring_rule_id: null });
             } else {
-                await insertTransaction(transaction);
+                await insertTransaction({ ...transactionMeta, recurring_rule_id: null });
             }
 
             if (onSuccess) {
@@ -165,6 +218,39 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     Income
                 </button>
             </div>
+
+            {/* Recurring Edit Choice */}
+            {initialData?.recurring_rule_id && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-4 rounded-xl space-y-3">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">This is a recurring transaction. How do you want to save changes?</p>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setEditType('this')}
+                            className={cn(
+                                "flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all border",
+                                editType === 'this' || !editType
+                                    ? "bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100"
+                                    : "bg-white dark:bg-zinc-800 border-gray-100 dark:border-zinc-700 text-gray-500"
+                            )}
+                        >
+                            Just this one
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setEditType('future')}
+                            className={cn(
+                                "flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-all border",
+                                editType === 'future'
+                                    ? "bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-100"
+                                    : "bg-white dark:bg-zinc-800 border-gray-100 dark:border-zinc-700 text-gray-500"
+                            )}
+                        >
+                            All future ones
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Amount & Currency */}
             <div className="grid grid-cols-3 gap-4">

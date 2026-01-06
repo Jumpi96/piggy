@@ -30,7 +30,7 @@ resource "aws_iam_role_policy" "s3_access" {
         "s3:ListBucket",
         "s3:DeleteObject"
       ]
-      Effect   = "Allow"
+      Effect = "Allow"
       Resource = [
         aws_s3_bucket.backups.arn,
         "${aws_s3_bucket.backups.arn}/*"
@@ -85,67 +85,3 @@ resource "aws_lambda_function" "backup" {
   depends_on = [null_resource.build_backup_lambda]
 }
 
-# Recurring Generator Lambda
-resource "aws_iam_role" "recurring_lambda_exec" {
-  name = "piggy_recurring_lambda_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "lambda.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "recurring_lambda_policy" {
-  role       = aws_iam_role.recurring_lambda_exec.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "null_resource" "build_recurring_lambda" {
-  triggers = {
-    requirements = filemd5("${path.module}/lambdas/recurring_generator/requirements.txt")
-    lambda_code  = filemd5("${path.module}/lambdas/recurring_generator/lambda_function.py")
-  }
-
-  provisioner "local-exec" {
-    command = <<EOF
-      set -e
-      cd ${path.module}/lambdas/recurring_generator
-      rm -rf package package.zip
-      mkdir -p package
-      pip install -r requirements.txt -t package/ --platform manylinux2014_x86_64 --only-binary=:all: --python-version 3.11
-      cp lambda_function.py package/
-      cd package
-      zip -r ../package.zip . -x "*.pyc" -x "__pycache__/*"
-    EOF
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = "rm -f ${path.module}/lambdas/recurring_generator/package.zip"
-  }
-}
-
-resource "aws_lambda_function" "recurring_generator" {
-  filename         = "${path.module}/lambdas/recurring_generator/package.zip"
-  function_name    = "piggy_recurring_generator"
-  role             = aws_iam_role.recurring_lambda_exec.arn
-  handler          = "lambda_function.handler"
-  runtime          = "python3.11"
-  source_code_hash = null_resource.build_recurring_lambda.id
-  timeout          = 300
-  memory_size      = 256
-
-  environment {
-    variables = {
-      SUPABASE_DB_URL = var.supabase_db_url
-    }
-  }
-
-  depends_on = [null_resource.build_recurring_lambda]
-}

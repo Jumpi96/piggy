@@ -1,20 +1,13 @@
+-- Migration: Initial Schema
+-- Timestamp: 20241221000000
+
 -- Enable uuid-ossp extension
 create extension if not exists "uuid-ossp";
-
--- Function to handle updated_at
-create or replace function update_updated_at_column()
-returns trigger as $$
-begin
-    new.updated_at = now();
-    return new;
-end;
-$$ language plpgsql;
 
 -- Currencies Table
 create table if not exists currencies (
   code text primary key,
-  name text not null,
-  updated_at timestamptz default now()
+  name text not null
 );
 
 -- Insert default currencies
@@ -30,8 +23,7 @@ create table if not exists exchange_rates (
   user_id uuid references auth.users(id) not null default auth.uid(),
   currency_code text references currencies(code) not null,
   rate numeric not null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  created_at timestamptz default now()
 );
 
 -- Credit Cards Table
@@ -42,7 +34,6 @@ create table if not exists credit_cards (
   closing_day integer not null check (closing_day between 1 and 31),
   payment_day integer not null check (payment_day between 1 and 31),
   created_at timestamptz default now(),
-  updated_at timestamptz default now(),
   deleted_at timestamptz
 );
 
@@ -63,9 +54,7 @@ create table if not exists recurring_rules (
   end_date date,
   active boolean default true,
   note text,
-  exception_dates jsonb,
   created_at timestamptz default now(),
-  updated_at timestamptz default now(),
   deleted_at timestamptz
 );
 
@@ -83,7 +72,6 @@ create table if not exists transactions (
   payment_method text not null check (payment_method in ('cash', 'card')),
   credit_card_id uuid references credit_cards(id),
   recurring_rule_id uuid references recurring_rules(id),
-  original_date date,
   to_be_balanced boolean not null default false,
   note text,
   created_at timestamptz default now(),
@@ -91,11 +79,11 @@ create table if not exists transactions (
   deleted_at timestamptz
 );
 
--- Idempotent constraint for transactions
+-- Initial constraint for transactions
 do $$
 begin
     if not exists (select 1 from pg_constraint where conname = 'recurrence_idempotency') then
-        alter table transactions add constraint recurrence_idempotency unique (recurring_rule_id, original_date);
+        alter table transactions add constraint recurrence_idempotency unique (recurring_rule_id, date);
     end if;
 end $$;
 
@@ -158,30 +146,71 @@ begin
     end if;
 end $$;
 
--- Triggers for all tables
-do $$
+-- RPCs
+-- Compute Month Balance
+create or replace function compute_month_balance(target_month date)
+returns json
+language plpgsql
+security definer
+as $$
+declare
+    income bigint;
+    expense bigint;
 begin
-    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_currencies') then
-        create trigger set_updated_at_currencies before update on currencies for each row execute procedure update_updated_at_column();
-    end if;
+    select coalesce(sum(case when t.direction = 'income' then t.amount_cents / coalesce(er.rate, 1) else 0 end), 0)
+    into income
+    from transactions t
+    left join exchange_rates er on t.exchange_rate_id = er.id
+    where t.date >= target_month 
+      and t.date < target_month + interval '1 month'
+      and t.deleted_at is null
+      and t.user_id = auth.uid();
 
-    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_exchange_rates') then
-        create trigger set_updated_at_exchange_rates before update on exchange_rates for each row execute procedure update_updated_at_column();
-    end if;
+    select coalesce(sum(case when t.direction = 'expense' then t.amount_cents / coalesce(er.rate, 1) else 0 end), 0)
+    into expense
+    from transactions t
+    left join exchange_rates er on t.exchange_rate_id = er.id
+    where t.date >= target_month 
+      and t.date < target_month + interval '1 month'
+      and t.deleted_at is null
+      and t.user_id = auth.uid();
 
-    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_credit_cards') then
-        create trigger set_updated_at_credit_cards before update on credit_cards for each row execute procedure update_updated_at_column();
-    end if;
+    return json_build_object(
+        'income', income,
+        'expense', expense,
+        'balance', income - expense
+    );
+end;
+$$;
 
-    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_recurring_rules') then
-        create trigger set_updated_at_recurring_rules before update on recurring_rules for each row execute procedure update_updated_at_column();
-    end if;
+-- Repoint Exchange Rate
+create or replace function repoint_exchange_rate(
+  p_currency_code text,
+  p_start_date date,
+  p_new_rate_id uuid
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  update transactions
+  set exchange_rate_id = p_new_rate_id
+  where currency_code = p_currency_code
+    and user_id = auth.uid()
+    and date >= p_start_date;
+end;
+$$;
 
-    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_transactions') then
-        create trigger set_updated_at_transactions before update on transactions for each row execute procedure update_updated_at_column();
-    end if;
-
-    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_parameters') then
-        create trigger set_updated_at_parameters before update on parameters for each row execute procedure update_updated_at_column();
-    end if;
-end $$;
+-- Fetch Distinct Tags
+create or replace function fetch_distinct_tags()
+returns table (tag text)
+language sql
+security definer
+as $$
+  select distinct tag 
+  from transactions 
+  where deleted_at is null 
+    and user_id = auth.uid()
+  order by tag;
+$$;

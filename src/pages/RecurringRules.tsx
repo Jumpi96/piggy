@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, ensureRecurringGenerated, fetchCurrencies, fetchDistinctTags, fetchCreditCards } from '../lib/api';
+import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, cleanupFutureRecurring, fetchCurrencies, fetchDistinctTags, fetchCreditCards } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
 import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import { cn } from '../lib/utils';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
-import { Plus, Trash2, Edit2, RefreshCw, Loader2, Info, Calendar } from 'lucide-react';
+import { Plus, Trash2, Edit2, RefreshCw, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
 
 const SCHEDULE_TYPES = [
     { value: 'monthly_day', label: 'Monthly on Date' },
@@ -85,14 +85,12 @@ export function RecurringRulesPage() {
     const handleGenerate = async () => {
         setIsGenerating(true);
         try {
-            const future = new Date();
-            future.setMonth(future.getMonth() + 24); // Generator for 24 months
-            await ensureRecurringGenerated(formatLocalDate(future));
-            alert("Generated transactions for the next 24 months.");
+            await cleanupFutureRecurring();
+            alert("Cleaned up old pre-generated transactions. Virtualized transactions are now active.");
             load();
         } catch (err) {
             console.error(err);
-            alert("Failed to generate.");
+            alert("Failed to cleanup.");
         } finally {
             setIsGenerating(false);
         }
@@ -125,10 +123,7 @@ export function RecurringRulesPage() {
             resetForm();
             load();
 
-            // Auto run generation to sync changes
-            const future = new Date();
-            future.setMonth(future.getMonth() + 24);
-            await ensureRecurringGenerated(formatLocalDate(future));
+            // Changes are immediately reflected via virtualization
         } catch (err) {
             console.error(err);
             alert("Failed to save rule");
@@ -162,10 +157,7 @@ export function RecurringRulesPage() {
         try {
             await deleteRecurringRule(id);
 
-            // Regenerate to clean up future transactions
-            const future = new Date();
-            future.setMonth(future.getMonth() + 24);
-            await ensureRecurringGenerated(formatLocalDate(future));
+            // Changes are immediately reflected via virtualization
 
             load();
         } catch (err) {
@@ -178,22 +170,35 @@ export function RecurringRulesPage() {
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold">Recurring Rules</h1>
-                    <p className="text-sm text-gray-500">Automate your finances (24-month horizon)</p>
-                    <p className="text-xs text-gray-400 mt-1 max-w-2xl">
-                        Rules control future transactions. Edit/delete a rule to update/remove all future transactions. Past transactions remain unchanged.
-                    </p>
+                <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-2xl font-bold text-zinc-900 dark:text-white">Recurring Rules</h1>
+                        <div className="group relative">
+                            <button className="p-1 text-zinc-400 hover:text-emerald-500 transition-colors">
+                                <HelpCircle className="w-4 h-4" />
+                            </button>
+                            <div className="absolute left-0 top-full mt-2 w-72 p-4 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-xl z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                                <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">How it works</h3>
+                                <ul className="space-y-3">
+                                    <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Deleting a rule</strong>
+                                        Future occurrences disappear. Past manual edits (overrides) are safely kept in history.
+                                    </li>
+                                    <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Modifying a rule</strong>
+                                        Changes apply to all future dates. Existing fixed transactions remain as they are.
+                                    </li>
+                                    <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Ending a rule</strong>
+                                        Transactions stop appearing naturally after your chosen end date.
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-sm text-zinc-500 font-medium">Automate your financial tracking</p>
                 </div>
                 <div className="flex gap-2">
-                    <button
-                        onClick={handleGenerate}
-                        disabled={isGenerating}
-                        className="p-2 text-gray-500 hover:text-emerald-600 border dark:border-zinc-700 rounded-lg hover:border-emerald-200 transition-colors"
-                        title="Sync / Generate (24 Months)"
-                    >
-                        <RefreshCw className={cn("w-5 h-5", isGenerating && "animate-spin")} />
-                    </button>
                     <button
                         onClick={() => { resetForm(); setShowForm(true); }}
                         className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"

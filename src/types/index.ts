@@ -41,6 +41,7 @@ export interface RecurringRule {
     end_date?: string | null;
     active: boolean;
     note?: string | null;
+    exception_dates?: string[] | null;
     created_at: string;
     deleted_at?: string | null;
 }
@@ -60,6 +61,7 @@ export interface Transaction {
     credit_card_id?: string | null;
     credit_card?: { name: string } | null;
     recurring_rule_id?: string | null;
+    original_date?: string | null;
     to_be_balanced: boolean;
     note?: string | null;
     created_at: string;
