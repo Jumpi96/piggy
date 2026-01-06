@@ -4,6 +4,8 @@ import type { CreditCard, Currency, Parameter } from '../types';
 import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
+const DEBUG_FLAG_KEY = 'piggy_debug_ui';
+
 export function SettingsPage() {
     const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general'>('cards');
 
@@ -61,6 +63,8 @@ export function SettingsPage() {
 function GeneralSettings() {
     const [apd, setApd] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
+    const [debugEnabled, setDebugEnabled] = useState(false);
+    const [debugError, setDebugError] = useState<string | null>(null);
 
     useEffect(() => {
         async function load() {
@@ -78,6 +82,14 @@ function GeneralSettings() {
         load();
     }, []);
 
+    useEffect(() => {
+        try {
+            setDebugEnabled(localStorage.getItem(DEBUG_FLAG_KEY) === '1');
+        } catch (err) {
+            setDebugError('Local storage is not available');
+        }
+    }, []);
+
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -86,6 +98,22 @@ function GeneralSettings() {
         } catch (err) {
             console.error(err);
             alert("Failed to save settings");
+        }
+    };
+
+    const handleToggleDebug = () => {
+        try {
+            const next = !debugEnabled;
+            if (next) {
+                localStorage.setItem(DEBUG_FLAG_KEY, '1');
+            } else {
+                localStorage.removeItem(DEBUG_FLAG_KEY);
+            }
+            setDebugEnabled(next);
+            setDebugError(null);
+            window.dispatchEvent(new Event('piggy-debug-change'));
+        } catch (err) {
+            setDebugError('Failed to update debug setting');
         }
     };
 
@@ -122,6 +150,27 @@ function GeneralSettings() {
                         Save Settings
                     </button>
                 </form>
+            </div>
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800">
+                <h3 className="text-lg font-bold mb-2">Debug</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                    Enable the in-app debug overlay to inspect offline storage and sync status.
+                </p>
+                <button
+                    type="button"
+                    onClick={handleToggleDebug}
+                    className={cn(
+                        "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                        debugEnabled
+                            ? "bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-zinc-800 dark:text-gray-300"
+                    )}
+                >
+                    {debugEnabled ? 'Disable Debug Overlay' : 'Enable Debug Overlay'}
+                </button>
+                {debugError && (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-2">{debugError}</p>
+                )}
             </div>
         </div>
     );

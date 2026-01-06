@@ -1,8 +1,19 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useOfflineStatus, formatLastSync } from '../lib/offline/network';
+import { getCurrentUserId, getLastSyncTimestamp, getDatabaseAsync, isUsingPersistence } from '../lib/offline';
+
+const DEBUG_FLAG_KEY = 'piggy_debug_ui';
+
+function readDebugFlag(): boolean {
+    try {
+        return localStorage.getItem(DEBUG_FLAG_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
 
 function SyncStatusIndicator({ compact = false }: { compact?: boolean }) {
     const { isOnline, isSyncing, lastSyncAt, pendingChanges, syncError, manualSync } = useOfflineStatus();
@@ -85,9 +96,216 @@ function SyncStatusIndicator({ compact = false }: { compact?: boolean }) {
     );
 }
 
+type DebugInfo = {
+    lastUpdated: string;
+    localStorageAvailable: boolean;
+    localStorageUserId: string | null;
+    localStorageLastSync: string | null;
+    derivedUserId: string | null;
+    derivedLastSync: string | null;
+    isUsingPersistence: boolean;
+    tableCounts: Array<{ table: string; count: number }>;
+    dbError: string | null;
+    storagePersisted: boolean | null;
+    storageEstimate: { usage: number; quota: number } | null;
+    deriveError: string | null;
+};
+
+function DebugPanel({ onClose }: { onClose: () => void }) {
+    const { isOnline, isSyncing, lastSyncAt, pendingChanges, syncError, isHydrated } = useOfflineStatus();
+    const [info, setInfo] = useState<DebugInfo | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const refresh = useCallback(async () => {
+        setIsLoading(true);
+        const now = new Date().toISOString();
+        let localStorageAvailable = true;
+        let localStorageUserId: string | null = null;
+        let localStorageLastSync: string | null = null;
+        let derivedUserId: string | null = null;
+        let derivedLastSync: string | null = null;
+        let deriveError: string | null = null;
+        let dbError: string | null = null;
+        const tableCounts: Array<{ table: string; count: number }> = [];
+
+        try {
+            const testKey = '__piggy_ls_test__';
+            localStorage.setItem(testKey, '1');
+            localStorage.removeItem(testKey);
+        } catch (err) {
+            localStorageAvailable = false;
+        }
+
+        if (localStorageAvailable) {
+            try {
+                localStorageUserId = localStorage.getItem('piggy_user_id');
+                localStorageLastSync = localStorage.getItem('piggy_last_sync');
+            } catch (err) {
+                localStorageAvailable = false;
+            }
+        }
+
+        try {
+            [derivedUserId, derivedLastSync] = await Promise.all([
+                getCurrentUserId(),
+                getLastSyncTimestamp()
+            ]);
+        } catch (err) {
+            deriveError = err instanceof Error ? err.message : String(err);
+        }
+
+        try {
+            const db = await getDatabaseAsync();
+            const tables = ['parameters', 'exchange_rates', 'credit_cards', 'recurring_rules', 'transactions'];
+            for (const table of tables) {
+                const result = await db.query<{ count: string }>(`
+                    SELECT COUNT(*) as count FROM ${table}
+                `);
+                const count = parseInt(result.rows[0]?.count || '0', 10);
+                tableCounts.push({ table, count: Number.isNaN(count) ? 0 : count });
+            }
+        } catch (err) {
+            dbError = err instanceof Error ? err.message : String(err);
+        }
+
+        let storagePersisted: boolean | null = null;
+        let storageEstimate: { usage: number; quota: number } | null = null;
+        if (navigator.storage?.persisted) {
+            try {
+                storagePersisted = await navigator.storage.persisted();
+            } catch {
+                storagePersisted = null;
+            }
+        }
+        if (navigator.storage?.estimate) {
+            try {
+                const estimate = await navigator.storage.estimate();
+                if (typeof estimate.usage === 'number' && typeof estimate.quota === 'number') {
+                    storageEstimate = { usage: estimate.usage, quota: estimate.quota };
+                }
+            } catch {
+                storageEstimate = null;
+            }
+        }
+
+        setInfo({
+            lastUpdated: now,
+            localStorageAvailable,
+            localStorageUserId,
+            localStorageLastSync,
+            derivedUserId,
+            derivedLastSync,
+            isUsingPersistence: isUsingPersistence(),
+            tableCounts,
+            dbError,
+            storagePersisted,
+            storageEstimate,
+            deriveError
+        });
+        setIsLoading(false);
+    }, []);
+
+    useEffect(() => {
+        refresh();
+    }, [refresh]);
+
+    const formatBytes = (value: number) => {
+        if (value < 1024) return `${value} B`;
+        const kb = value / 1024;
+        if (kb < 1024) return `${kb.toFixed(1)} KB`;
+        const mb = kb / 1024;
+        if (mb < 1024) return `${mb.toFixed(1)} MB`;
+        const gb = mb / 1024;
+        return `${gb.toFixed(2)} GB`;
+    };
+
+    return (
+        <div className="fixed bottom-24 md:bottom-4 right-2 left-2 md:left-auto z-50 max-w-md">
+            <div className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900/40 rounded-xl shadow-lg p-3 text-xs">
+                <div className="flex items-center justify-between mb-2">
+                    <span className="font-semibold text-amber-700 dark:text-amber-300">Debug</span>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={refresh}
+                            className="px-2 py-1 rounded-md bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
+                        >
+                            {isLoading ? 'Loading...' : 'Refresh'}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="px-2 py-1 rounded-md bg-gray-100 dark:bg-zinc-800 text-gray-600 dark:text-gray-300"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+                <div className="space-y-1 font-mono">
+                    <div className="flex justify-between gap-2"><span>online</span><span>{isOnline ? 'true' : 'false'}</span></div>
+                    <div className="flex justify-between gap-2"><span>syncing</span><span>{isSyncing ? 'true' : 'false'}</span></div>
+                    <div className="flex justify-between gap-2"><span>sync error</span><span>{syncError || 'none'}</span></div>
+                    <div className="flex justify-between gap-2"><span>pending</span><span>{pendingChanges}</span></div>
+                    <div className="flex justify-between gap-2"><span>hydrated</span><span>{isHydrated ? 'true' : 'false'}</span></div>
+                    <div className="flex justify-between gap-2"><span>last sync</span><span>{lastSyncAt ? lastSyncAt.toISOString() : 'null'}</span></div>
+                    <div className="flex justify-between gap-2"><span>ls available</span><span>{info?.localStorageAvailable ? 'true' : 'false'}</span></div>
+                    <div className="flex justify-between gap-2"><span>ls user_id</span><span>{info?.localStorageUserId || 'null'}</span></div>
+                    <div className="flex justify-between gap-2"><span>ls last_sync</span><span>{info?.localStorageLastSync || 'null'}</span></div>
+                    <div className="flex justify-between gap-2"><span>derived user_id</span><span>{info?.derivedUserId || 'null'}</span></div>
+                    <div className="flex justify-between gap-2"><span>derived last_sync</span><span>{info?.derivedLastSync || 'null'}</span></div>
+                    <div className="flex justify-between gap-2"><span>persistence</span><span>{info?.isUsingPersistence ? 'true' : 'false'}</span></div>
+                    {info && info.storagePersisted !== null && (
+                        <div className="flex justify-between gap-2"><span>storage persisted</span><span>{info.storagePersisted ? 'true' : 'false'}</span></div>
+                    )}
+                    {info?.storageEstimate && (
+                        <div className="flex justify-between gap-2">
+                            <span>storage usage</span>
+                            <span>{formatBytes(info.storageEstimate.usage)} / {formatBytes(info.storageEstimate.quota)}</span>
+                        </div>
+                    )}
+                    {info?.tableCounts && info.tableCounts.length > 0 && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                            {info.tableCounts.map(({ table, count }) => (
+                                <span key={table} className="px-2 py-1 rounded bg-gray-100 dark:bg-zinc-800">
+                                    {table}:{count}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+                    {(info?.dbError || info?.deriveError) && (
+                        <div className="pt-1 text-red-600 dark:text-red-400">
+                            {info?.dbError ? `db error: ${info.dbError}` : ''}
+                            {info?.deriveError ? `derive error: ${info.deriveError}` : ''}
+                        </div>
+                    )}
+                    <div className="text-[10px] text-gray-400">updated: {info?.lastUpdated || '...'}</div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function Layout() {
     const location = useLocation();
+    const debugFromQuery = new URLSearchParams(location.search).get('debug') === '1';
+    const [debugEnabled, setDebugEnabled] = useState(() => debugFromQuery || readDebugFlag());
     // const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+    useEffect(() => {
+        if (debugFromQuery) {
+            setDebugEnabled(true);
+            return;
+        }
+        setDebugEnabled(readDebugFlag());
+    }, [debugFromQuery]);
+
+    useEffect(() => {
+        const handleDebugChange = () => {
+            if (!debugFromQuery) {
+                setDebugEnabled(readDebugFlag());
+            }
+        };
+        window.addEventListener('piggy-debug-change', handleDebugChange);
+        return () => window.removeEventListener('piggy-debug-change', handleDebugChange);
+    }, [debugFromQuery]);
 
     const navItems = [
         { href: '/', icon: LayoutDashboard, label: 'Overview' },
@@ -136,6 +354,16 @@ export function Layout() {
                         <SyncStatusIndicator compact />
                     </div>
                 </div>
+                {debugEnabled && (
+                    <DebugPanel
+                        onClose={() => {
+                            try {
+                                localStorage.removeItem(DEBUG_FLAG_KEY);
+                            } catch {}
+                            setDebugEnabled(false);
+                        }}
+                    />
+                )}
                 <Outlet />
             </main>
 
