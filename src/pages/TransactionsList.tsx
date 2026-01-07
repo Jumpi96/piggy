@@ -126,15 +126,15 @@ export function TransactionsList() {
         if (!term) return transactions;
 
         if (term.startsWith('tag:')) {
-            const tag = term.slice(4);
-            return transactions.filter(t => t.tag.toLowerCase() === tag);
+            const tag = term.slice(4).trim();
+            return transactions.filter(t => t.tag.toLowerCase().trim() === tag);
         }
         if (term.startsWith('category:')) {
-            const cat = term.slice(9);
-            return transactions.filter(t => t.category.toLowerCase() === cat);
+            const cat = term.slice(9).trim();
+            return transactions.filter(t => t.category.toLowerCase().trim() === cat);
         }
         if (term.startsWith('balance:')) {
-            const val = term.slice(8);
+            const val = term.slice(8).trim();
             return transactions.filter(t => String(t.to_be_balanced) === val);
         }
 

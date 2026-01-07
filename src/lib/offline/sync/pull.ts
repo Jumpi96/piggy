@@ -238,13 +238,16 @@ async function hydrateTablePaginated(
     let offset = 0;
     let hasMore = true;
     let totalRecords = 0;
+    const pkColumn = getPrimaryKeyColumn(table);
+
 
     while (hasMore) {
         const { data, error } = await supabase
             .from(table)
             .select('*')
             .range(offset, offset + pageSize - 1)
-            .order('created_at', { ascending: true });
+            .order('created_at', { ascending: true })
+            .order(pkColumn, { ascending: true });
 
         if (error) throw error;
 
@@ -252,6 +255,7 @@ async function hydrateTablePaginated(
             hasMore = false;
             break;
         }
+
 
         for (const record of data) {
             await upsertLocalRecord(db, table, record);
