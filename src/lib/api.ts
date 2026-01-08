@@ -141,7 +141,7 @@ export async function updateCreditCard(id: string, updates: Partial<CreditCard>)
     const db = await getDatabaseAsync();
     const timestamp = now();
 
-    const keys = Object.keys(updates).filter(k => k !== 'id' && k !== 'user_id');
+    const keys = Object.keys(updates).filter(k => k !== 'id' && k !== 'user_id' && k !== 'created_at' && k !== 'updated_at');
     if (keys.length === 0) return;
 
     const setClause = keys.map((k, i) => `${k} = $${i + 1}`).join(', ');
@@ -576,7 +576,7 @@ export async function updateRecurringRule(id: string, updates: Partial<Recurring
     let paramIndex = 2;
 
     for (const [key, value] of Object.entries(updates)) {
-        if (key === 'id' || key === 'user_id' || key === 'created_at') continue;
+        if (key === 'id' || key === 'user_id' || key === 'created_at' || key === 'updated_at') continue;
 
         setClauses.push(`${key} = $${paramIndex}`);
         if (key === 'schedule_config' || key === 'exception_dates') {
