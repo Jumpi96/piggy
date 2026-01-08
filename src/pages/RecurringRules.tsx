@@ -153,6 +153,27 @@ export function RecurringRulesPage() {
     };
 
 
+    const [showPast, setShowPast] = useState(false);
+
+    // Filter & Sort
+    const today = getTodayLocalDate();
+
+    // Helper to check if rule is "past" (inactive or ended)
+    const isPast = (rule: RecurringRule) => {
+        if (!rule.active) return true;
+        if (rule.end_date && rule.end_date < today) return true;
+        return false;
+    };
+
+    const activeRules = rules
+        .filter(r => !isPast(r))
+        .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+    const pastRules = rules
+        .filter(r => isPast(r))
+        .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
             <div className="flex items-center justify-between">
@@ -199,68 +220,53 @@ export function RecurringRulesPage() {
                     <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
                 </div>
             ) : (
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    {rules.map(rule => (
-                        <div key={rule.id} className={cn(
-                            "bg-white dark:bg-zinc-900 p-5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm relative transition-all",
-                            (!rule.active || (rule.end_date && rule.end_date < getTodayLocalDate())) && "opacity-60 bg-gray-50 dark:bg-zinc-950"
-                        )}>
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="space-y-1">
-                                    <h3 className="font-bold text-lg leading-tight">{rule.tag}</h3>
-                                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{rule.category}</p>
-                                </div>
-                                <div className="flex gap-1 ml-2">
-                                    <button onClick={() => handleEdit(rule)} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
-                                        <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button onClick={() => handleDelete(rule.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete Rule">
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
+                <div className="space-y-8">
+                    {/* Active Rules */}
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {activeRules.map(rule => (
+                            <RuleCard
+                                key={rule.id}
+                                rule={rule}
+                                onEdit={() => handleEdit(rule)}
+                                onDelete={() => handleDelete(rule.id)}
+                                creditCards={creditCards}
+                            />
+                        ))}
+                        {activeRules.length === 0 && (
+                            <div className="md:col-span-3 text-center p-12 text-gray-500 border-2 border-dashed border-gray-100 dark:border-zinc-800 rounded-xl">
+                                <Plus className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+                                <p>No active recurring rules.</p>
+                                <button onClick={() => setShowForm(true)} className="mt-4 text-emerald-600 font-medium hover:underline text-sm">Create your first rule</button>
                             </div>
+                        )}
+                    </div>
 
-                            <div className="space-y-2">
-                                <div className="flex items-baseline gap-2">
-                                    <span className={cn(
-                                        "text-lg font-bold font-mono",
-                                        rule.direction === 'income' ? "text-sky-600" : "text-red-600"
-                                    )}>
-                                        {rule.direction === 'income' ? '+' : '-'}{rule.currency_code} {(rule.amount_cents / 100).toFixed(2)}
-                                    </span>
+                    {/* Past Rules Toggle */}
+                    {pastRules.length > 0 && (
+                        <div className="space-y-4 pt-4 border-t border-dashed border-gray-200 dark:border-zinc-800">
+                            <button
+                                onClick={() => setShowPast(!showPast)}
+                                className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                            >
+                                <div className={cn("p-1 rounded transition-transform duration-200", showPast && "rotate-90")}>
+                                    <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-b-[8px] border-b-current rotate-90" />
                                 </div>
+                                {showPast ? 'Hide' : 'Show'} {pastRules.length} Past Rules
+                            </button>
 
-                                {rule.note && (
-                                    <div className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-lg italic">
-                                        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                                        <span className="line-clamp-2">{rule.note}</span>
-                                    </div>
-                                )}
-
-                                <div className="text-[10px] text-gray-400 pt-2 border-t dark:border-zinc-800 flex flex-col gap-1">
-                                    <div className="flex justify-between">
-                                        <span>
-                                            {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type.replace(/_/g, ' ')}
-                                        </span>
-                                        <span className="capitalize">
-                                            {rule.payment_method === 'card'
-                                                ? (creditCards.find(c => c.id === rule.credit_card_id)?.name || 'Card')
-                                                : 'Cash'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between italic">
-                                        <span>Start: {rule.start_date}</span>
-                                        {rule.end_date && <span>End: {rule.end_date}</span>}
-                                    </div>
+                            {showPast && (
+                                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 opacity-60 grayscale-[0.5] hover:grayscale-0 transition-all duration-300">
+                                    {pastRules.map(rule => (
+                                        <RuleCard
+                                            key={rule.id}
+                                            rule={rule}
+                                            onEdit={() => handleEdit(rule)}
+                                            onDelete={() => handleDelete(rule.id)}
+                                            creditCards={creditCards}
+                                        />
+                                    ))}
                                 </div>
-                            </div>
-                        </div>
-                    ))}
-                    {rules.length === 0 && (
-                        <div className="md:col-span-3 text-center p-12 text-gray-500 border-2 border-dashed border-gray-100 dark:border-zinc-800 rounded-xl">
-                            <Plus className="w-8 h-8 mx-auto mb-3 text-gray-300" />
-                            <p>No recurring rules yet.</p>
-                            <button onClick={() => setShowForm(true)} className="mt-4 text-emerald-600 font-medium hover:underline text-sm">Create your first rule</button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -521,6 +527,65 @@ export function RecurringRulesPage() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+function RuleCard({ rule, onEdit, onDelete, creditCards }: { rule: RecurringRule, onEdit: () => void, onDelete: () => void, creditCards: CreditCard[] }) {
+    return (
+        <div className={cn(
+            "bg-white dark:bg-zinc-900 p-5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm relative transition-all",
+            (!rule.active || (rule.end_date && rule.end_date < getTodayLocalDate())) && "opacity-60 bg-gray-50 dark:bg-zinc-950"
+        )}>
+            <div className="flex justify-between items-start mb-3">
+                <div className="space-y-1">
+                    <h3 className="font-bold text-lg leading-tight">{rule.tag}</h3>
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">{rule.category}</p>
+                </div>
+                <div className="flex gap-1 ml-2">
+                    <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete Rule">
+                        <Trash2 className="w-4 h-4" />
+                    </button>
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <div className="flex items-baseline gap-2">
+                    <span className={cn(
+                        "text-lg font-bold font-mono",
+                        rule.direction === 'income' ? "text-sky-600" : "text-red-600"
+                    )}>
+                        {rule.direction === 'income' ? '+' : '-'}{rule.currency_code} {(rule.amount_cents / 100).toFixed(2)}
+                    </span>
+                </div>
+
+                {rule.note && (
+                    <div className="flex items-start gap-1.5 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-zinc-800/50 p-2 rounded-lg italic">
+                        <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        <span className="line-clamp-2">{rule.note}</span>
+                    </div>
+                )}
+
+                <div className="text-[10px] text-gray-400 pt-2 border-t dark:border-zinc-800 flex flex-col gap-1">
+                    <div className="flex justify-between">
+                        <span>
+                            {rule.schedule_type === 'monthly_day' ? 'Monthly' : rule.schedule_type.replace(/_/g, ' ')}
+                        </span>
+                        <span className="capitalize">
+                            {rule.payment_method === 'card'
+                                ? (creditCards.find(c => c.id === rule.credit_card_id)?.name || 'Card')
+                                : 'Cash'}
+                        </span>
+                    </div>
+                    <div className="flex justify-between italic">
+                        <span>Start: {rule.start_date}</span>
+                        {rule.end_date && <span>End: {rule.end_date}</span>}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
