@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 import { TagBarChart } from '../components/charts/TagBarChart';
 import { aggregateByCategory, aggregateByTag } from '../lib/chartUtils';
+import { DailySpendingChart } from '../components/charts/DailySpendingChart';
 import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 export function Overview() {
@@ -396,7 +397,6 @@ export function Overview() {
                         )}
                     </div>
 
-                    {/* Projection Table */}
                     {projectionDays.length > 0 && (
                         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 overflow-hidden">
                             <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-700 flex items-center gap-2">
@@ -417,6 +417,27 @@ export function Overview() {
                             </div>
                         </div>
                     )}
+
+                    {/* Daily Spending Chart - Cash only, excludes recurring & credit cards */}
+                    <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <TrendingDown className="w-4 h-4 text-orange-500" />
+                                <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                                    Daily Cash Spending
+                                </h3>
+                            </div>
+                            <span className="text-xs text-zinc-400 font-mono">
+                                excl. recurring, cards, to-balance
+                            </span>
+                        </div>
+                        <div className="h-[280px]">
+                            <DailySpendingChart
+                                transactions={transactions}
+                                apd={apd}
+                            />
+                        </div>
+                    </div>
 
                     {/* Empty State */}
                     {transactions.length === 0 && (
