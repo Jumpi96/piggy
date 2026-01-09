@@ -1,7 +1,8 @@
-import { pullChanges, initialHydration, type PullResult } from './pull';
+import { pullChanges, initialHydration, fullTableResync, type PullResult } from './pull';
 import { pushChanges, type PushResult } from './push';
 import { getPendingChangesCount } from './queue';
 import { getLastSyncTimestamp } from '../database';
+import { checkReconciliation } from './reconcile';
 
 export interface SyncResult {
     success: boolean;
@@ -69,6 +70,15 @@ export async function runSync(): Promise<SyncResult> {
 
         // Then pull - get latest server state
         const pullResult = await pullChanges();
+
+        // Reconciliation - check counts match between local and server
+        const reconcileResult = await checkReconciliation();
+        if (reconcileResult.mismatches.length > 0) {
+            console.log('[Sync] Reconciliation found mismatches, triggering full re-pull');
+            for (const table of reconcileResult.mismatches) {
+                await fullTableResync(table);
+            }
+        }
 
         const duration = Date.now() - startTime;
         const success = pushResult.success && pullResult.success;
@@ -226,3 +236,5 @@ export { trackChange, getPendingChanges, getPendingChangesCount, subscribePendin
 export type { PendingChange, OperationType } from './queue';
 export type { PullResult } from './pull';
 export type { PushResult } from './push';
+export { checkReconciliation } from './reconcile';
+export type { ReconcileResult } from './reconcile';

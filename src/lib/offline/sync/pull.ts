@@ -268,3 +268,33 @@ async function hydrateTablePaginated(
 
     console.log(`[Sync] Hydrated ${table}: ${totalRecords} records (paginated)`);
 }
+
+/**
+ * Performs a full resync of a single table.
+ * Clears local data and re-downloads everything from server.
+ * Used when reconciliation detects a count mismatch.
+ */
+export async function fullTableResync(table: SyncTableName): Promise<number> {
+    console.log(`[Sync] Starting full resync for ${table}...`);
+    const db = await getDatabaseAsync();
+
+    // Clear local table data
+    await db.query(`DELETE FROM ${table}`);
+    console.log(`[Sync] Cleared local ${table} table`);
+
+    // Re-hydrate from server
+    if (table === 'transactions') {
+        await hydrateTablePaginated(db, table);
+    } else {
+        await hydrateTable(db, table);
+    }
+
+    // Get new count
+    const countResult = await db.query<{ count: number }>(
+        `SELECT COUNT(*)::int as count FROM ${table}`
+    );
+    const newCount = countResult.rows[0]?.count ?? 0;
+
+    console.log(`[Sync] Full resync completed for ${table}: ${newCount} records`);
+    return newCount;
+}

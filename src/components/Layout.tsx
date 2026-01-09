@@ -367,7 +367,7 @@ export function Layout() {
             </main>
 
             {/* Bottom Nav (Mobile) */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-950 border-t border-gray-200 dark:border-zinc-800 flex items-center overflow-x-auto flex-nowrap z-50 safe-area-bottom scrollbar-none pt-4 pb-1">
+            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-950 border-t border-gray-200 dark:border-zinc-800 flex items-center overflow-x-auto flex-nowrap z-50 safe-area-bottom scrollbar-none pt-2">
                 {navItems.map((item) => (
                     <Link
                         key={item.href}
