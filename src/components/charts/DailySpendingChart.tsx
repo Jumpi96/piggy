@@ -49,7 +49,8 @@ export function DailySpendingChart({ transactions, apd }: Props) {
         !t.to_be_balanced &&
         !t.recurring_rule_id &&
         t.payment_method !== 'card' &&
-        !t.credit_card_id
+        !t.credit_card_id &&
+        !t.tag?.startsWith('Ahorro#')
     );
 
     // Group by day of month
@@ -93,7 +94,7 @@ export function DailySpendingChart({ transactions, apd }: Props) {
             <div className="h-full flex items-center justify-center text-sm text-zinc-400 flex-col gap-2">
                 <span>No cash spending data</span>
                 <span className="text-xs opacity-60 text-center">
-                    Excludes: recurring rules, credit cards, to-be-balanced
+                    Excludes: recurring rules, credit cards, to-be-balanced, savings
                 </span>
             </div>
         );

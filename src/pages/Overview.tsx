@@ -428,7 +428,7 @@ export function Overview() {
                                 </h3>
                             </div>
                             <span className="text-xs text-zinc-400 font-mono">
-                                excl. recurring, cards, to-balance
+                                excl. recurring, cards, to-balance, savings
                             </span>
                         </div>
                         <div className="h-[280px]">
