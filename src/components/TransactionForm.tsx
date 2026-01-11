@@ -81,6 +81,28 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     }, []);
 
 
+    const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === '=') {
+            e.preventDefault();
+            try {
+                // Only allow numbers and basic math operators
+                const cleanExpr = amount.replace(/[^-+/()*.\d]/g, '');
+                if (!cleanExpr) return;
+
+                // Safe evaluation using Function constructor (better than eval for simple math)
+                // We wrap it to ensure it only returns a number
+                const result = new Function(`return (${cleanExpr})`)();
+
+                if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+                    setAmount((Math.round(result * 100) / 100).toString());
+                }
+            } catch (err) {
+                // "If it fails, no problem" - do nothing on error
+                console.error("Calculator error:", err);
+            }
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -257,10 +279,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                 <div className="col-span-2 space-y-2">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
                     <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
+                        onKeyDown={handleAmountKeyDown}
                         placeholder="0.00"
                         className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-xl font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
                         required
