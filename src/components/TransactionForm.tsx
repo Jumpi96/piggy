@@ -211,7 +211,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     const filteredTags = allTags.filter(t => t.toLowerCase().includes(tag.toLowerCase()));
 
     return (
-        <form onSubmit={handleSubmit} className="max-w-lg mx-auto bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-lg border border-gray-100 dark:border-zinc-800 space-y-6">
+        <form onSubmit={handleSubmit} className="max-w-lg mx-auto bg-white dark:bg-zinc-900 p-6 pb-24 md:pb-6 rounded-xl shadow-lg border border-gray-100 dark:border-zinc-800 space-y-6">
 
             {/* Direction Tabs */}
             <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
