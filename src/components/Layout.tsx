@@ -219,7 +219,7 @@ function DebugPanel({ onClose }: { onClose: () => void }) {
     };
 
     return (
-        <div className="fixed bottom-24 md:bottom-4 right-2 left-2 md:left-auto z-50 max-w-md">
+        <div className="fixed bottom-32 md:bottom-4 right-2 left-2 md:left-auto z-50 max-w-md">
             <div className="bg-white dark:bg-zinc-900 border border-amber-200 dark:border-amber-900/40 rounded-xl shadow-lg p-3 text-xs">
                 <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-amber-700 dark:text-amber-300">Debug</span>
@@ -358,7 +358,7 @@ export function Layout() {
                         onClose={() => {
                             try {
                                 localStorage.removeItem(DEBUG_FLAG_KEY);
-                            } catch {}
+                            } catch { }
                             setDebugEnabled(false);
                         }}
                     />
@@ -367,32 +367,36 @@ export function Layout() {
             </main>
 
             {/* Bottom Nav (Mobile) */}
-            <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-zinc-950 border-t border-gray-200 dark:border-zinc-800 flex items-center overflow-x-auto flex-nowrap z-50 safe-area-bottom scrollbar-none pt-2">
-                {navItems.map((item) => (
-                    <Link
-                        key={item.href}
-                        to={item.href}
-                        className={cn(
-                            "flex flex-col items-center justify-center px-1 py-1 rounded-lg min-w-[72px] shrink-0 transition-transform active:scale-95",
-                            item.special ? "relative -top-4" : "",
-                            location.pathname === item.href
-                                ? "text-emerald-600 dark:text-emerald-400"
-                                : "text-gray-500 dark:text-gray-400"
-                        )}
-                    >
-                        {item.special ? (
-                            <div className="bg-emerald-600 text-white p-3 rounded-full shadow-lg ring-4 ring-white dark:ring-zinc-950">
-                                <item.icon className="w-6 h-6" />
-                            </div>
-                        ) : (
-                            <>
-                                <item.icon className="w-6 h-6" />
-                                <span className="text-[10px] mt-1 font-medium">{item.label}</span>
-                            </>
-                        )}
-                    </Link>
-                ))}
-            </nav>
+            <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 safe-area-bottom bg-white dark:bg-zinc-950 border-t border-gray-200 dark:border-zinc-800 overflow-visible">
+                <div className="relative h-16 overflow-visible">
+                    <nav className="absolute left-0 right-0 bottom-0 h-24 flex items-center overflow-x-auto flex-nowrap scrollbar-none pt-8">
+                        {navItems.map((item) => (
+                            <Link
+                                key={item.href}
+                                to={item.href}
+                                className={cn(
+                                    "flex flex-col items-center justify-center px-1 py-1 rounded-lg min-w-[72px] shrink-0 transition-transform active:scale-95 h-16",
+                                    item.special ? "relative -top-4" : "",
+                                    location.pathname === item.href
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-gray-500 dark:text-gray-400"
+                                )}
+                            >
+                                {item.special ? (
+                                    <div className="bg-emerald-600 text-white p-3 rounded-full shadow-lg ring-4 ring-white dark:ring-zinc-950">
+                                        <item.icon className="w-6 h-6" />
+                                    </div>
+                                ) : (
+                                    <>
+                                        <item.icon className="w-6 h-6" />
+                                        <span className="text-[10px] mt-1 font-medium">{item.label}</span>
+                                    </>
+                                )}
+                            </Link>
+                        ))}
+                    </nav>
+                </div>
+            </div>
         </div>
     );
 }
