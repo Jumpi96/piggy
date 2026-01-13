@@ -19,11 +19,14 @@ export interface SyncState {
     pendingChanges: number;
     error: string | null;
     isHydrated: boolean;
+    lastDataUpdate: number;
 }
 
 // Sync lock to prevent concurrent syncs
 let isSyncing = false;
 let syncListeners: Array<(state: SyncState) => void> = [];
+// Store last data update in memory (persists for session)
+let lastDataUpdate = Date.now();
 
 /**
  * Performs a full sync: push local changes, then pull server changes.
@@ -63,6 +66,8 @@ export async function runSync(): Promise<SyncResult> {
         if (!lastSync) {
             console.log('[Sync] First sync detected, running initial hydration');
             await initialHydration();
+            // Initial hydration definitely brings data
+            lastDataUpdate = Date.now();
         }
 
         // Push first - ensure local changes get to server before pulling
@@ -71,6 +76,11 @@ export async function runSync(): Promise<SyncResult> {
         // Then pull - get latest server state
         const pullResult = await pullChanges();
 
+        // Update data timestamp if we pulled anything new
+        if (pullResult.success && pullResult.recordsProcessed > 0) {
+            lastDataUpdate = Date.now();
+        }
+
         // Reconciliation - check counts match between local and server
         const reconcileResult = await checkReconciliation();
         if (reconcileResult.mismatches.length > 0) {
@@ -78,6 +88,8 @@ export async function runSync(): Promise<SyncResult> {
             for (const table of reconcileResult.mismatches) {
                 await fullTableResync(table);
             }
+            // Mismatches mean we fixed/downloaded data
+            lastDataUpdate = Date.now();
         }
 
         const duration = Date.now() - startTime;
@@ -85,7 +97,7 @@ export async function runSync(): Promise<SyncResult> {
 
         console.log(`[Sync] Complete in ${duration}ms. Success: ${success}`);
 
-        // Notify listeners of new state
+        // Notify listeners of new state (including potentially new lastDataUpdate)
         await updateSyncState(success ? null : 'Sync completed with errors');
 
         return {
@@ -162,15 +174,16 @@ function notifyListeners(partialState: Partial<SyncState>): void {
 }
 
 export async function getSyncState(): Promise<SyncState> {
-    const lastSyncAt = await getLastSyncTimestamp();
+    const lastSyncAtSync = await getLastSyncTimestamp();
     const pendingChanges = await getPendingChangesCount();
 
     return {
         status: isSyncing ? 'syncing' : (navigator.onLine ? 'idle' : 'offline'),
-        lastSyncAt,
+        lastSyncAt: lastSyncAtSync,
         pendingChanges,
         error: null,
-        isHydrated: lastSyncAt !== null
+        isHydrated: lastSyncAtSync !== null, // Renamed variable to avoid conflict
+        lastDataUpdate
     };
 }
 

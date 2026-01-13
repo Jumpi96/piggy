@@ -13,10 +13,15 @@ const SCHEDULE_TYPES = [
     { value: 'every_n_months', label: 'Every N Months' }
 ];
 
+import { useSyncData } from '../hooks/useSyncData';
+
 export function RecurringRulesPage() {
     const [rules, setRules] = useState<RecurringRule[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [showForm, setShowForm] = useState(false);
+
+    // Subscribe to sync data
+    const lastDataUpdate = useSyncData();
 
     // Form State
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -79,7 +84,7 @@ export function RecurringRulesPage() {
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    useEffect(() => { load(); }, []);
+    useEffect(() => { load(); }, [lastDataUpdate]);
 
 
     const handleCalculateEndDate = () => {
@@ -273,7 +278,7 @@ export function RecurringRulesPage() {
             )}
 
             {showForm && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
                     <div className="bg-white dark:bg-zinc-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden border border-gray-100 dark:border-zinc-800 animate-in fade-in zoom-in duration-200">
                         <div className="p-6 border-b border-gray-50 dark:border-zinc-800 flex items-center justify-between">
                             <h2 className="text-xl font-bold">{editingId ? 'Edit Rule' : 'New Recurring Rule'}</h2>
@@ -281,7 +286,7 @@ export function RecurringRulesPage() {
                                 <Plus className="w-6 h-6 text-gray-400 rotate-45" />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+                        <form onSubmit={handleSubmit} className="p-6 pb-24 md:pb-6 space-y-5 max-h-[80vh] overflow-y-auto">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Type</label>

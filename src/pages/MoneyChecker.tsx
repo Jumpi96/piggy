@@ -5,6 +5,8 @@ import { Loader2, Plus, Trash2, Wallet, ArrowRightLeft, Settings2, CheckCircle2,
 import { cn } from '../lib/utils';
 import { formatLocalDate } from '../lib/dates';
 
+import { useSyncData } from '../hooks/useSyncData';
+
 export function MoneyChecker() {
     const [accounts, setAccounts] = useState<Record<string, string>>({});
     const [accountValues, setAccountValues] = useState<Record<string, string>>({});
@@ -17,6 +19,9 @@ export function MoneyChecker() {
     const [isManaging, setIsManaging] = useState(false);
     const [newAccountName, setNewAccountName] = useState('');
     const [newAccountCurrency, setNewAccountCurrency] = useState('ARS');
+
+    // Subscribe to sync data
+    const lastDataUpdate = useSyncData();
 
     useEffect(() => {
         async function load() {
@@ -56,7 +61,7 @@ export function MoneyChecker() {
             }
         }
         load();
-    }, []);
+    }, [lastDataUpdate]);
 
     const convertToUSD = (amount: number, currency: string) => {
         if (currency === 'USD') return amount;

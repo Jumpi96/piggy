@@ -5,6 +5,8 @@ import { Loader2, Calendar, Wallet } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { formatLocalDate, formatLocalMonth, parseLocalDate } from '../lib/dates';
 
+import { useSyncData } from '../hooks/useSyncData';
+
 export function Balance() {
     // Default range: next month to +12 months
     const getInitialRange = () => {
@@ -25,6 +27,9 @@ export function Balance() {
 
     const [apd, setApd] = useState<number>(0);
     const [latestRates, setLatestRates] = useState<ExchangeRate[]>([]);
+
+    // Subscribe to sync data
+    const lastDataUpdate = useSyncData();
 
     useEffect(() => {
         async function load() {
@@ -52,7 +57,7 @@ export function Balance() {
             }
         }
         load();
-    }, [range]);
+    }, [range, lastDataUpdate]);
 
     const formatUSD = (cents: number, isCents = true) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((isCents ? cents / 100 : cents));

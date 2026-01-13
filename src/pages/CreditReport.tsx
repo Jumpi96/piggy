@@ -5,6 +5,7 @@ import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, 
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
+import { useSyncData } from '../hooks/useSyncData';
 
 export function CreditReport() {
     // Default logic: next month if > 15, current month if <= 15
@@ -27,6 +28,9 @@ export function CreditReport() {
     const [isLoading, setIsLoading] = useState(false);
     const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
     const [showChecked, setShowChecked] = useState(false);
+
+    // Subscribe to sync data
+    const lastDataUpdate = useSyncData();
 
     // Modal state
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -69,7 +73,7 @@ export function CreditReport() {
 
     useEffect(() => {
         loadTransactions();
-    }, [selectedCardId, currentMonth]);
+    }, [selectedCardId, currentMonth, lastDataUpdate]);
 
     const toggleCheck = (id: string) => {
         const next = new Set(checkedItems);

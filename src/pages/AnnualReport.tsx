@@ -13,11 +13,16 @@ import { MonthlyTrendsLineChart } from '../components/charts/MonthlyTrendsLineCh
 import { MonthlyBalanceBarChart } from '../components/charts/MonthlyBalanceBarChart';
 import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 
+import { useSyncData } from '../hooks/useSyncData';
+
 export function AnnualReport() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Subscribe to sync data
+  const lastDataUpdate = useSyncData();
 
   useEffect(() => {
     async function load() {
@@ -55,7 +60,7 @@ export function AnnualReport() {
       }
     }
     load();
-  }, [selectedYear]);
+  }, [selectedYear, lastDataUpdate]);
 
   // Computed data
   const expensesByMonth = useMemo(() => aggregateExpensesByMonth(transactions, selectedYear), [transactions, selectedYear]);

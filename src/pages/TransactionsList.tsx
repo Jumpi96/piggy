@@ -6,6 +6,8 @@ import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { formatLocalDate, parseLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
+import { useSyncData } from '../hooks/useSyncData';
+
 export function TransactionsList() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -13,6 +15,9 @@ export function TransactionsList() {
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
     const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
     const [showFuture, setShowFuture] = useState(false);
+
+    // Subscribe to sync data updates
+    const lastDataUpdate = useSyncData();
 
     useEffect(() => {
         const today = new Date();
@@ -23,9 +28,10 @@ export function TransactionsList() {
 
     useEffect(() => {
         loadTransactions();
-    }, [currentMonth]);
+    }, [currentMonth, lastDataUpdate]); // Reload when month changes OR data syncs
 
     async function loadTransactions() {
+        // ... rest of function
         setIsLoading(true);
         try {
             const year = currentMonth.getFullYear();

@@ -9,6 +9,8 @@ import { aggregateByCategory, aggregateByTag } from '../lib/chartUtils';
 import { DailySpendingChart } from '../components/charts/DailySpendingChart';
 import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
+import { useSyncData } from '../hooks/useSyncData';
+
 export function Overview() {
     const [currentMonth, setCurrentMonth] = useState(getPersistentMonth());
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -30,6 +32,8 @@ export function Overview() {
     const [visualizationMode, setVisualizationMode] = useState<'income' | 'expense'>('expense');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [showTopTagsOnly, setShowTopTagsOnly] = useState(true);
+
+    const lastDataUpdate = useSyncData();
 
     const getMonthStr = (d: Date) => {
         const year = d.getFullYear();
@@ -94,7 +98,7 @@ export function Overview() {
             }
         }
         load();
-    }, [currentMonth]);
+    }, [currentMonth, lastDataUpdate]);
 
     const formatMonth = (d: Date) => {
         return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(d);
