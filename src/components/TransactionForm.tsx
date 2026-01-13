@@ -14,7 +14,7 @@ import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, fo
 import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '../lib/utils';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
 export function TransactionForm({ initialData, onSuccess, onCancel }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void }) {
     const navigate = useNavigate();
@@ -41,8 +41,10 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
 
     // Tag Autocomplete State
     const [showTagSuggestions, setShowTagSuggestions] = useState(false);
+    const [isAmountFocused, setIsAmountFocused] = useState(false);
     const tagInputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
+    const amountInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         async function loadData() {
@@ -82,25 +84,38 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
 
 
     const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === '=') {
+        if (e.key === 'Enter' || e.key === '=') {
             e.preventDefault();
-            try {
-                // Only allow numbers and basic math operators
-                const cleanExpr = amount.replace(/[^-+/()*.\d]/g, '');
-                if (!cleanExpr) return;
-
-                // Safe evaluation using Function constructor (better than eval for simple math)
-                // We wrap it to ensure it only returns a number
-                const result = new Function(`return (${cleanExpr})`)();
-
-                if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
-                    setAmount((Math.round(result * 100) / 100).toString());
-                }
-            } catch (err) {
-                // "If it fails, no problem" - do nothing on error
-                console.error("Calculator error:", err);
-            }
+            calculateAmount();
         }
+    };
+
+    const calculateAmount = () => {
+        try {
+            // Only allow numbers and basic math operators
+            const cleanExpr = amount.replace(/[^-+/()*.\d]/g, '');
+            if (!cleanExpr) return;
+
+            // Safe evaluation using Function constructor
+            const result = new Function(`return (${cleanExpr})`)();
+
+            if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
+                setAmount((Math.round(result * 100) / 100).toString());
+            }
+        } catch (err) {
+            console.error("Calculator error:", err);
+        }
+    };
+
+    const insertOperator = (op: string) => {
+        // Prevent double operators
+        const lastChar = amount.slice(-1);
+        if (['+', '-', '*', '/'].includes(lastChar) && ['+', '-', '*', '/'].includes(op)) {
+            setAmount(amount.slice(0, -1) + op);
+        } else {
+            setAmount(amount + op);
+        }
+        amountInputRef.current?.focus();
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -276,16 +291,59 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
 
             {/* Amount & Currency */}
             <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2 space-y-2">
+                <div className="col-span-2 space-y-2 relative">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
+
+                    {/* Calculator Toolbar */}
+                    {isAmountFocused && (
+                        <div className="absolute bottom-full left-0 right-0 mb-2 flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1.5 rounded-lg shadow-sm animate-in slide-in-from-bottom-2 z-10">
+                            {[
+                                { op: '+', icon: Plus },
+                                { op: '-', icon: Minus },
+                                { op: '*', icon: X },
+                                { op: '/', icon: Divide },
+                            ].map(({ op, icon: Icon }) => (
+                                <button
+                                    key={op}
+                                    type="button"
+                                    onClick={() => insertOperator(op)}
+                                    className="flex-1 h-10 flex items-center justify-center bg-white dark:bg-zinc-700 rounded text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 active:bg-gray-200 transition-colors"
+                                >
+                                    <Icon className="w-4 h-4" />
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={calculateAmount}
+                                className="flex-1 h-10 flex items-center justify-center bg-emerald-600 text-white rounded shadow-sm hover:bg-emerald-700 active:bg-emerald-800 transition-colors"
+                            >
+                                <Equal className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
+
                     <input
+                        ref={amountInputRef}
                         type="text"
                         inputMode="decimal"
                         value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
+                        onChange={(e) => {
+                            // Replace comma with dot immediately
+                            const val = e.target.value.replace(/,/g, '.');
+                            // Allow digits, operators, dots, and parens
+                            if (/^[0-9+\-*/().]*$/.test(val)) {
+                                setAmount(val);
+                            }
+                        }}
+                        onFocus={() => setIsAmountFocused(true)}
+                        onBlur={() => {
+                            // Small delay to allow button clicks on the toolbar
+                            setTimeout(() => setIsAmountFocused(false), 200);
+                        }}
                         onKeyDown={handleAmountKeyDown}
                         placeholder="0.00"
                         className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-xl font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                        autoComplete="off"
                         required
                     />
                 </div>

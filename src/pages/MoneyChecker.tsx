@@ -192,11 +192,16 @@ export function MoneyChecker() {
                                     </label>
                                     <div className="relative">
                                         <input
-                                            type="number"
+                                            type="text"
                                             inputMode="decimal"
                                             placeholder="0.00"
                                             value={accountValues[name] || ''}
-                                            onChange={e => setAccountValues({ ...accountValues, [name]: e.target.value })}
+                                            onChange={e => {
+                                                const val = e.target.value.replace(/,/g, '.');
+                                                if (/^[0-9.]*$/.test(val)) {
+                                                    setAccountValues({ ...accountValues, [name]: val });
+                                                }
+                                            }}
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:outline-none transition-all font-mono"
                                         />
                                         <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
