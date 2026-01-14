@@ -60,7 +60,8 @@ export function useSyncState(): SyncState & { refresh: () => Promise<void> } {
         lastSyncAt: null,
         pendingChanges: 0,
         error: null,
-        isHydrated: false
+        isHydrated: false,
+        lastDataUpdate: Date.now()
     });
 
     const refresh = useCallback(async () => {
