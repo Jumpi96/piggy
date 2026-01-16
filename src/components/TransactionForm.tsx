@@ -45,6 +45,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     const tagInputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
     const amountInputRef = useRef<HTMLInputElement>(null);
+    const amountBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         async function loadData() {
@@ -101,6 +102,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
 
             if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
                 setAmount((Math.round(result * 100) / 100).toString());
+                // After successful calculation, we don't refocus, 
+                // allowing the toolbar to disappear on the next tick if it's no longer a calculation
             }
         } catch (err) {
             console.error("Calculator error:", err);
@@ -225,6 +228,10 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
     // Filter tags: match text
     const filteredTags = allTags.filter(t => t.toLowerCase().includes(tag.toLowerCase()));
 
+    // Show calculator if focused OR if there's an ongoing calculation (has operators)
+    const hasCalculation = amount.length > 0 && !/^-?\d*\.?\d*$/.test(amount);
+    const showCalculator = isAmountFocused || hasCalculation;
+
     return (
         <form onSubmit={handleSubmit} className="max-w-lg mx-auto bg-white dark:bg-zinc-900 p-6 pb-24 md:pb-6 rounded-xl shadow-lg border border-gray-100 dark:border-zinc-800 space-y-6">
 
@@ -295,7 +302,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
 
                     {/* Calculator Toolbar */}
-                    {isAmountFocused && (
+                    {showCalculator && (
                         <div className="absolute bottom-full left-0 right-0 mb-2 flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1.5 rounded-lg shadow-sm animate-in slide-in-from-bottom-2 z-10">
                             {[
                                 { op: '+', icon: Plus },
@@ -335,10 +342,13 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                                 setAmount(val);
                             }
                         }}
-                        onFocus={() => setIsAmountFocused(true)}
+                        onFocus={() => {
+                            if (amountBlurTimeoutRef.current) clearTimeout(amountBlurTimeoutRef.current);
+                            setIsAmountFocused(true);
+                        }}
                         onBlur={() => {
                             // Small delay to allow button clicks on the toolbar
-                            setTimeout(() => setIsAmountFocused(false), 200);
+                            amountBlurTimeoutRef.current = setTimeout(() => setIsAmountFocused(false), 200);
                         }}
                         onKeyDown={handleAmountKeyDown}
                         placeholder="0.00"
