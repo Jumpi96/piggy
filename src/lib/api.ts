@@ -668,12 +668,12 @@ export async function cleanupFutureRecurring(): Promise<void> {
 // Month Balance (Local Computation)
 // ============================================================================
 
-export async function computeMonthBalance(month: string): Promise<{ income: number; expense: number; balance: number }> {
+export async function computeMonthBalance(month: string): Promise<{ income: number; expense: number; balance: number; taxes: number }> {
     // month is already YYYY-MM-01 format, use it directly
     const [year, monthNum] = month.split('-').map(Number);
 
     // We fetch a range that includes everything in the month
-    // fetchTransactionsRange uses startDate <= date <= endDate or similar? 
+    // fetchTransactionsRange uses startDate <= date <= endDate or similar?
     // Actually fetchTransactionsRange uses t.date < $3, so we need first of NEXT month
     const nextMonth = monthNum === 12 ? 1 : monthNum + 1;
     const nextYear = monthNum === 12 ? year + 1 : year;
@@ -683,6 +683,7 @@ export async function computeMonthBalance(month: string): Promise<{ income: numb
 
     let income = 0;
     let expense = 0;
+    let taxes = 0;
 
     for (const t of txs) {
         const rate = t.exchange_rate?.rate || 1;
@@ -691,13 +692,17 @@ export async function computeMonthBalance(month: string): Promise<{ income: numb
             income += amount;
         } else {
             expense += amount;
+            if (t.category === 'Taxes') {
+                taxes += amount;
+            }
         }
     }
 
     return {
         income: Math.round(income),
         expense: Math.round(expense),
-        balance: Math.round(income - expense)
+        balance: Math.round(income - expense),
+        taxes: Math.round(taxes)
     };
 }
 

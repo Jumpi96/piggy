@@ -12,6 +12,7 @@ export const CATEGORIES: { name: string; direction: Direction }[] = [
     { name: 'Living', direction: 'expense' },
     { name: 'Debts', direction: 'expense' },
     { name: 'Investments', direction: 'expense' },
+    { name: 'Taxes', direction: 'expense' },
 ];
 
 export const PAYMENT_METHODS = [

@@ -25,6 +25,7 @@ export function Overview() {
     const [totalBalance, setTotalBalance] = useState(0);
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalExpense, setTotalExpense] = useState(0);
+    const [taxes, setTaxes] = useState(0);
     const [toBeBalancedTotal, setToBeBalancedTotal] = useState(0);
     const [availableCash, setAvailableCash] = useState(0);
 
@@ -67,6 +68,7 @@ export function Overview() {
                 setTotalIncome(balanceData.income);
                 setTotalExpense(balanceData.expense);
                 setTotalBalance(balanceData.balance);
+                setTaxes(balanceData.taxes);
                 setLatestRates(rates as ExchangeRate[]);
 
                 const apdParam = params.find(p => p.key === 'amount_per_day');
@@ -108,17 +110,20 @@ export function Overview() {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((isCents ? cents / 100 : cents));
     };
 
-    // Data aggregation for charts
+    // Data aggregation for charts (exclude Taxes from spending insights)
     const categoryData = useMemo(() => {
-        return aggregateByCategory(transactions, visualizationMode);
+        const excludeCategories = visualizationMode === 'expense' ? ['Taxes'] : undefined;
+        return aggregateByCategory(transactions, visualizationMode, excludeCategories);
     }, [transactions, visualizationMode]);
 
     const tagData = useMemo(() => {
+        const excludeCategories = visualizationMode === 'expense' ? ['Taxes'] : undefined;
         return aggregateByTag(
             transactions,
             visualizationMode,
             selectedCategory,
-            showTopTagsOnly ? 10 : undefined
+            showTopTagsOnly ? 10 : undefined,
+            excludeCategories
         );
     }, [transactions, visualizationMode, selectedCategory, showTopTagsOnly]);
 
@@ -272,19 +277,26 @@ export function Overview() {
                                 <TrendingUp className="w-4 h-4" />
                                 <h3 className="text-[10px] font-bold uppercase tracking-wider">Monthly Income</h3>
                             </div>
-                            <p className="text-xl font-bold text-zinc-900 dark:text-white">
-                                {formatUSD(totalIncome)}
-                            </p>
+                            <div>
+                                <p className="text-xl font-bold text-zinc-900 dark:text-white">
+                                    {formatUSD(totalIncome)}
+                                </p>
+                                {taxes > 0 && (
+                                    <p className="text-[10px] text-zinc-400 mt-1">
+                                        (Taxes: {formatUSD(taxes)})
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Expense */}
+                        {/* Expense (excluding Taxes) */}
                         <div className="bg-white dark:bg-zinc-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col justify-between hover:border-red-200 transition-colors">
                             <div className="flex items-center gap-2 text-red-600 mb-2">
                                 <TrendingDown className="w-4 h-4" />
                                 <h3 className="text-[10px] font-bold uppercase tracking-wider">Monthly Expense</h3>
                             </div>
                             <p className="text-xl font-bold text-zinc-900 dark:text-white">
-                                {formatUSD(totalExpense)}
+                                {formatUSD(totalExpense - taxes)}
                             </p>
                         </div>
                     </div>

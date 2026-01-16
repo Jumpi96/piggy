@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { fetchTransactionsRange } from '../lib/api';
 import type { Transaction } from '../types';
-import { Loader2, FileText, TrendingUp, TrendingDown, Wallet, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, FileText, TrendingUp, TrendingDown, Wallet, ChevronLeft, ChevronRight, Receipt } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   aggregateExpensesByMonth,
   aggregateIncomeByCategory,
   aggregateExpensesByCategory,
   calculateMonthlySummary,
+  calculateTotalTaxes,
 } from '../lib/annualReportUtils';
 import { MonthlyTrendsLineChart } from '../components/charts/MonthlyTrendsLineChart';
 import { MonthlyBalanceBarChart } from '../components/charts/MonthlyBalanceBarChart';
@@ -68,15 +69,23 @@ export function AnnualReport() {
   const incomeByCategory = useMemo(() => aggregateIncomeByCategory(transactions), [transactions]);
   const monthlySummary = useMemo(() => calculateMonthlySummary(transactions, selectedYear), [transactions, selectedYear]);
 
-  const totalIncome = useMemo(() => {
+  // Calculate total taxes
+  const totalTaxes = useMemo(() => calculateTotalTaxes(transactions), [transactions]);
+
+  // Gross income (before taxes)
+  const grossIncome = useMemo(() => {
     return transactions
       .filter(t => t.direction === 'income')
       .reduce((sum, t) => sum + (t.amount_cents / (t.exchange_rate?.rate || 1)), 0);
   }, [transactions]);
 
+  // Net income (after taxes)
+  const totalIncome = grossIncome - totalTaxes;
+
+  // Expenses (excluding taxes)
   const totalExpense = useMemo(() => {
     return transactions
-      .filter(t => t.direction === 'expense')
+      .filter(t => t.direction === 'expense' && t.category !== 'Taxes')
       .reduce((sum, t) => sum + (t.amount_cents / (t.exchange_rate?.rate || 1)), 0);
   }, [transactions]);
 
@@ -161,16 +170,24 @@ export function AnnualReport() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Total Income */}
+          <div className={cn(
+            "grid gap-4",
+            totalTaxes > 0 ? "grid-cols-1 md:grid-cols-4" : "grid-cols-1 md:grid-cols-3"
+          )}>
+            {/* Net Income (after taxes) */}
             <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 hover:border-sky-200 transition-colors">
               <div className="flex items-center gap-2 text-sky-600 mb-2">
                 <TrendingUp className="w-5 h-5" />
-                <h3 className="text-sm font-bold uppercase tracking-wider">Total Income</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider">Net Income</h3>
               </div>
               <p className="text-3xl font-bold text-zinc-900 dark:text-white">
                 {formatUSD(totalIncome)}
               </p>
+              {totalTaxes > 0 && (
+                <p className="text-xs text-zinc-400 mt-1">
+                  (After taxes)
+                </p>
+              )}
             </div>
 
             {/* Total Expenses */}
@@ -183,6 +200,19 @@ export function AnnualReport() {
                 {formatUSD(totalExpense)}
               </p>
             </div>
+
+            {/* Taxes Paid (only shown if > 0) */}
+            {totalTaxes > 0 && (
+              <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 hover:border-violet-200 transition-colors">
+                <div className="flex items-center gap-2 text-violet-600 mb-2">
+                  <Receipt className="w-5 h-5" />
+                  <h3 className="text-sm font-bold uppercase tracking-wider">Taxes Paid</h3>
+                </div>
+                <p className="text-3xl font-bold text-zinc-900 dark:text-white">
+                  {formatUSD(totalTaxes)}
+                </p>
+              </div>
+            )}
 
             {/* Net Balance */}
             <div className="bg-white dark:bg-zinc-800 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 hover:border-emerald-200 transition-colors">

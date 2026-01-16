@@ -29,6 +29,7 @@ const expenseCategoryColors: Record<string, string> = {
   'Living': '#ef4444',      // red-500
   'Debts': '#dc2626',       // red-600
   'Investments': '#f59e0b', // amber-500
+  'Taxes': '#7c3aed',       // violet-600
 };
 
 const tagColors = [
@@ -70,12 +71,17 @@ export function getTagColor(index: number): string {
  */
 export function aggregateByCategory(
   transactions: Transaction[],
-  direction: 'income' | 'expense'
+  direction: 'income' | 'expense',
+  excludeCategories?: string[]
 ): CategoryData[] {
   const categoryMap = new Map<string, { value: number; count: number }>();
 
   transactions
-    .filter(t => t.direction === direction)
+    .filter(t => {
+      if (t.direction !== direction) return false;
+      if (excludeCategories?.includes(t.category)) return false;
+      return true;
+    })
     .forEach(t => {
       const existing = categoryMap.get(t.category) || { value: 0, count: 0 };
       categoryMap.set(t.category, {
@@ -101,17 +107,20 @@ export function aggregateByTag(
   transactions: Transaction[],
   direction: 'income' | 'expense',
   selectedCategory?: string | null,
-  limit?: number
+  limit?: number,
+  excludeCategories?: string[]
 ): TagData[] {
   const tagMap = new Map<string, { value: number; count: number }>();
 
   transactions
     .filter(t => {
       // Filter by direction
-      const directionMatch = t.direction === direction;
+      if (t.direction !== direction) return false;
       // Filter by category if selected
-      const categoryMatch = !selectedCategory || t.category === selectedCategory;
-      return directionMatch && categoryMatch;
+      if (selectedCategory && t.category !== selectedCategory) return false;
+      // Exclude specified categories
+      if (excludeCategories?.includes(t.category)) return false;
+      return true;
     })
     .forEach(t => {
       const existing = tagMap.get(t.tag) || { value: 0, count: 0 };

@@ -1,6 +1,9 @@
 import type { Transaction } from '../types';
 import { CATEGORIES } from './constants';
 
+// Categories excluded from expense totals in annual report (treated as income reduction)
+const EXCLUDED_FROM_ANNUAL_EXPENSES = ['Taxes'];
+
 export interface MonthlyExpenseData {
   month: string; // YYYY-MM format
   categories: Record<string, number>; // Category name -> amount in cents
@@ -31,8 +34,11 @@ function convertToUSD(transaction: Transaction): number {
 /**
  * Get expense category names
  */
-function getExpenseCategories(): string[] {
-  return CATEGORIES.filter(c => c.direction === 'expense').map(c => c.name);
+function getExpenseCategories(excludeCategories?: string[]): string[] {
+  return CATEGORIES
+    .filter(c => c.direction === 'expense')
+    .filter(c => !excludeCategories?.includes(c.name))
+    .map(c => c.name);
 }
 
 /**
@@ -43,13 +49,14 @@ function getIncomeCategories(): string[] {
 }
 
 /**
- * Aggregate expenses by month and category
+ * Aggregate expenses by month and category (excludes Taxes)
  */
 export function aggregateExpensesByMonth(
   transactions: Transaction[],
   year: number
 ): MonthlyExpenseData[] {
-  const expenseCategories = getExpenseCategories();
+  // Exclude Taxes from expense categories for annual report
+  const expenseCategories = getExpenseCategories(EXCLUDED_FROM_ANNUAL_EXPENSES);
 
   // Determine max month to show (up to current month if viewing current year)
   const today = new Date();
@@ -68,8 +75,10 @@ export function aggregateExpensesByMonth(
     monthMap.set(monthStr, categoryAmounts);
   }
 
-  // Filter to only expenses and populate actual data
-  const expenseTransactions = transactions.filter(t => t.direction === 'expense');
+  // Filter to only expenses and exclude Taxes
+  const expenseTransactions = transactions.filter(
+    t => t.direction === 'expense' && !EXCLUDED_FROM_ANNUAL_EXPENSES.includes(t.category)
+  );
 
   expenseTransactions.forEach(t => {
     const month = t.date.substring(0, 7); // YYYY-MM
@@ -129,12 +138,13 @@ export function aggregateIncomeByCategory(
 }
 
 /**
- * Aggregate expenses by category for the whole year
+ * Aggregate expenses by category for the whole year (excludes Taxes)
  */
 export function aggregateExpensesByCategory(
   transactions: Transaction[]
 ): IncomeCategoryData[] {
-  const expenseCategories = getExpenseCategories();
+  // Exclude Taxes from expense categories for annual report
+  const expenseCategories = getExpenseCategories(EXCLUDED_FROM_ANNUAL_EXPENSES);
   const categoryMap = new Map<string, number>();
 
   // Initialize all categories with 0
@@ -142,8 +152,10 @@ export function aggregateExpensesByCategory(
     categoryMap.set(cat, 0);
   });
 
-  // Filter to only expenses
-  const expenseTransactions = transactions.filter(t => t.direction === 'expense');
+  // Filter to only expenses and exclude Taxes
+  const expenseTransactions = transactions.filter(
+    t => t.direction === 'expense' && !EXCLUDED_FROM_ANNUAL_EXPENSES.includes(t.category)
+  );
 
   // Sum by category
   expenseTransactions.forEach(t => {
@@ -169,6 +181,7 @@ export function aggregateExpensesByCategory(
 
 /**
  * Calculate monthly summary (income, expense, balance per month)
+ * Taxes are subtracted from income (shown as net income) and excluded from expenses
  */
 export function calculateMonthlySummary(
   transactions: Transaction[],
@@ -181,10 +194,10 @@ export function calculateMonthlySummary(
   const maxMonth = year === currentYear ? currentMonth : 12;
 
   // Initialize months up to maxMonth with zero values
-  const monthMap = new Map<string, { income: number; expense: number }>();
+  const monthMap = new Map<string, { income: number; expense: number; taxes: number }>();
   for (let month = 1; month <= maxMonth; month++) {
     const monthStr = `${year}-${String(month).padStart(2, '0')}`;
-    monthMap.set(monthStr, { income: 0, expense: 0 });
+    monthMap.set(monthStr, { income: 0, expense: 0, taxes: 0 });
   }
 
   // Populate with actual transaction data
@@ -197,21 +210,35 @@ export function calculateMonthlySummary(
       if (t.direction === 'income') {
         monthData.income += amount;
       } else {
-        monthData.expense += amount;
+        if (EXCLUDED_FROM_ANNUAL_EXPENSES.includes(t.category)) {
+          monthData.taxes += amount;
+        } else {
+          monthData.expense += amount;
+        }
       }
     }
   });
 
-  // Convert to array with balance (already sorted due to initialization order)
+  // Convert to array with balance
+  // Income is reduced by taxes, expenses exclude taxes
   const result = Array.from(monthMap.entries())
     .map(([month, data]) => ({
       month,
-      income: data.income,
-      expense: data.expense,
-      balance: data.income - data.expense,
+      income: data.income - data.taxes, // Net income after taxes
+      expense: data.expense,            // Expenses excluding taxes
+      balance: (data.income - data.taxes) - data.expense,
     }));
 
   return result;
+}
+
+/**
+ * Calculate total taxes for the year
+ */
+export function calculateTotalTaxes(transactions: Transaction[]): number {
+  return transactions
+    .filter(t => t.category === 'Taxes')
+    .reduce((sum, t) => sum + convertToUSD(t), 0);
 }
 
 /**
