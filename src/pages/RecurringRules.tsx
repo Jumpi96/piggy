@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRecurringRule, fetchCurrencies, fetchDistinctTags, fetchCreditCards } from '../lib/api';
 import { calculateEndDate } from '../lib/recurrence';
 import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
-import { cn } from '../lib/utils';
+import { cn, normalizeForComparison } from '../lib/utils';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
 import { Plus, Trash2, Edit2, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
@@ -104,7 +104,13 @@ export function RecurringRulesPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const payload = { ...formData };
+            // Normalize tag casing and accents
+            const currentTag = formData.tag || '';
+            const normTag = normalizeForComparison(currentTag);
+            const existingTag = allTags.find(t => normalizeForComparison(t) === normTag);
+            const finalTag = existingTag || currentTag.trim();
+
+            const payload = { ...formData, tag: finalTag };
             if (editingId) {
                 await updateRecurringRule(editingId, payload);
             } else {
@@ -330,13 +336,13 @@ export function RecurringRulesPage() {
                                     autoComplete="off"
                                 />
 
-                                {showTagSuggestions && allTags.filter(t => t.toLowerCase().includes((formData.tag || '').toLowerCase())).length > 0 && (
+                                {showTagSuggestions && allTags.filter(t => normalizeForComparison(t).includes(normalizeForComparison(formData.tag || ''))).length > 0 && (
                                     <div
                                         ref={suggestionsRef}
                                         className="absolute z-10 w-full mt-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg max-h-48 overflow-y-auto"
                                     >
                                         {allTags
-                                            .filter(t => t.toLowerCase().includes((formData.tag || '').toLowerCase()))
+                                            .filter(t => normalizeForComparison(t).includes(normalizeForComparison(formData.tag || '')))
                                             .map((suggestion) => (
                                                 <button
                                                     key={suggestion}

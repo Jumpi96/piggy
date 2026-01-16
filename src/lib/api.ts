@@ -3,6 +3,7 @@ import { trackChange, triggerBackgroundSync } from './offline/sync';
 import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
 import { formatLocalDate, getTodayLocalDate } from './dates';
 import { generateOccurrences, mergeTransactions } from './recurringUtils';
+import { normalizeForComparison } from './utils';
 
 // Transaction Input without system fields
 export type TransactionInput = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'deleted_at'>;
@@ -465,10 +466,22 @@ export async function fetchDistinctTags(): Promise<string[]> {
     const result = await db.query<{ tag: string }>(`
         SELECT DISTINCT tag FROM transactions
         WHERE user_id = $1 AND deleted_at IS NULL
-        ORDER BY tag
     `, [userId]);
 
-    return result.rows.map(r => r.tag);
+    // Normalize tags to be unique case-and-accent-insensitively, keeping the first one found
+    const seen = new Set<string>();
+    const uniqueTags: string[] = [];
+
+    for (const row of result.rows) {
+        if (!row.tag) continue;
+        const norm = normalizeForComparison(row.tag);
+        if (!seen.has(norm)) {
+            seen.add(norm);
+            uniqueTags.push(row.tag.trim());
+        }
+    }
+
+    return uniqueTags.sort((a, b) => a.localeCompare(b));
 }
 
 // ============================================================================

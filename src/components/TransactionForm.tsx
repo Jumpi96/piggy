@@ -13,7 +13,7 @@ import {
 import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate } from '../lib/dates';
 import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { cn } from '../lib/utils';
+import { cn, normalizeForComparison } from '../lib/utils';
 import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
 export function TransactionForm({ initialData, onSuccess, onCancel }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void }) {
@@ -132,6 +132,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             if (!tag) throw new Error("Tag is required");
             if (method === 'card' && !cardId) throw new Error("Credit card is required");
 
+            // Normalize tag: if it matches an existing tag case-and-accent-insensitively, use that casing
+            const normTag = normalizeForComparison(tag);
+            const existingTag = allTags.find(t => normalizeForComparison(t) === normTag);
+            const finalTag = existingTag || tag.trim();
+
             const amountCents = Math.round(parseFloat(amount) * 100);
 
             // Effective Date Logic
@@ -153,7 +158,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                 currency_code: currencyCode,
                 date: dateStr,
                 category,
-                tag,
+                tag: finalTag,
                 payment_method: method,
                 credit_card_id: method === 'card' ? cardId : null,
                 exchange_rate_id: exchangeRateId,
@@ -225,8 +230,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
 
     const filteredCategories = CATEGORIES.filter(c => c.direction === direction);
 
-    // Filter tags: match text
-    const filteredTags = allTags.filter(t => t.toLowerCase().includes(tag.toLowerCase()));
+    // Filter tags: match text case-and-accent-insensitively
+    const filteredTags = allTags.filter(t => normalizeForComparison(t).includes(normalizeForComparison(tag)));
 
     // Show calculator if focused OR if there's an ongoing calculation (has operators)
     const hasCalculation = amount.length > 0 && !/^-?\d*\.?\d*$/.test(amount);
