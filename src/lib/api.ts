@@ -332,6 +332,11 @@ export async function insertTransaction(transaction: TransactionInput): Promise<
 }
 
 export async function updateTransaction(id: string, updates: Partial<TransactionInput>): Promise<Transaction> {
+    // Guard: virtual transactions cannot be updated directly
+    if (id.startsWith('virtual-')) {
+        throw new Error('Cannot update a virtual transaction. Create a physical override instead.');
+    }
+
     const db = await getDatabaseAsync();
     const timestamp = now();
 
@@ -373,6 +378,11 @@ export async function updateTransaction(id: string, updates: Partial<Transaction
 }
 
 export async function deleteTransaction(id: string): Promise<void> {
+    // Guard: virtual transactions cannot be deleted directly
+    if (id.startsWith('virtual-')) {
+        throw new Error('Cannot delete a virtual transaction. Add an exception to the recurring rule instead.');
+    }
+
     const db = await getDatabaseAsync();
     const timestamp = now();
 

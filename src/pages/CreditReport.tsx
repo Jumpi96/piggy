@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { fetchCreditTransactions, fetchCreditCards, deleteTransaction } from '../lib/api';
+import { fetchCreditTransactions, fetchCreditCards, deleteTransaction, fetchRecurringRule, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
 import type { Transaction, CreditCard } from '../types';
 import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
+import { formatLocalDate, getPersistentMonth, setPersistentMonth, parseLocalDate } from '../lib/dates';
 import { useSyncData } from '../hooks/useSyncData';
 
 export function CreditReport() {
@@ -35,6 +35,7 @@ export function CreditReport() {
     // Modal state
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>(undefined);
+    const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
 
     useEffect(() => {
         async function loadCards() {
@@ -82,12 +83,52 @@ export function CreditReport() {
         setCheckedItems(next);
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm("Delete this transaction?")) return;
+    const handleDelete = async (t: Transaction) => {
+        if (t.recurring_rule_id) {
+            // Show modal for recurring transactions
+            setDeletingTransaction(t);
+        } else {
+            if (!confirm("Delete this transaction?")) return;
+            try {
+                await deleteTransaction(t.id);
+                loadTransactions();
+            } catch (err) {
+                alert("Failed to delete");
+            }
+        }
+    };
+
+    const confirmDelete = async (allFuture: boolean) => {
+        if (!deletingTransaction || !deletingTransaction.recurring_rule_id) return;
+
         try {
-            await deleteTransaction(id);
+            if (!allFuture) {
+                if (deletingTransaction.id.startsWith('virtual-')) {
+                    // Add exception to rule
+                    const rule = await fetchRecurringRule(deletingTransaction.recurring_rule_id);
+                    const exceptions = [...(rule.exception_dates || []), deletingTransaction.date];
+                    await updateRecurringRule(rule.id, { exception_dates: exceptions });
+                } else {
+                    // It's a physical override, just delete it
+                    await deleteTransaction(deletingTransaction.id);
+                }
+            } else {
+                const ruleId = deletingTransaction.recurring_rule_id!;
+                const dateStr = deletingTransaction.original_date || deletingTransaction.date;
+                const originalDate = parseLocalDate(dateStr);
+                const prevDay = new Date(originalDate);
+                prevDay.setDate(prevDay.getDate() - 1);
+
+                // End the rule
+                await updateRecurringRule(ruleId, { end_date: formatLocalDate(prevDay) });
+
+                // Cleanup future physical overrides linked to this rule
+                await deleteFutureTransactionsForRule(ruleId, dateStr);
+            }
+            setDeletingTransaction(null);
             loadTransactions();
         } catch (err) {
+            console.error(err);
             alert("Failed to delete");
         }
     };
@@ -168,7 +209,7 @@ export function CreditReport() {
                     <Edit2 className="w-4 h-4" />
                 </button>
                 <button
-                    onClick={() => handleDelete(t.id)}
+                    onClick={() => handleDelete(t)}
                     className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-600 rounded-lg transition-colors"
                 >
                     <Trash2 className="w-4 h-4" />
@@ -317,6 +358,52 @@ export function CreditReport() {
                     </div>
                 )
             }
+            {/* Delete Modal */}
+            {deletingTransaction && deletingTransaction.recurring_rule_id && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-zinc-800 p-8 space-y-6">
+                        <div className="text-center space-y-2">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Delete Recurring</h3>
+                            <p className="text-sm text-gray-500 dark:text-zinc-400">
+                                How would you like to handle this deletion?
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-4">
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => confirmDelete(false)}
+                                    className="w-full bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 py-4 rounded-2xl text-sm font-bold transition-all active:scale-[0.98]"
+                                >
+                                    Just this one
+                                </button>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2">
+                                    Skips this specific occurrence. The rule will continue to generate future instances.
+                                </p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => confirmDelete(true)}
+                                    className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-sm font-bold transition-all shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98]"
+                                >
+                                    This and all future ones
+                                </button>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2">
+                                    Stops the series from today onwards. All future virtual and physical instances will be removed.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setDeletingTransaction(null)}
+                            className="w-full py-2 text-gray-400 dark:text-zinc-600 text-xs font-medium hover:text-gray-600 dark:hover:text-zinc-400 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

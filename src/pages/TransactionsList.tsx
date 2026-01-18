@@ -67,9 +67,31 @@ export function TransactionsList() {
         }).format(cents / 100);
     };
 
-    const toggleBalanced = async (id: string, current: boolean) => {
+    const toggleBalanced = async (t: Transaction) => {
         try {
-            await updateTransaction(id, { to_be_balanced: !current });
+            if (t.id.startsWith('virtual-')) {
+                // Virtual transaction: need to create a physical override
+                const { insertTransaction, fetchExchangeRate } = await import('../lib/api');
+                const exchangeRateId = await fetchExchangeRate(t.currency_code);
+                await insertTransaction({
+                    direction: t.direction,
+                    amount_cents: t.amount_cents,
+                    currency_code: t.currency_code,
+                    date: t.date,
+                    category: t.category,
+                    tag: t.tag,
+                    payment_method: t.payment_method,
+                    credit_card_id: t.credit_card_id || null,
+                    exchange_rate_id: exchangeRateId,
+                    to_be_balanced: !t.to_be_balanced,
+                    note: t.note || null,
+                    recurring_rule_id: t.recurring_rule_id || null,
+                    original_date: t.original_date || t.date,
+                });
+            } else {
+                // Physical transaction: just update it
+                await updateTransaction(t.id, { to_be_balanced: !t.to_be_balanced });
+            }
             loadTransactions();
         } catch (err) {
             console.error(err);
@@ -404,7 +426,7 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                             </h3>
                             {t.to_be_balanced && (
                                 <button
-                                    onClick={() => toggleBalanced(t.id, t.to_be_balanced)}
+                                    onClick={() => toggleBalanced(t)}
                                     className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
                                     title="Click to mark as balanced"
                                 >
@@ -414,7 +436,7 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                             )}
                             {!t.to_be_balanced && (
                                 <button
-                                    onClick={() => toggleBalanced(t.id, t.to_be_balanced)}
+                                    onClick={() => toggleBalanced(t)}
                                     className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-amber-500 transition-all ml-1"
                                     title="Mark as to be balanced"
                                 >
