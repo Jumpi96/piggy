@@ -3,6 +3,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -46,11 +50,11 @@ export default defineConfig({
   base: '/piggy/',
   resolve: {
     alias: {
-      'node:crypto': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/crypto-shim.ts',
+      'node:crypto': path.resolve(__dirname, 'src/lib/ledger/crypto-shim.ts'),
       'node:path': 'path-browserify',
-      'node:fs/promises': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/empty-shim.ts',
-      'node:child_process': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/empty-shim.ts',
-      'node:os': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/empty-shim.ts',
+      'node:fs/promises': path.resolve(__dirname, 'src/lib/ledger/empty-shim.ts'),
+      'node:child_process': path.resolve(__dirname, 'src/lib/ledger/empty-shim.ts'),
+      'node:os': path.resolve(__dirname, 'src/lib/ledger/empty-shim.ts'),
     },
   },
   optimizeDeps: {
