@@ -1,6 +1,6 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle, Check } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle, Check, PiggyBank } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useOfflineStatus, formatLastSync } from '../lib/offline/network';
 import { getCurrentUserId, getLastSyncTimestamp, getDatabaseAsync, isUsingPersistence } from '../lib/offline';
@@ -315,6 +315,7 @@ export function Layout() {
         { href: '/credit', icon: CreditCard, label: 'Credit' },
         { href: '/balance', icon: BarChart3, label: 'Balance' },
         { href: '/annual', icon: FileText, label: 'Annual' },
+        { href: '/savings', icon: PiggyBank, label: 'Savings' },
         { href: '/settings', icon: Settings, label: 'Settings' },
     ];
 

@@ -44,6 +44,15 @@ export default defineConfig({
     }),
   ],
   base: '/piggy/',
+  resolve: {
+    alias: {
+      'node:crypto': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/crypto-shim.ts',
+      'node:path': 'path-browserify',
+      'node:fs/promises': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/empty-shim.ts',
+      'node:child_process': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/empty-shim.ts',
+      'node:os': '/Users/juampilorenzo/LocalDocuments/piggy/src/lib/ledger/empty-shim.ts',
+    },
+  },
   optimizeDeps: {
     exclude: ['@electric-sql/pglite'],
   },

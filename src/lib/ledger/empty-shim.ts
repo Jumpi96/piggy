@@ -1,0 +1,10 @@
+export default {};
+export const readFile = () => { throw new Error('fs.readFile not supported'); };
+export const writeFile = () => { throw new Error('fs.writeFile not supported'); };
+export const rename = () => { throw new Error('fs.rename not supported'); };
+export const stat = () => { throw new Error('fs.stat not supported'); };
+export const unlink = () => { throw new Error('fs.unlink not supported'); };
+export const spawn = () => { throw new Error('child_process.spawn not supported'); };
+export const exec = () => { throw new Error('child_process.exec not supported'); };
+export const platform = () => 'browser';
+export const release = () => '0.0.0';

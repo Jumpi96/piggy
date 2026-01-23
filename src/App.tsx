@@ -10,6 +10,7 @@ import { Balance } from './pages/Balance';
 import { CreditReport } from './pages/CreditReport';
 import { AnnualReport } from './pages/AnnualReport';
 import { MoneyChecker } from './pages/MoneyChecker';
+import { Savings } from './pages/Savings';
 import { Login } from './pages/Login';
 import { supabase } from './lib/supabase';
 import type { Session } from '@supabase/supabase-js';
@@ -171,6 +172,7 @@ export default function App() {
           <Route path="credit" element={<CreditReport />} />
           <Route path="annual" element={<AnnualReport />} />
           <Route path="money-checker" element={<MoneyChecker />} />
+          <Route path="savings" element={<Savings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

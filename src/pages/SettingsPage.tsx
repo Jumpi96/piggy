@@ -1,12 +1,19 @@
 import { useState, useEffect } from 'react';
 import { fetchCreditCards, insertCreditCard, deleteCreditCard, updateCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
 import type { CreditCard, Currency, Parameter } from '../types';
-import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2 } from 'lucide-react';
+import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, Loader2, Check, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { DEBUG_FLAG_KEY } from '../lib/debug';
+import {
+    getAllocationConfig,
+    saveAllocationConfig,
+    testLedgerConnection,
+    type AllocationConfig,
+    DEFAULT_ALLOCATION_CONFIG,
+} from '../lib/ledger';
 
 export function SettingsPage() {
-    const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general'>('cards');
+    const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general' | 'ledger'>('cards');
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
@@ -50,11 +57,24 @@ export function SettingsPage() {
                     <Settings2 className="w-4 h-4" />
                     General
                 </button>
+                <button
+                    onClick={() => setActiveTab('ledger')}
+                    className={cn(
+                        "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
+                        activeTab === 'ledger'
+                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                            : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    )}
+                >
+                    <PiggyBank className="w-4 h-4" />
+                    Ledger
+                </button>
             </div>
 
             {activeTab === 'cards' && <CardsSettings />}
             {activeTab === 'rates' && <RatesSettings />}
             {activeTab === 'general' && <GeneralSettings />}
+            {activeTab === 'ledger' && <LedgerSettings />}
         </div>
     );
 }
@@ -447,6 +467,186 @@ function RatesSettings() {
                     <strong> All transactions from the start of the current month </strong>
                     onwards will be updated to use this new rate in your Overview and reports.
                 </p>
+            </div>
+        </div>
+    );
+}
+
+function LedgerSettings() {
+    // Connection status
+    const [isTesting, setIsTesting] = useState(false);
+    const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+    // Allocation config
+    const [allocationJson, setAllocationJson] = useState('');
+    const [allocationError, setAllocationError] = useState<string | null>(null);
+    const [allocationSaved, setAllocationSaved] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoadingConfig, setIsLoadingConfig] = useState(true);
+
+    // Load existing config
+    useEffect(() => {
+        async function loadConfig() {
+            setIsLoadingConfig(true);
+            const allocation = await getAllocationConfig();
+            setAllocationJson(JSON.stringify(allocation, null, 2));
+            setIsLoadingConfig(false);
+        }
+        loadConfig();
+    }, []);
+
+    const handleTestConnection = async () => {
+        setIsTesting(true);
+        setTestResult(null);
+
+        const result = await testLedgerConnection();
+        setTestResult(result);
+
+        setIsTesting(false);
+    };
+
+    const handleSaveAllocation = async () => {
+        try {
+            const parsed = JSON.parse(allocationJson) as AllocationConfig;
+
+            // Basic validation
+            if (typeof parsed.expected !== 'number' || !parsed.categories || !parsed.goals) {
+                throw new Error('Invalid allocation config structure');
+            }
+
+            setIsSaving(true);
+            await saveAllocationConfig(parsed);
+            setAllocationError(null);
+            setAllocationSaved(true);
+            setTimeout(() => setAllocationSaved(false), 3000);
+        } catch (err) {
+            setAllocationError(err instanceof Error ? err.message : 'Invalid JSON');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleResetAllocation = () => {
+        setAllocationJson(JSON.stringify(DEFAULT_ALLOCATION_CONFIG, null, 2));
+        setAllocationError(null);
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* GitHub Connection */}
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800">
+                <h3 className="text-lg font-bold mb-4">GitHub Ledger Connection</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                    The ledger connection is configured via server-side environment variables for enhanced security.
+                    Click the button below to verify the connection to your private GitHub repository.
+                </p>
+
+                <div className="space-y-4 max-w-lg">
+                    {/* Test Result */}
+                    {testResult && (
+                        <div className={cn(
+                            "flex items-center gap-2 p-3 rounded-lg text-sm",
+                            testResult.success
+                                ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                                : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300"
+                        )}>
+                            {testResult.success ? (
+                                <>
+                                    <Check className="w-4 h-4" />
+                                    Successfully connected to the ledger!
+                                </>
+                            ) : (
+                                <>
+                                    <AlertCircle className="w-4 h-4" />
+                                    {testResult.error}
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Buttons */}
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleTestConnection}
+                            disabled={isTesting}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isTesting ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Testing Connection...
+                                </>
+                            ) : (
+                                'Check Connection Status'
+                            )}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Allocation Config */}
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800">
+                <h3 className="text-lg font-bold mb-2">Allocation Configuration</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Configure your investment allocation targets and savings goals. This JSON defines the KPIs shown on the Savings overview.
+                </p>
+
+                <div className="space-y-4">
+                    {isLoadingConfig ? (
+                        <div className="flex items-center justify-center p-8 border border-gray-300 dark:border-zinc-600 rounded-lg">
+                            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                        </div>
+                    ) : (
+                        <textarea
+                            value={allocationJson}
+                            onChange={(e) => {
+                                setAllocationJson(e.target.value);
+                                setAllocationError(null);
+                            }}
+                            rows={16}
+                            className="w-full p-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 font-mono text-xs resize-y"
+                            spellCheck={false}
+                        />
+                    )}
+
+                    {allocationError && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 text-sm">
+                            <AlertCircle className="w-4 h-4" />
+                            {allocationError}
+                        </div>
+                    )}
+
+                    {allocationSaved && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm">
+                            <Check className="w-4 h-4" />
+                            Allocation config saved!
+                        </div>
+                    )}
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleSaveAllocation}
+                            disabled={isSaving || isLoadingConfig}
+                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isSaving ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Saving...
+                                </>
+                            ) : (
+                                'Save Allocation Config'
+                            )}
+                        </button>
+                        <button
+                            onClick={handleResetAllocation}
+                            disabled={isSaving}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 dark:bg-zinc-800 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-50"
+                        >
+                            Reset to Default
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     );

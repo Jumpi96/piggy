@@ -13,6 +13,7 @@ A modern, mobile-first Progressive Web App (PWA) for personal finance management
 - [Testing](#testing)
 - [Deployment](#deployment)
 - [Database Schema](#database-schema)
+- [Savings Feature](#savings-feature-ledger-integration)
 - [License](#license)
 
 ## Features
@@ -30,6 +31,7 @@ A modern, mobile-first Progressive Web App (PWA) for personal finance management
 - **Secure Authentication**: Email/password and magic link authentication via Supabase
 - **Automated Backups**: Weekly database backups to AWS S3 with 30-day retention
 - **Background Sync**: Automatic data synchronization when online with conflict resolution
+- **Savings & Investment Tracking**: Ledger-based savings tracking with GitHub integration, allocation metrics, and asset evolution charts
 
 ## Architecture
 
@@ -381,6 +383,173 @@ npm run build
 - `compute_month_balance(year, month, user_id)`: Calculates monthly income, expenses, and net balance in USD
 - `ensure_recurring_generated(user_id)`: Generates recurring transactions up to 24 months ahead (idempotent)
 - `repoint_exchange_rate(year, month, currency, user_id)`: Updates exchange rate references for a month
+
+## Savings Feature (Ledger Integration)
+
+The Savings page provides investment and savings tracking using a plain-text ledger file stored in a private GitHub repository. It replicates the functionality of the Streamlit grootboek tool.
+
+### Features
+
+- **Overview Tab**: KPIs (total assets, retirement, liabilities, net worth), savings goals progress, investment allocation metrics, pie charts
+- **Add Transaction Tab**: Create new ledger entries with real-time balance validation
+- **Raw Data Tab**: View all account balances in flat table or hierarchical tree format
+- **Assets Evolution Tab**: Time series charts showing asset growth and deposits vs appreciation
+
+### Setup Instructions
+
+#### 1. Create a GitHub Repository for Your Ledger
+
+1. Create a new **private** repository on GitHub (e.g., `my-ledger`)
+2. Add a ledger file (e.g., `ledger/main.journal`) with initial content:
+
+```
+; My Ledger File
+; Prices go here
+P 2024/01/01 SPY $ 475.00
+P 2024/01/01 BTC $ 42000.00
+
+; Opening balances
+2024/01/01 Opening Balance
+  Assets:Bank:Checking  $10000.00
+  Equity:Opening
+
+; Example transaction
+2024/01/15 Buy ETF
+  Assets:Investments:SPY  10 SPY
+  Assets:Bank:Checking  $-4750.00
+```
+
+#### 2. Create a GitHub Personal Access Token
+
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Click "Generate new token (classic)"
+3. Give it a descriptive name (e.g., "Piggy Ledger Access")
+4. Select the `repo` scope (full control of private repositories)
+5. Click "Generate token"
+6. **Copy the token immediately** - you won't see it again!
+
+#### 3. Deploy Supabase Edge Functions
+
+The Savings feature requires two Supabase Edge Functions to interact with GitHub:
+
+```bash
+# Install Supabase CLI if not already installed
+npm install -g supabase
+
+# Login to Supabase
+supabase login
+
+# Link to your project (get project ref from Supabase dashboard URL)
+supabase link --project-ref YOUR_PROJECT_REF
+
+# Deploy the edge functions
+supabase functions deploy read-ledger
+supabase functions deploy commit-ledger
+```
+
+**Verify deployment:**
+```bash
+# List deployed functions
+supabase functions list
+```
+
+You should see `read-ledger` and `commit-ledger` in the list.
+
+#### 4. Configure Supabase Secrets
+
+The GitHub connection details are stored securely as environment variables in Supabase. Use the Supabase CLI to set them:
+
+```bash
+# Set GitHub repository connection details
+supabase secrets set LEDGER_GITHUB_OWNER=your_github_username
+supabase secrets set LEDGER_GITHUB_REPO=your_ledger_repo_name
+supabase secrets set LEDGER_GITHUB_PATH=path/to/ledger/main.journal
+supabase secrets set LEDGER_GITHUB_TOKEN=your_github_pat_token
+```
+
+#### 5. Verify and Polish
+
+1. Open Piggy and go to **Settings → Ledger** tab
+2. Click **"Check Connection Status"** to verify the app can communicate with GitHub using the configured secrets.
+3. (Optional) Customize the **Allocation Configuration** JSON to match your investment strategy.
+
+#### 6. Test the Feature
+
+1. Navigate to the **Savings** page from the sidebar
+2. Verify the **Overview** tab shows your account balances and KPIs
+3. Try adding a transaction in the **Add** tab:
+   - Select a date
+   - Enter a description
+   - Add at least 2 postings (e.g., `Assets:Bank:Checking` with `$-100` and `Expenses:Food` with `$100`)
+   - Wait for the "Transaction is balanced" indicator
+   - Click "Add Transaction"
+4. Check your GitHub repo to confirm the transaction was committed
+5. View balances in the **Raw Data** tab
+6. Explore asset evolution in the **Evolution** tab
+
+### Ledger File Format
+
+The parser supports standard ledger format:
+
+```
+; Comments start with semicolon
+
+; Price directives (for USD conversion)
+P 2024/01/15 BTC $ 42000.00
+P 2024/01/15 ETH $ 2500.00
+
+; Transactions
+2024/01/15 Transaction description
+  Account:SubAccount:Name  $100.00
+  Account:Another:Name  $-100.00
+
+; Amount formats supported:
+;   $100.00 or -$100.00 (USD)
+;   100 USD (currency code)
+;   0.5 BTC (cryptocurrency)
+;   10 SPY (stock shares)
+;   (empty) - auto-balance the transaction
+```
+
+### Allocation Configuration
+
+The allocation config (editable in Settings → Ledger) defines:
+
+- **Expected allocation percentages** for investment categories
+- **Account patterns** (regex) to match accounts to categories
+- **Savings goals** with target amounts
+
+Example configuration:
+```json
+{
+  "expected": 0.89,
+  "categories": {
+    "main_stocks": {
+      "expected": 0.73,
+      "patterns": ["Assets:3_Retirement:.*:SPY", "Assets:3_Retirement:.*:VEA"]
+    },
+    "crypto": {
+      "expected": 0.05,
+      "patterns": ["Assets:3_Retirement:.*:BTC", "Assets:3_Retirement:.*:ETH"]
+    }
+  },
+  "goals": {
+    "security": { "target": 12000, "pattern": "Assets:1_Security" },
+    "discretionary": { "target": 8000, "pattern": "Assets:0_Discretionary" }
+  },
+  "liabilities_pattern": "Liabilities"
+}
+```
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Ledger not configured" | Go to Settings → Ledger and configure GitHub connection |
+| "Failed to read ledger" | Check GitHub token has `repo` scope and hasn't expired |
+| "File not found" | Verify the file path is correct (case-sensitive) |
+| Edge function errors | Ensure functions are deployed: `supabase functions list` |
+| Transaction not balanced | Each commodity must sum to zero across all postings |
 
 ## License
 
