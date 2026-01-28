@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     AreaChart,
     Area,
@@ -9,7 +9,7 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
-import { Loader2, Calendar, Search } from 'lucide-react';
+import { Loader2, Calendar, Search, Filter } from 'lucide-react';
 import {
     type ParsedLedger,
     type SimplePrice,
@@ -57,14 +57,35 @@ function getDefaultDateRange(): { start: string; end: string } {
     };
 }
 
+// Extract unique account prefixes for filtering (Assets accounts only, up to 2 levels)
+function getAccountPrefixes(accounts: Set<string>): string[] {
+    const prefixes = new Set<string>();
+
+    for (const account of accounts) {
+        if (!account.startsWith('Assets:')) continue;
+
+        const parts = account.split(':');
+        // Add progressively deeper prefixes: Assets:X, Assets:X:Y, etc.
+        for (let i = 2; i <= parts.length; i++) {
+            prefixes.add(parts.slice(0, i).join(':'));
+        }
+    }
+
+    return Array.from(prefixes).sort();
+}
+
 function AssetsEvolutionTab({ parsed, prices }: Props) {
     const defaults = getDefaultDateRange();
     const [startDate, setStartDate] = useState(defaults.start);
     const [endDate, setEndDate] = useState(defaults.end);
+    const [accountFilter, setAccountFilter] = useState<string | null>(null);
     const [isComputing, setIsComputing] = useState(false);
     const [chartData, setChartData] = useState<any[] | null>(null);
     const [growthData, setGrowthData] = useState<any[] | null>(null);
     const [seriesNames, setSeriesNames] = useState<string[]>([]);
+
+    // Memoize account prefixes for filter dropdown
+    const accountPrefixes = useMemo(() => getAccountPrefixes(parsed.accounts), [parsed.accounts]);
 
     // Compute evolution data
     const compute = async () => {
@@ -74,7 +95,7 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         try {
-            const evolution = computeEvolution(parsed, prices, startDate, endDate, 'full');
+            const evolution = computeEvolution(parsed, prices, startDate, endDate, 'full', accountFilter);
             const { labels, datasets } = evolutionToChartData(evolution);
 
             // Transform to recharts format
@@ -90,7 +111,7 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
             setSeriesNames(datasets.map(d => d.label));
 
             // Compute growth breakdown, passing totals from evolution to ensure consistency
-            const growth = computeGrowthBreakdown(parsed, prices, startDate, endDate, evolution.totals);
+            const growth = computeGrowthBreakdown(parsed, prices, startDate, endDate, evolution.totals, accountFilter);
             const growthChart = growthToChartData(growth);
 
             const growthDataFormatted = growthChart.labels.map((label, i) => ({
@@ -205,42 +226,74 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
 
     return (
         <div className="space-y-6">
-            {/* Date Range Picker */}
-            <div className="flex flex-wrap items-center gap-4 bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-lg">
-                <div className="flex flex-wrap items-center gap-4 flex-1">
-                    <Calendar className="w-5 h-5 text-gray-500" />
-                    <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600 dark:text-gray-400">From:</label>
+            {/* Filters */}
+            <div className="bg-gray-50 dark:bg-zinc-800/50 p-4 rounded-lg space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {/* From Date */}
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5" />
+                            From
+                        </label>
                         <input
                             type="date"
                             value={startDate}
                             onChange={(e) => setStartDate(e.target.value)}
-                            className="p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-sm"
+                            className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-sm"
                         />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600 dark:text-gray-400">To:</label>
+
+                    {/* To Date */}
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5" />
+                            To
+                        </label>
                         <input
                             type="date"
                             value={endDate}
                             onChange={(e) => setEndDate(e.target.value)}
-                            className="p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-sm"
+                            className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-sm"
                         />
                     </div>
-                </div>
 
-                <button
-                    onClick={compute}
-                    disabled={isComputing}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm font-medium"
-                >
-                    {isComputing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                        <Search className="w-4 h-4" />
-                    )}
-                    {isComputing ? 'Computing...' : 'Update Charts'}
-                </button>
+                    {/* Account Filter */}
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
+                            <Filter className="w-3.5 h-3.5" />
+                            Account
+                        </label>
+                        <select
+                            value={accountFilter ?? ''}
+                            onChange={(e) => setAccountFilter(e.target.value || null)}
+                            className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-sm"
+                        >
+                            <option value="">All Accounts</option>
+                            {accountPrefixes.map((prefix) => (
+                                <option key={prefix} value={prefix}>
+                                    {prefix.replace('Assets:', '')}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Update Button */}
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-transparent select-none">Action</label>
+                        <button
+                            onClick={compute}
+                            disabled={isComputing}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                        >
+                            {isComputing ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Search className="w-4 h-4" />
+                            )}
+                            {isComputing ? 'Computing...' : 'Update'}
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Loading */}

@@ -47,13 +47,20 @@ function getFullAccount(account: string): string {
         .replace(/^\d+_/, '');
 }
 
+// Check if account matches a filter prefix (wildcard matching)
+function matchesAccountFilter(account: string, filter: string | null): boolean {
+    if (!filter) return true;
+    return account.startsWith(filter);
+}
+
 // Compute daily balances over a date range using computeBalances
 export function computeEvolution(
     parsed: ParsedLedger,
     prices: SimplePrice[],
     startDate: string,
     endDate: string,
-    groupByLevel: 'top' | 'second' | 'full' = 'full'
+    groupByLevel: 'top' | 'second' | 'full' = 'full',
+    accountFilter: string | null = null
 ): EvolutionData {
     const dates = generateDateRange(normalizeDate(startDate), normalizeDate(endDate));
 
@@ -88,6 +95,7 @@ export function computeEvolution(
 
         for (const balance of balances) {
             if (!balance.account.startsWith('Assets:')) continue;
+            if (!matchesAccountFilter(balance.account, accountFilter)) continue;
 
             const groupKey = getGroupKey(balance.account);
             const usdValue = balance.usdValue;
@@ -150,7 +158,8 @@ export function computeGrowthBreakdown(
     prices: SimplePrice[],
     startDate: string,
     endDate: string,
-    evolutionTotals?: Decimal[]  // Reuse totals from computeEvolution if provided
+    evolutionTotals?: Decimal[],  // Reuse totals from computeEvolution if provided
+    accountFilter: string | null = null
 ): GrowthBreakdown {
     const dates = generateDateRange(normalizeDate(startDate), normalizeDate(endDate));
 
@@ -189,6 +198,7 @@ export function computeGrowthBreakdown(
 
                 // Only track Assets accounts
                 if (!account.startsWith('Assets:')) continue;
+                if (!matchesAccountFilter(account, accountFilter)) continue;
 
                 const commodity = p.amount?.commodity ?? '$';
                 const rawQuantity = p.amount?.quantity;
