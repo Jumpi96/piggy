@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
-import { fetchParameters, fetchLatestRates, fetchTransactions, upsertParameter, fetchCurrencies } from '../lib/api';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { fetchParameters, fetchLatestRates, fetchTransactions, upsertParameter, fetchCurrencies, insertTransaction, fetchExchangeRate } from '../lib/api';
 import type { ExchangeRate } from '../types';
-import { Loader2, Plus, Trash2, Wallet, ArrowRightLeft, Settings2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Loader2, Plus, Trash2, Wallet, ArrowRightLeft, Settings2, CheckCircle2, Scale } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { formatLocalDate } from '../lib/dates';
+import { formatLocalDate, getTodayLocalDate } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -20,8 +20,46 @@ export function MoneyChecker() {
     const [newAccountName, setNewAccountName] = useState('');
     const [newAccountCurrency, setNewAccountCurrency] = useState('ARS');
 
+    // Balance button state
+    const [balanceProgress, setBalanceProgress] = useState(0);
+    const [isBalancing, setIsBalancing] = useState(false);
+    const [shouldBalance, setShouldBalance] = useState(false);
+    const balanceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const BALANCE_HOLD_DURATION = 2000; // 2 seconds
+    const BALANCE_INTERVAL = 50; // Update every 50ms
+
     // Subscribe to sync data
     const lastDataUpdate = useSyncData();
+
+    const handleBalanceEnd = useCallback(() => {
+        if (balanceIntervalRef.current) {
+            clearInterval(balanceIntervalRef.current);
+            balanceIntervalRef.current = null;
+        }
+        setBalanceProgress(0);
+    }, []);
+
+    const handleBalanceStart = useCallback(() => {
+        balanceIntervalRef.current = setInterval(() => {
+            setBalanceProgress(prev => {
+                const next = prev + (100 / (BALANCE_HOLD_DURATION / BALANCE_INTERVAL));
+                if (next >= 100) {
+                    setShouldBalance(true);
+                    return 0;
+                }
+                return next;
+            });
+        }, BALANCE_INTERVAL);
+    }, []);
+
+    // Cleanup interval on unmount
+    useEffect(() => {
+        return () => {
+            if (balanceIntervalRef.current) {
+                clearInterval(balanceIntervalRef.current);
+            }
+        };
+    }, []);
 
     useEffect(() => {
         async function load() {
@@ -78,6 +116,64 @@ export function MoneyChecker() {
     }, [accountValues, accounts, latestRates]);
 
     const difference = totalCountedUSD - expectedCash;
+
+    // Handle balance when shouldBalance becomes true
+    useEffect(() => {
+        if (!shouldBalance) return;
+
+        const doBalance = async () => {
+            handleBalanceEnd();
+            setIsBalancing(true);
+            setShouldBalance(false);
+            try {
+                const today = getTodayLocalDate();
+                const exchangeRateId = await fetchExchangeRate('USD');
+                const amountCents = Math.round(Math.abs(difference) * 100);
+
+                if (difference < 0) {
+                    // Negative diff: we have less than expected → expense
+                    await insertTransaction({
+                        direction: 'expense',
+                        amount_cents: amountCents,
+                        currency_code: 'USD',
+                        date: today,
+                        category: 'Recreation',
+                        tag: 'Diary',
+                        payment_method: 'cash',
+                        credit_card_id: null,
+                        exchange_rate_id: exchangeRateId,
+                        to_be_balanced: false,
+                        note: 'Balance adjustment from Money Checker',
+                        recurring_rule_id: null,
+                        original_date: null,
+                    });
+                } else {
+                    // Positive diff: we have more than expected → income
+                    await insertTransaction({
+                        direction: 'income',
+                        amount_cents: amountCents,
+                        currency_code: 'USD',
+                        date: today,
+                        category: 'Grants',
+                        tag: 'Diary',
+                        payment_method: 'cash',
+                        credit_card_id: null,
+                        exchange_rate_id: exchangeRateId,
+                        to_be_balanced: false,
+                        note: 'Balance adjustment from Money Checker',
+                        recurring_rule_id: null,
+                        original_date: null,
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to create balance transaction:', err);
+            } finally {
+                setIsBalancing(false);
+            }
+        };
+
+        doBalance();
+    }, [shouldBalance, difference, handleBalanceEnd]);
 
     const handleAddAccount = async () => {
         if (!newAccountName) return;
@@ -242,7 +338,42 @@ export function MoneyChecker() {
                                 {Math.abs(difference) < 0.1 ? (
                                     <CheckCircle2 className="w-4 h-4 text-emerald-200" />
                                 ) : (
-                                    <AlertCircle className="w-4 h-4" />
+                                    <button
+                                        onMouseDown={handleBalanceStart}
+                                        onMouseUp={handleBalanceEnd}
+                                        onMouseLeave={handleBalanceEnd}
+                                        onTouchStart={handleBalanceStart}
+                                        onTouchEnd={handleBalanceEnd}
+                                        disabled={isBalancing}
+                                        className="relative w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center overflow-hidden disabled:opacity-50"
+                                        title={`Hold to balance: ${difference < 0 ? 'Create expense (Recreation/Diary)' : 'Create income (Grants/Diary)'}`}
+                                    >
+                                        <svg className="absolute inset-0 w-full h-full -rotate-90">
+                                            <circle
+                                                cx="16"
+                                                cy="16"
+                                                r="14"
+                                                fill="none"
+                                                stroke="rgba(255,255,255,0.3)"
+                                                strokeWidth="3"
+                                            />
+                                            <circle
+                                                cx="16"
+                                                cy="16"
+                                                r="14"
+                                                fill="none"
+                                                stroke="white"
+                                                strokeWidth="3"
+                                                strokeDasharray={`${balanceProgress * 0.88} 88`}
+                                                className="transition-all duration-75"
+                                            />
+                                        </svg>
+                                        {isBalancing ? (
+                                            <Loader2 className="w-4 h-4 animate-spin relative z-10" />
+                                        ) : (
+                                            <Scale className="w-4 h-4 relative z-10" />
+                                        )}
+                                    </button>
                                 )}
                             </div>
                         </div>

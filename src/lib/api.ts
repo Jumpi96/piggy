@@ -394,6 +394,48 @@ export async function deleteTransaction(id: string): Promise<void> {
     triggerBackgroundSync();
 }
 
+export async function clearBalancedTransactions(monthStart: string): Promise<number> {
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+    const timestamp = now();
+
+    // Calculate end of month
+    const [year, month] = monthStart.split('-').map(Number);
+    const endDate = new Date(year, month, 1);
+    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-01`;
+
+    // Get all balanced transactions for the month
+    const result = await db.query<{ id: string }>(`
+        SELECT id FROM transactions
+        WHERE user_id = $1
+          AND deleted_at IS NULL
+          AND to_be_balanced = true
+          AND date >= $2
+          AND date < $3
+    `, [userId, monthStart, endStr]);
+
+    // Update each transaction and track changes
+    for (const row of result.rows) {
+        await db.query(`
+            UPDATE transactions
+            SET to_be_balanced = false, updated_at = $1
+            WHERE id = $2
+        `, [timestamp, row.id]);
+
+        await trackChange('transactions', row.id, 'UPDATE', {
+            id: row.id,
+            to_be_balanced: false,
+            updated_at: timestamp
+        });
+    }
+
+    if (result.rows.length > 0) {
+        triggerBackgroundSync();
+    }
+
+    return result.rows.length;
+}
+
 // ============================================================================
 // Exchange Rates
 // ============================================================================

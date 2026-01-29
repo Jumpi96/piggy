@@ -161,9 +161,19 @@ export function TransactionsList() {
             const cat = term.slice(9).trim();
             return transactions.filter(t => t.category.toLowerCase().trim() === cat);
         }
-        if (term.startsWith('balance:')) {
-            const val = term.slice(8).trim();
-            return transactions.filter(t => String(t.to_be_balanced) === val);
+        // Balance shortcuts: "balance" = balanced, "!balance" = not balanced
+        if (term === 'balance') {
+            return transactions.filter(t => t.to_be_balanced === true);
+        }
+        if (term === '!balance') {
+            return transactions.filter(t => t.to_be_balanced === false);
+        }
+        // Method filter: method:cash or method:cards
+        if (term === 'method:cash') {
+            return transactions.filter(t => t.payment_method === 'cash');
+        }
+        if (term === 'method:cards') {
+            return transactions.filter(t => t.payment_method === 'card');
         }
 
         return transactions.filter(t => {
@@ -250,7 +260,7 @@ export function TransactionsList() {
                     <div className="flex items-center gap-2 px-1">
                         <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Pro tip:</span>
                         <span className="text-[10px] text-gray-500 dark:text-gray-400">
-                            Use <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">tag:NAME</code>, <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">category:NAME</code> or <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">balance:true|false</code> for exact filtering.
+                            Use <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">tag:NAME</code>, <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">category:NAME</code>, <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">balance</code>/<code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">!balance</code>, <code className="bg-gray-100 dark:bg-zinc-800 px-1 rounded text-emerald-600 dark:text-emerald-400">method:cash|cards</code>
                         </span>
                     </div>
                 </div>

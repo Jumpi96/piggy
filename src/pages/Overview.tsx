@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates } from '../lib/api';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates, clearBalancedTransactions } from '../lib/api';
 import type { Transaction, ExchangeRate } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar, PieChart as PieChartIcon, Filter } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar, PieChart as PieChartIcon, Filter, XCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 import { TagBarChart } from '../components/charts/TagBarChart';
@@ -34,7 +34,68 @@ export function Overview() {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [showTopTagsOnly, setShowTopTagsOnly] = useState(true);
 
+    // Clear balanced state
+    const [clearProgress, setClearProgress] = useState(0);
+    const [isClearing, setIsClearing] = useState(false);
+    const [shouldClear, setShouldClear] = useState(false);
+    const clearIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const CLEAR_HOLD_DURATION = 2000; // 2 seconds
+    const CLEAR_INTERVAL = 50; // Update every 50ms
+
     const lastDataUpdate = useSyncData();
+
+    const handleClearEnd = useCallback(() => {
+        if (clearIntervalRef.current) {
+            clearInterval(clearIntervalRef.current);
+            clearIntervalRef.current = null;
+        }
+        setClearProgress(0);
+    }, []);
+
+    const handleClearStart = useCallback(() => {
+        if (toBeBalancedTotal === 0) return;
+
+        clearIntervalRef.current = setInterval(() => {
+            setClearProgress(prev => {
+                const next = prev + (100 / (CLEAR_HOLD_DURATION / CLEAR_INTERVAL));
+                if (next >= 100) {
+                    setShouldClear(true);
+                    return 0;
+                }
+                return next;
+            });
+        }, CLEAR_INTERVAL);
+    }, [toBeBalancedTotal]);
+
+    // Handle clear when shouldClear becomes true
+    useEffect(() => {
+        if (!shouldClear) return;
+
+        const doClear = async () => {
+            handleClearEnd();
+            setIsClearing(true);
+            setShouldClear(false);
+            try {
+                const monthStr = getMonthStr(currentMonth);
+                await clearBalancedTransactions(monthStr);
+            } catch (err) {
+                console.error('Failed to clear balanced transactions:', err);
+            } finally {
+                setIsClearing(false);
+            }
+        };
+
+        doClear();
+    }, [shouldClear, currentMonth, handleClearEnd]);
+
+    // Cleanup interval on unmount
+    useEffect(() => {
+        return () => {
+            if (clearIntervalRef.current) {
+                clearInterval(clearIntervalRef.current);
+            }
+        };
+    }, []);
 
     const getMonthStr = (d: Date) => {
         const year = d.getFullYear();
@@ -245,9 +306,49 @@ export function Overview() {
                             </div>
                             <div className="space-y-1">
                                 <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">To be Balanced</span>
-                                <div className="flex items-baseline gap-2">
-                                    <p className={cn("text-2xl font-black", toBeBalancedTotal > 0 ? "text-red-200" : "text-white")}>{formatUSD(toBeBalancedTotal)}</p>
-                                    <span className="text-xs opacity-60">⚖️</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-baseline gap-2">
+                                        <p className={cn("text-2xl font-black", toBeBalancedTotal > 0 ? "text-red-200" : "text-white")}>{formatUSD(toBeBalancedTotal)}</p>
+                                        <span className="text-xs opacity-60">⚖️</span>
+                                    </div>
+                                    {toBeBalancedTotal !== 0 && (
+                                        <button
+                                            onMouseDown={handleClearStart}
+                                            onMouseUp={handleClearEnd}
+                                            onMouseLeave={handleClearEnd}
+                                            onTouchStart={handleClearStart}
+                                            onTouchEnd={handleClearEnd}
+                                            disabled={isClearing}
+                                            className="relative w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center overflow-hidden disabled:opacity-50"
+                                            title="Hold to clear all balanced transactions"
+                                        >
+                                            <svg className="absolute inset-0 w-full h-full -rotate-90">
+                                                <circle
+                                                    cx="16"
+                                                    cy="16"
+                                                    r="14"
+                                                    fill="none"
+                                                    stroke="rgba(255,255,255,0.3)"
+                                                    strokeWidth="3"
+                                                />
+                                                <circle
+                                                    cx="16"
+                                                    cy="16"
+                                                    r="14"
+                                                    fill="none"
+                                                    stroke="white"
+                                                    strokeWidth="3"
+                                                    strokeDasharray={`${clearProgress * 0.88} 88`}
+                                                    className="transition-all duration-75"
+                                                />
+                                            </svg>
+                                            {isClearing ? (
+                                                <Loader2 className="w-4 h-4 animate-spin relative z-10" />
+                                            ) : (
+                                                <XCircle className="w-4 h-4 relative z-10" />
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
