@@ -76,6 +76,189 @@ export async function appendTransaction(
     return updatedContent;
 }
 
+// Normalize string for comparison (trim, collapse whitespace)
+function normalizeForComparison(str: string): string {
+    return str.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+// Find transaction boundaries in raw content
+// Returns the start/end character indices and original text
+export function findTransactionInContent(
+    content: string,
+    targetDate: string,  // YYYY/MM/DD format
+    targetDescription: string
+): { startIndex: number; endIndex: number; originalText: string } | null {
+    const lines = content.split('\n');
+    let charIndex = 0;
+
+    const normalizedTargetDesc = normalizeForComparison(targetDescription);
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const lineStart = charIndex;
+
+        // Match transaction header: "YYYY/MM/DD Description" (possibly with comment)
+        const headerMatch = line.match(/^(\d{4}\/\d{2}\/\d{2})\s+(.+?)(?:\s*;.*)?$/);
+        if (headerMatch) {
+            const [, dateStr, desc] = headerMatch;
+            const normalizedDesc = normalizeForComparison(desc);
+
+            // Compare dates and normalized descriptions
+            if (dateStr === targetDate && normalizedDesc === normalizedTargetDesc) {
+                // Found the transaction, now find where it ends
+                let endLine = i + 1;
+
+                // Collect posting lines (indented with spaces) and blank lines within
+                while (endLine < lines.length) {
+                    const nextLine = lines[endLine];
+                    // Stop at next transaction header or non-posting content
+                    if (nextLine.match(/^\d{4}\/\d{2}\/\d{2}\s/) || // next transaction
+                        nextLine.match(/^P\s+\d{4}/) || // price directive
+                        (nextLine.trim() !== '' && !nextLine.startsWith('  '))) { // other content
+                        break;
+                    }
+                    endLine++;
+                }
+
+                // Calculate end character index
+                let endIndex = lineStart;
+                for (let j = i; j < endLine; j++) {
+                    endIndex += lines[j].length + 1; // +1 for newline
+                }
+
+                const originalText = lines.slice(i, endLine).join('\n');
+                return { startIndex: lineStart, endIndex, originalText };
+            }
+        }
+
+        charIndex += line.length + 1; // +1 for newline
+    }
+
+    // Debug: if not found, log what we were looking for and show found transactions
+    console.warn(`Transaction not found: "${targetDate}" "${targetDescription}"`);
+    console.warn('Looking for normalized:', normalizedTargetDesc);
+
+    // Log all transaction headers found for debugging
+    const foundHeaders: string[] = [];
+    for (const line of lines) {
+        const match = line.match(/^(\d{4}\/\d{2}\/\d{2})\s+(.+?)(?:\s*;.*)?$/);
+        if (match) {
+            foundHeaders.push(`${match[1]} | "${match[2]}" | normalized: "${normalizeForComparison(match[2])}"`);
+        }
+    }
+    console.warn('Last 20 transaction headers:', foundHeaders.slice(-20)); // Show last 20 (newest)
+
+    // Also search for any line containing the target date
+    const matchingDateLines = lines.filter(l => l.includes(targetDate));
+    console.warn(`Lines containing "${targetDate}":`, matchingDateLines);
+
+    return null;
+}
+
+// Edit a transaction in the ledger
+export async function editTransaction(
+    currentContent: string,
+    oldDate: string,
+    oldDescription: string,
+    newTxStr: string,
+    commitMessage: string
+): Promise<string> {
+    const found = findTransactionInContent(currentContent, oldDate, oldDescription);
+
+    if (!found) {
+        throw new Error(`Transaction not found: ${oldDate} ${oldDescription}`);
+    }
+
+    // Replace the old transaction with the new one
+    const before = currentContent.slice(0, found.startIndex);
+    const after = currentContent.slice(found.endIndex);
+
+    // Ensure proper spacing
+    const updatedContent = before + newTxStr + (newTxStr.endsWith('\n') ? '' : '\n') + after;
+
+    await commitLedger(updatedContent, commitMessage);
+    return updatedContent;
+}
+
+// Delete a transaction from the ledger
+export async function deleteTransaction(
+    currentContent: string,
+    targetDate: string,
+    targetDescription: string,
+    commitMessage: string
+): Promise<string> {
+    const found = findTransactionInContent(currentContent, targetDate, targetDescription);
+
+    if (!found) {
+        throw new Error(`Transaction not found: ${targetDate} ${targetDescription}`);
+    }
+
+    // Remove the transaction
+    const before = currentContent.slice(0, found.startIndex);
+    const after = currentContent.slice(found.endIndex);
+
+    // Clean up extra blank lines
+    const updatedContent = (before + after).replace(/\n{3,}/g, '\n\n');
+
+    await commitLedger(updatedContent, commitMessage);
+    return updatedContent;
+}
+
+// Editable transaction format for the UI
+export interface EditableTransaction {
+    index: number;
+    date: string;        // YYYY/MM/DD format for lookup
+    dateInput: string;   // YYYY-MM-DD format for input fields
+    description: string;
+    postings: Array<{ account: string; amountStr: string }>;
+}
+
+// Get transactions sorted by date (newest first) for editing
+export function getTransactionsForEditing(
+    transactions: Array<{ date: Date; description: string; postings: readonly any[] }>
+): EditableTransaction[] {
+    // Sort by date descending (newest first)
+    const sorted = [...transactions].sort((a, b) => b.date.getTime() - a.date.getTime());
+
+    return sorted.map((tx, index) => {
+        // Use UTC to avoid timezone issues (dates are stored as midnight UTC)
+        const year = tx.date.getUTCFullYear();
+        const month = String(tx.date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(tx.date.getUTCDate()).padStart(2, '0');
+
+        return {
+            index,
+            date: `${year}/${month}/${day}`,
+            dateInput: `${year}-${month}-${day}`,
+            description: tx.description,
+            postings: tx.postings.map(p => {
+                const account = typeof p.account === 'string' ? p.account : p.account.name;
+                let amountStr = '';
+
+                if (p.amount) {
+                    const commodity = p.amount.commodity ?? '$';
+                    const quantity = p.amount.quantity?.toString() ?? '0';
+
+                    if (commodity === '$') {
+                        // Format as $XXX.XX
+                        const num = parseFloat(quantity);
+                        if (num < 0) {
+                            amountStr = `-$${Math.abs(num).toFixed(2)}`;
+                        } else {
+                            amountStr = `$${num.toFixed(2)}`;
+                        }
+                    } else {
+                        // Format as "quantity commodity"
+                        amountStr = `${quantity} ${commodity}`;
+                    }
+                }
+
+                return { account, amountStr };
+            }),
+        };
+    });
+}
+
 // Test connection to GitHub repo
 export async function testLedgerConnection(): Promise<{ success: boolean; error?: string }> {
     try {

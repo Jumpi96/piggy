@@ -164,6 +164,7 @@ export function Savings() {
                         <AddTransactionTab
                             accounts={[...parsed.accounts]}
                             currentContent={ledgerContent}
+                            parsed={parsed}
                             onTransactionAdded={handleTransactionAdded}
                         />
                     )}
