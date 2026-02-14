@@ -156,10 +156,32 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
             }));
     }, [postings]);
 
+    // Track invalid (non-empty but unparsable) amounts separately from true elided amounts
+    const invalidAmountRows = useMemo(() => {
+        return postings
+            .filter(p => p.account.trim())
+            .map((p, index) => ({
+                row: index + 1,
+                isInvalid: Boolean(p.amountStr.trim()) && !parseAmountInput(p.amountStr),
+            }))
+            .filter(r => r.isInvalid)
+            .map(r => r.row);
+    }, [postings]);
+
     // Validate postings
     const validation = useMemo(() => {
         if (parsedPostings.length < 2) {
             return { isValid: false, errors: [{ lineNumber: 0, message: 'At least 2 postings required' }] };
+        }
+
+        if (invalidAmountRows.length > 0) {
+            return {
+                isValid: false,
+                errors: [{
+                    lineNumber: 0,
+                    message: `Invalid amount format in row${invalidAmountRows.length > 1 ? 's' : ''} ${invalidAmountRows.join(', ')}`,
+                }],
+            };
         }
 
         const sums = new Map<string, Decimal>();
@@ -187,7 +209,7 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
         }
 
         return { isValid: true, errors: [] };
-    }, [parsedPostings]);
+    }, [invalidAmountRows, parsedPostings]);
 
     // Validate prices
     const priceValidation = useMemo(() => {
