@@ -2,6 +2,7 @@ import { supabase } from '../../supabase';
 import { getDatabaseAsync, getLastSyncTimestamp, setLastSyncTimestamp } from '../database';
 import { SYNC_TABLES, tableHasUpdatedAt, type SyncTableName } from '../schema';
 import { resolveConflict, type SyncRecord } from './conflict';
+import { getPendingChanges } from './queue';
 
 export interface PullResult {
     success: boolean;
@@ -24,10 +25,18 @@ export async function pullChanges(): Promise<PullResult> {
 
     const lastSync = await getLastSyncTimestamp();
     console.log(`[Sync Pull] Starting pull, last sync: ${lastSync || 'never'}`);
+    const pendingChanges = await getPendingChanges();
+    const pendingByTable = new Map<SyncTableName, Set<string>>(
+        SYNC_TABLES.map(table => [table, new Set<string>()])
+    );
+
+    for (const change of pendingChanges) {
+        pendingByTable.get(change.table_name)?.add(change.record_id);
+    }
 
     for (const table of SYNC_TABLES) {
         try {
-            const recordsUpdated = await pullTable(table, lastSync);
+            const recordsUpdated = await pullTable(table, lastSync, pendingByTable.get(table) || new Set());
             if (recordsUpdated > 0) {
                 result.tablesUpdated++;
                 result.recordsProcessed += recordsUpdated;
@@ -49,7 +58,11 @@ export async function pullChanges(): Promise<PullResult> {
     return result;
 }
 
-async function pullTable(table: SyncTableName, lastSync: string | null): Promise<number> {
+async function pullTable(
+    table: SyncTableName,
+    lastSync: string | null,
+    pendingRecordIds: Set<string>
+): Promise<number> {
     const db = await getDatabaseAsync();
 
     // Build query
@@ -85,8 +98,10 @@ async function pullTable(table: SyncTableName, lastSync: string | null): Promise
 
     for (const serverRecord of data) {
         try {
-            await upsertLocalRecord(db, table, serverRecord);
-            processedCount++;
+            const wasUpdated = await upsertLocalRecord(db, table, serverRecord, pendingRecordIds);
+            if (wasUpdated) {
+                processedCount++;
+            }
         } catch (error) {
             console.error(`[Sync Pull] Failed to upsert ${table}/${serverRecord[pkColumn]}:`, error);
         }
@@ -104,10 +119,16 @@ function getPrimaryKeyColumn(table: SyncTableName): string {
 async function upsertLocalRecord(
     db: Awaited<ReturnType<typeof getDatabaseAsync>>,
     table: SyncTableName,
-    serverRecord: Record<string, unknown>
-): Promise<void> {
+    serverRecord: Record<string, unknown>,
+    pendingRecordIds?: Set<string>
+): Promise<boolean> {
     const pkColumn = getPrimaryKeyColumn(table);
     const pkValue = serverRecord[pkColumn] as string;
+
+    if (pendingRecordIds?.has(pkValue)) {
+        console.log(`[Sync Pull] Skipping ${table}/${pkValue} due to pending local changes`);
+        return false;
+    }
 
     // Check if local record exists
     const existing = await db.query<SyncRecord>(`
@@ -126,7 +147,7 @@ async function upsertLocalRecord(
 
         if (resolution === 'local') {
             // Local wins - don't update
-            return;
+            return false;
         }
     }
 
@@ -153,6 +174,8 @@ async function upsertLocalRecord(
         VALUES (${placeholders})
         ${conflictClause}
     `, values);
+
+    return true;
 }
 
 function prepareRecordForLocal(

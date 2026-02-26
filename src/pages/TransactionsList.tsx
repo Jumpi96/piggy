@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment, useMemo } from 'react';
-import { fetchTransactions, deleteTransaction, updateTransaction, fetchRecurringRule, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
+import { fetchTransactions, deleteTransaction, updateTransaction, skipRecurringOccurrence, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
 import type { Transaction } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -117,15 +117,7 @@ export function TransactionsList() {
 
         try {
             if (!allFuture) {
-                if (deletingTransaction.id.startsWith('virtual-')) {
-                    // Add exception to rule
-                    const rule = await fetchRecurringRule(deletingTransaction.recurring_rule_id);
-                    const exceptions = [...(rule.exception_dates || []), deletingTransaction.date];
-                    await updateRecurringRule(rule.id, { exception_dates: exceptions });
-                } else {
-                    // It's a physical override, just delete it
-                    await deleteTransaction(deletingTransaction.id);
-                }
+                await skipRecurringOccurrence(deletingTransaction);
             } else {
                 const ruleId = deletingTransaction.recurring_rule_id!;
                 const dateStr = deletingTransaction.original_date || deletingTransaction.date;

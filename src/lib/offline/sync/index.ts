@@ -24,6 +24,7 @@ export interface SyncState {
 
 // Sync lock to prevent concurrent syncs
 let isSyncing = false;
+let syncRequestedWhileBusy = false;
 let syncListeners: Array<(state: SyncState) => void> = [];
 // Store last data update in memory (persists for session)
 let lastDataUpdate = Date.now();
@@ -34,6 +35,7 @@ let lastDataUpdate = Date.now();
  */
 export async function runSync(): Promise<SyncResult> {
     if (isSyncing) {
+        syncRequestedWhileBusy = true;
         console.log('[Sync] Already syncing, skipping');
         return {
             success: false,
@@ -120,6 +122,7 @@ export async function runSync(): Promise<SyncResult> {
         };
     } finally {
         isSyncing = false;
+        flushDeferredQuickSync();
     }
 }
 
@@ -133,6 +136,7 @@ export async function quickSync(): Promise<PushResult> {
     }
 
     if (isSyncing) {
+        syncRequestedWhileBusy = true;
         return { success: false, changesPushed: 0, changesFailed: 0, errors: ['Sync in progress'] };
     }
 
@@ -143,6 +147,7 @@ export async function quickSync(): Promise<PushResult> {
         return result;
     } finally {
         isSyncing = false;
+        flushDeferredQuickSync();
     }
 }
 
@@ -151,11 +156,25 @@ export async function quickSync(): Promise<PushResult> {
  * Non-blocking - fire and forget.
  */
 export function triggerBackgroundSync(): void {
-    if (navigator.onLine && !isSyncing) {
-        quickSync().catch(err => {
-            console.error('[Sync] Background sync failed:', err);
-        });
+    if (!navigator.onLine) return;
+
+    if (isSyncing) {
+        syncRequestedWhileBusy = true;
+        return;
     }
+
+    quickSync().catch(err => {
+        console.error('[Sync] Background sync failed:', err);
+    });
+}
+
+function flushDeferredQuickSync(): void {
+    if (!syncRequestedWhileBusy || isSyncing || !navigator.onLine) return;
+
+    syncRequestedWhileBusy = false;
+    quickSync().catch(err => {
+        console.error('[Sync] Deferred background sync failed:', err);
+    });
 }
 
 // Sync state management

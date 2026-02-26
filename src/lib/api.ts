@@ -24,13 +24,25 @@ async function getUserId(): Promise<string> {
 export async function migrateFutureTransactions(oldRuleId: string, newRuleId: string, startDate: string): Promise<void> {
     try {
         const db = await getDatabaseAsync();
-        await db.query(`
+        const userId = await getUserId();
+        const timestamp = now();
+        const result = await db.query<Transaction>(`
             UPDATE transactions 
-            SET recurring_rule_id = $1 
+            SET recurring_rule_id = $1,
+                updated_at = $5
             WHERE recurring_rule_id = $2 
+              AND user_id = $4
               AND (original_date >= $3 OR (original_date IS NULL AND date >= $3))
               AND deleted_at IS NULL
-        `, [newRuleId, oldRuleId, startDate]);
+            RETURNING *
+        `, [newRuleId, oldRuleId, startDate, userId, timestamp]);
+
+        for (const row of result.rows) {
+            await trackChange('transactions', row.id, 'UPDATE', row);
+        }
+        if (result.rows.length > 0) {
+            triggerBackgroundSync();
+        }
         console.log(`[API] Migrated future transactions from ${oldRuleId} to ${newRuleId}`);
     } catch (err) {
         console.error('[API] Failed to migrate future transactions:', err);
@@ -44,17 +56,54 @@ export async function migrateFutureTransactions(oldRuleId: string, newRuleId: st
 export async function deleteFutureTransactionsForRule(ruleId: string, startDate: string): Promise<void> {
     try {
         const db = await getDatabaseAsync();
-        await db.query(`
+        const userId = await getUserId();
+        const timestamp = now();
+        const result = await db.query<{ id: string }>(`
             UPDATE transactions 
-            SET deleted_at = CURRENT_TIMESTAMP 
-            WHERE recurring_rule_id = $1 
-              AND (original_date >= $2 OR (original_date IS NULL AND date >= $2))
+            SET deleted_at = $1,
+                updated_at = $1
+            WHERE recurring_rule_id = $2
+              AND user_id = $4
+              AND (original_date >= $3 OR (original_date IS NULL AND date >= $3))
               AND deleted_at IS NULL
-        `, [ruleId, startDate]);
+            RETURNING id
+        `, [timestamp, ruleId, startDate, userId]);
+
+        for (const row of result.rows) {
+            await trackChange('transactions', row.id, 'DELETE', { id: row.id, deleted_at: timestamp });
+        }
+        if (result.rows.length > 0) {
+            triggerBackgroundSync();
+        }
         console.log(`[API] Deleted future transactions for rule ${ruleId}`);
     } catch (err) {
         console.error('[API] Failed to delete future transactions:', err);
         throw err;
+    }
+}
+
+/**
+ * Skips a single recurring occurrence.
+ * - Always records an exception on the rule for the original occurrence date.
+ * - Deletes the physical override if one exists.
+ */
+export async function skipRecurringOccurrence(
+    transaction: Pick<Transaction, 'id' | 'date' | 'original_date' | 'recurring_rule_id'>
+): Promise<void> {
+    if (!transaction.recurring_rule_id) {
+        throw new Error('Transaction is not linked to a recurring rule');
+    }
+
+    const occurrenceDate = (transaction.original_date || transaction.date).trim();
+    const rule = await fetchRecurringRule(transaction.recurring_rule_id);
+    const existingExceptions = Array.isArray(rule.exception_dates) ? rule.exception_dates : [];
+    const exceptionDates = Array.from(new Set([...existingExceptions, occurrenceDate]));
+
+    await updateRecurringRule(rule.id, { exception_dates: exceptionDates });
+
+    // Virtual occurrences only exist in memory; physical overrides must be soft-deleted.
+    if (!transaction.id.startsWith('virtual-')) {
+        await deleteTransaction(transaction.id);
     }
 }
 // Helper to generate UUID
@@ -585,7 +634,7 @@ export async function fetchRecurringRule(id: string): Promise<RecurringRule> {
 export async function insertRecurringRule(rule: Partial<RecurringRule>): Promise<RecurringRule> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
-    const id = generateId();
+    const id = rule.id || generateId();
     const timestamp = now();
 
     const newRule: RecurringRule = {
@@ -604,6 +653,7 @@ export async function insertRecurringRule(rule: Partial<RecurringRule>): Promise
         end_date: rule.end_date || null,
         active: rule.active ?? true,
         note: rule.note || null,
+        exception_dates: rule.exception_dates || [],
         created_at: timestamp,
         deleted_at: null
     };

@@ -56,11 +56,8 @@ function getRecordTimestamp(record: SyncRecord): number {
     const timestamp = record.updated_at || record.created_at;
     if (!timestamp) return 0;
 
-    try {
-        return new Date(timestamp).getTime();
-    } catch {
-        return 0;
-    }
+    const parsed = new Date(timestamp).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchCreditTransactions, fetchCreditCards, deleteTransaction, fetchRecurringRule, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
+import { fetchCreditTransactions, fetchCreditCards, deleteTransaction, skipRecurringOccurrence, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
 import type { Transaction, CreditCard } from '../types';
 import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -103,15 +103,7 @@ export function CreditReport() {
 
         try {
             if (!allFuture) {
-                if (deletingTransaction.id.startsWith('virtual-')) {
-                    // Add exception to rule
-                    const rule = await fetchRecurringRule(deletingTransaction.recurring_rule_id);
-                    const exceptions = [...(rule.exception_dates || []), deletingTransaction.date];
-                    await updateRecurringRule(rule.id, { exception_dates: exceptions });
-                } else {
-                    // It's a physical override, just delete it
-                    await deleteTransaction(deletingTransaction.id);
-                }
+                await skipRecurringOccurrence(deletingTransaction);
             } else {
                 const ruleId = deletingTransaction.recurring_rule_id!;
                 const dateStr = deletingTransaction.original_date || deletingTransaction.date;

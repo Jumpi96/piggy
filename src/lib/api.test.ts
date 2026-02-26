@@ -238,6 +238,28 @@ describe('api', () => {
             expect(result.id).toBeDefined();
             expect(mockQuery).toHaveBeenCalled();
         });
+
+        it('uses provided id when one is supplied', async () => {
+            const input: Partial<RecurringRule> = {
+                id: 'rule-custom-id',
+                direction: 'expense',
+                amount_cents: 100000,
+                currency_code: 'USD',
+                category: 'Housing',
+                tag: 'rent',
+                payment_method: 'cash',
+                schedule_type: 'monthly_day',
+                schedule_config: { day: 1 },
+                start_date: '2024-01-01',
+            };
+
+            mockQuery.mockResolvedValueOnce({ rows: [] });
+
+            const result = await api.insertRecurringRule(input);
+
+            expect(result.id).toBe('rule-custom-id');
+            expect(mockQuery.mock.calls[0][1][0]).toBe('rule-custom-id');
+        });
     });
 
     describe('deleteRecurringRule', () => {
@@ -250,6 +272,119 @@ describe('api', () => {
             const callArgs = mockQuery.mock.calls[0][0];
             expect(callArgs).toContain('UPDATE');
             expect(callArgs).toContain('deleted_at');
+        });
+    });
+
+    describe('skipRecurringOccurrence', () => {
+        it('adds exception using original_date and deletes physical override', async () => {
+            mockQuery
+                // fetchRecurringRule
+                .mockResolvedValueOnce({
+                    rows: [{
+                        id: 'rule-1',
+                        schedule_config: '{"n":1}',
+                        exception_dates: '[]'
+                    }]
+                })
+                // updateRecurringRule UPDATE
+                .mockResolvedValueOnce({ rows: [] })
+                // updateRecurringRule SELECT
+                .mockResolvedValueOnce({
+                    rows: [{
+                        id: 'rule-1',
+                        schedule_config: '{"n":1}',
+                        exception_dates: '["2024-01-10"]'
+                    }]
+                })
+                // deleteTransaction
+                .mockResolvedValueOnce({ rows: [] });
+
+            await api.skipRecurringOccurrence({
+                id: 'tx-1',
+                recurring_rule_id: 'rule-1',
+                date: '2024-01-20',
+                original_date: '2024-01-10',
+            });
+
+            expect(mockQuery).toHaveBeenCalledTimes(4);
+
+            const updateSql = mockQuery.mock.calls[1][0];
+            const updateParams = mockQuery.mock.calls[1][1];
+            expect(updateSql).toContain('UPDATE recurring_rules');
+            expect(updateParams[1]).toBe(JSON.stringify(['2024-01-10']));
+
+            const deleteSql = mockQuery.mock.calls[3][0];
+            const deleteParams = mockQuery.mock.calls[3][1];
+            expect(deleteSql).toContain('UPDATE transactions SET deleted_at');
+            expect(deleteParams[1]).toBe('tx-1');
+        });
+
+        it('adds exception without deleting when occurrence is virtual', async () => {
+            mockQuery
+                // fetchRecurringRule
+                .mockResolvedValueOnce({
+                    rows: [{
+                        id: 'rule-1',
+                        schedule_config: '{"n":1}',
+                        exception_dates: '[]'
+                    }]
+                })
+                // updateRecurringRule UPDATE
+                .mockResolvedValueOnce({ rows: [] })
+                // updateRecurringRule SELECT
+                .mockResolvedValueOnce({
+                    rows: [{
+                        id: 'rule-1',
+                        schedule_config: '{"n":1}',
+                        exception_dates: '["2024-01-10"]'
+                    }]
+                });
+
+            await api.skipRecurringOccurrence({
+                id: 'virtual-rule-1-2024-01-10',
+                recurring_rule_id: 'rule-1',
+                date: '2024-01-10',
+                original_date: '2024-01-10',
+            });
+
+            expect(mockQuery).toHaveBeenCalledTimes(3);
+        });
+    });
+
+    describe('migrateFutureTransactions', () => {
+        it('updates recurring_rule_id with updated_at and user scope', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [{ id: 'tx-1' }] });
+
+            await api.migrateFutureTransactions('old-rule', 'new-rule', '2024-01-01');
+
+            const sql = mockQuery.mock.calls[0][0];
+            const params = mockQuery.mock.calls[0][1];
+            expect(sql).toContain('SET recurring_rule_id = $1');
+            expect(sql).toContain('updated_at = $5');
+            expect(sql).toContain('WHERE recurring_rule_id = $2');
+            expect(sql).toContain('AND user_id = $4');
+            expect(params[0]).toBe('new-rule');
+            expect(params[1]).toBe('old-rule');
+            expect(params[2]).toBe('2024-01-01');
+            expect(params[3]).toBe('test-user-123');
+        });
+    });
+
+    describe('deleteFutureTransactionsForRule', () => {
+        it('soft deletes future overrides with updated_at and user scope', async () => {
+            mockQuery.mockResolvedValueOnce({ rows: [{ id: 'tx-1' }, { id: 'tx-2' }] });
+
+            await api.deleteFutureTransactionsForRule('rule-1', '2024-01-15');
+
+            const sql = mockQuery.mock.calls[0][0];
+            const params = mockQuery.mock.calls[0][1];
+            expect(sql).toContain('SET deleted_at = $1');
+            expect(sql).toContain('updated_at = $1');
+            expect(sql).toContain('WHERE recurring_rule_id = $2');
+            expect(sql).toContain('AND user_id = $4');
+            expect(params[1]).toBe('rule-1');
+            expect(params[2]).toBe('2024-01-15');
+            expect(params[3]).toBe('test-user-123');
         });
     });
 
