@@ -292,6 +292,38 @@ async function hydrateTablePaginated(
     console.log(`[Sync] Hydrated ${table}: ${totalRecords} records (paginated)`);
 }
 
+// FK dependencies: table -> tables it depends on (in order they should be hydrated)
+const FK_DEPENDENCIES: Partial<Record<SyncTableName, SyncTableName[]>> = {
+    'exchange_rates': ['currencies'],
+    'recurring_rules': ['currencies', 'credit_cards'],
+    'transactions': ['currencies', 'exchange_rates', 'credit_cards', 'recurring_rules'],
+};
+
+/**
+ * Ensures all FK dependency tables are populated before resyncing a table.
+ */
+async function ensureDependenciesPopulated(
+    db: Awaited<ReturnType<typeof getDatabaseAsync>>,
+    table: SyncTableName
+): Promise<void> {
+    const dependencies = FK_DEPENDENCIES[table];
+    if (!dependencies) return;
+
+    for (const depTable of dependencies) {
+        const countResult = await db.query<{ count: number }>(
+            `SELECT COUNT(*)::int as count FROM ${depTable}`
+        );
+        if ((countResult.rows[0]?.count ?? 0) === 0) {
+            console.log(`[Sync] Dependency ${depTable} empty, hydrating before ${table} resync...`);
+            if (depTable === 'transactions') {
+                await hydrateTablePaginated(db, depTable);
+            } else {
+                await hydrateTable(db, depTable);
+            }
+        }
+    }
+}
+
 /**
  * Performs a full resync of a single table.
  * Clears local data and re-downloads everything from server.
@@ -300,6 +332,9 @@ async function hydrateTablePaginated(
 export async function fullTableResync(table: SyncTableName): Promise<number> {
     console.log(`[Sync] Starting full resync for ${table}...`);
     const db = await getDatabaseAsync();
+
+    // Ensure FK dependencies are populated before clearing and resyncing
+    await ensureDependenciesPopulated(db, table);
 
     // Clear local table data
     await db.query(`DELETE FROM ${table}`);
