@@ -102,6 +102,27 @@ async function pushInsert(
     // Remove user_id - Supabase will set it via RLS default
     const { user_id, ...insertPayload } = payload;
 
+    // For transaction overrides, use upsert on the (recurring_rule_id, original_date) constraint
+    // This handles the case where user edits the same occurrence multiple times
+    if (table === 'transactions' && payload.recurring_rule_id && payload.original_date) {
+        const { error } = await supabase
+            .from(table)
+            .upsert(insertPayload, {
+                onConflict: 'recurring_rule_id,original_date',
+                ignoreDuplicates: false
+            });
+
+        if (error) {
+            // If upsert fails due to primary key conflict, the record already exists with same ID
+            if (error.code === '23505') {
+                console.log(`[Sync Push] Record already exists, treating as success: ${table}/${payload.id}`);
+                return;
+            }
+            throw new Error(error.message);
+        }
+        return;
+    }
+
     const { error } = await supabase
         .from(table)
         .insert(insertPayload);

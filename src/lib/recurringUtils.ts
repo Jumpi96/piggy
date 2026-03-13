@@ -105,10 +105,16 @@ export function generateOccurrences(
 /**
  * Merges virtual occurrences with physical overrides.
  * Virtual occurrences that have a physical counterpart (matched by recurring_rule_id and original_date) are hidden.
+ *
+ * @param virtual - Virtual transactions generated from recurring rules
+ * @param physical - Physical transactions to display
+ * @param overridesForFiltering - Additional overrides used only for filtering virtuals (not included in output).
+ *                                 Useful when an override was moved to a different date range.
  */
 export function mergeTransactions(
     virtual: Transaction[],
-    physical: Transaction[]
+    physical: Transaction[],
+    overridesForFiltering: Array<{ recurring_rule_id: string | null; original_date: string | null; date: string }> = []
 ): Transaction[] {
     const overrides = new Set<string>();
 
@@ -118,6 +124,14 @@ export function mergeTransactions(
             // For legacy transactions, original_date might be missing. Fallback to date.
             const originalDate = (p.original_date || p.date).trim();
             overrides.add(`${p.recurring_rule_id.trim()}-${originalDate}`);
+        }
+    }
+
+    // Also add overrides that are only for filtering (moved to different date range)
+    for (const o of overridesForFiltering) {
+        if (o.recurring_rule_id) {
+            const originalDate = (o.original_date || o.date).trim();
+            overrides.add(`${o.recurring_rule_id.trim()}-${originalDate}`);
         }
     }
 

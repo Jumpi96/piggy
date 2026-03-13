@@ -250,13 +250,27 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
         };
     });
 
+    // Fetch overrides where original_date is in range but date is outside
+    // These are used only for filtering virtuals, not for display
+    const movedOverrides = await db.query<{ recurring_rule_id: string; original_date: string; date: string }>(`
+        SELECT recurring_rule_id, original_date, date
+        FROM transactions
+        WHERE user_id = $1
+          AND deleted_at IS NULL
+          AND recurring_rule_id IS NOT NULL
+          AND original_date IS NOT NULL
+          AND original_date >= $2
+          AND original_date < $3
+          AND (date < $2 OR date >= $3)
+    `, [userId, startStr, endStr]);
+
     const rules = await fetchRecurringRules();
     let virtual: Transaction[] = [];
     for (const rule of rules) {
         virtual = virtual.concat(generateOccurrences(rule, monthStart, endStr, rates));
     }
 
-    return mergeTransactions(virtual, physical);
+    return mergeTransactions(virtual, physical, movedOverrides.rows);
 }
 
 export async function fetchTransactionsRange(startDate: string, endDate: string): Promise<Transaction[]> {
@@ -291,13 +305,26 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
         };
     });
 
+    // Fetch overrides where original_date is in range but date is outside
+    const movedOverrides = await db.query<{ recurring_rule_id: string; original_date: string; date: string }>(`
+        SELECT recurring_rule_id, original_date, date
+        FROM transactions
+        WHERE user_id = $1
+          AND deleted_at IS NULL
+          AND recurring_rule_id IS NOT NULL
+          AND original_date IS NOT NULL
+          AND original_date >= $2
+          AND original_date < $3
+          AND (date < $2 OR date >= $3)
+    `, [userId, startDate, endDate]);
+
     const rules = await fetchRecurringRules();
     let virtual: Transaction[] = [];
     for (const rule of rules) {
         virtual = virtual.concat(generateOccurrences(rule, startDate, endDate, rates));
     }
 
-    return mergeTransactions(virtual, physical);
+    return mergeTransactions(virtual, physical, movedOverrides.rows);
 }
 
 export async function fetchCreditTransactions(cardId: string, startDate: string, endDate: string): Promise<Transaction[]> {
@@ -333,6 +360,20 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
         };
     });
 
+    // Fetch overrides where original_date is in range but date is outside
+    const movedOverrides = await db.query<{ recurring_rule_id: string; original_date: string; date: string }>(`
+        SELECT recurring_rule_id, original_date, date
+        FROM transactions
+        WHERE user_id = $1
+          AND deleted_at IS NULL
+          AND credit_card_id = $2
+          AND recurring_rule_id IS NOT NULL
+          AND original_date IS NOT NULL
+          AND original_date >= $3
+          AND original_date <= $4
+          AND (date < $3 OR date > $4)
+    `, [userId, cardId, startDate, endDate]);
+
     const rules = await fetchRecurringRules();
     let virtual: Transaction[] = [];
     for (const rule of rules) {
@@ -341,7 +382,7 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
         }
     }
 
-    return mergeTransactions(virtual, physical);
+    return mergeTransactions(virtual, physical, movedOverrides.rows);
 }
 
 export async function insertTransaction(transaction: TransactionInput): Promise<Transaction> {
