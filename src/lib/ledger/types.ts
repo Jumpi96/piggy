@@ -153,6 +153,12 @@ export const DEFAULT_ALLOCATION_CONFIG: AllocationConfig = {
                 "Assets:3_Retirement:IOL:USD",
                 "Assets:3_Retirement:Mattress"
             ]
+        },
+        real_estate: {
+            expected: 0.0,
+            patterns: [
+                "Assets:3_Retirement:NonLiquid:LoteSantoDomingo"
+            ]
         }
     },
     goals: {
