@@ -1,11 +1,23 @@
 import { useState, useEffect } from 'react';
 import { fetchTransactionsRange, fetchParameters, fetchLatestRates } from '../lib/api';
 import type { Transaction, Parameter, ExchangeRate } from '../types';
-import { Loader2, Calendar, Wallet } from 'lucide-react';
+import { Loader2, Calendar, Wallet, PiggyBank } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { formatLocalDate, formatLocalMonth, parseLocalDate } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
+
+// Distinct Tailwind color classes per Ahorro# tag, listed literally so Tailwind's JIT picks them up.
+const AHORRO_TAG_COLORS = [
+    { bar: 'bg-sky-500', dot: 'bg-sky-500' },
+    { bar: 'bg-emerald-500', dot: 'bg-emerald-500' },
+    { bar: 'bg-violet-500', dot: 'bg-violet-500' },
+    { bar: 'bg-amber-500', dot: 'bg-amber-500' },
+    { bar: 'bg-rose-500', dot: 'bg-rose-500' },
+    { bar: 'bg-fuchsia-500', dot: 'bg-fuchsia-500' },
+    { bar: 'bg-lime-500', dot: 'bg-lime-500' },
+    { bar: 'bg-indigo-500', dot: 'bg-indigo-500' },
+];
 
 export function Balance() {
     // Default range: next month to +12 months
@@ -116,6 +128,32 @@ export function Balance() {
         });
         current.setMonth(current.getMonth() + 1);
     }
+
+    // Ahorro# breakdown: per-month + per-tag, signed so allocations (expenses) read positive.
+    const ahorroByMonth: Record<string, Record<string, number>> = {};
+    const ahorroTagSet = new Set<string>();
+    for (const t of transactions) {
+        if (!t.tag?.startsWith('Ahorro#')) continue;
+        const monthKey = t.date.substring(0, 7);
+        const rate = t.exchange_rate?.rate || 1;
+        const cents = t.amount_cents / rate;
+        const value = t.direction === 'expense' ? cents : -cents;
+        ahorroByMonth[monthKey] = ahorroByMonth[monthKey] || {};
+        ahorroByMonth[monthKey][t.tag] = (ahorroByMonth[monthKey][t.tag] || 0) + value;
+        ahorroTagSet.add(t.tag);
+    }
+    const ahorroTags = Array.from(ahorroTagSet).sort();
+    const ahorroRows = breakdown.map(b => {
+        const segments = ahorroTags.map(tag => ({ tag, value: ahorroByMonth[b.month]?.[tag] || 0 }));
+        const total = segments.reduce((s, x) => s + x.value, 0);
+        return { month: b.month, segments, total };
+    });
+    const ahorroTagTotals = ahorroTags.map(tag => ({
+        tag,
+        value: ahorroRows.reduce((s, r) => s + (r.segments.find(seg => seg.tag === tag)?.value || 0), 0),
+    }));
+    const ahorroGrandTotal = ahorroTagTotals.reduce((s, t) => s + t.value, 0);
+    const ahorroMaxRowTotal = Math.max(0, ...ahorroRows.map(r => Math.abs(r.total)));
 
     // Total days in range
     const totalDiffTime = Math.max(0, end.getTime() - start.getTime());
@@ -238,6 +276,80 @@ export function Balance() {
                             </p>
                         </div>
                     </div>
+
+                    {ahorroTags.length > 0 && (
+                        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 overflow-hidden">
+                            <div className="px-6 py-4 border-b border-gray-100 dark:border-zinc-700 flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex items-center gap-2">
+                                    <PiggyBank className="w-4 h-4 text-zinc-400" />
+                                    <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-500">Savings Allocation</h3>
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                    {ahorroTags.map((tag, i) => (
+                                        <div key={tag} className="flex items-center gap-1.5">
+                                            <span className={cn("w-2 h-2 rounded-full", AHORRO_TAG_COLORS[i % AHORRO_TAG_COLORS.length].dot)} />
+                                            <span className="text-[10px] font-mono opacity-70">{tag}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="divide-y divide-gray-50 dark:divide-zinc-700/50">
+                                {ahorroRows.map(row => {
+                                    const outerWidthPct = ahorroMaxRowTotal > 0
+                                        ? Math.min(100, (Math.abs(row.total) / ahorroMaxRowTotal) * 100)
+                                        : 0;
+                                    const denom = row.segments.reduce((s, x) => s + Math.abs(x.value), 0);
+                                    return (
+                                        <div key={row.month} className="px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <span className="font-mono text-sm font-bold w-20 shrink-0">{row.month}</span>
+                                            <div className="flex-1 flex items-center gap-3">
+                                                <div className="flex-1 h-2 bg-gray-100 dark:bg-zinc-700 rounded-full overflow-hidden hidden md:block">
+                                                    <div className="h-full flex" style={{ width: `${outerWidthPct}%` }}>
+                                                        {row.segments.map((seg) => {
+                                                            const segPct = denom > 0 ? (Math.abs(seg.value) / denom) * 100 : 0;
+                                                            if (segPct === 0) return null;
+                                                            const colorIdx = ahorroTags.indexOf(seg.tag) % AHORRO_TAG_COLORS.length;
+                                                            return (
+                                                                <div
+                                                                    key={seg.tag}
+                                                                    className={cn("h-full", AHORRO_TAG_COLORS[colorIdx].bar)}
+                                                                    style={{ width: `${segPct}%` }}
+                                                                    title={`${seg.tag}: ${formatUSD(seg.value)}`}
+                                                                />
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                                <span className={cn(
+                                                    "font-bold text-sm min-w-[100px] text-right",
+                                                    row.total >= 0 ? "text-zinc-900 dark:text-white" : "text-red-600"
+                                                )}>
+                                                    {formatUSD(row.total)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="px-6 py-3 bg-zinc-50 dark:bg-zinc-900/30 border-t border-gray-100 dark:border-zinc-700 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-mono">
+                                    {ahorroTagTotals.map((tt, i) => (
+                                        <div key={tt.tag} className="flex items-center gap-1.5">
+                                            <span className={cn("w-1.5 h-1.5 rounded-full", AHORRO_TAG_COLORS[i % AHORRO_TAG_COLORS.length].dot)} />
+                                            <span className="opacity-60">{tt.tag}:</span>
+                                            <span className="font-bold">{formatUSD(tt.value)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="text-sm">
+                                    <span className="opacity-60 font-mono text-xs mr-1">TOTAL</span>
+                                    <span className={cn("font-bold", ahorroGrandTotal >= 0 ? "text-emerald-600" : "text-red-600")}>
+                                        {formatUSD(ahorroGrandTotal)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
         </div>
