@@ -1,4 +1,5 @@
 import { supabase } from '../../supabase';
+import { getDatabaseAsync } from '../database';
 import { SYNC_TABLES, type SyncTableName } from '../schema';
 import {
     getPendingChanges,
@@ -129,6 +130,18 @@ async function pushInsert(
             .eq('original_date', payload.original_date);
 
         if (updateError) throw new Error(updateError.message);
+
+        // If another device created this occurrence first, the server row keeps ITS id,
+        // not ours. Converge the local row (and any queued changes) onto the server id,
+        // otherwise our later edits/deletes would be keyed by our stale local id, match
+        // zero server rows, and retry forever — and pull can't repair it because the
+        // local table already holds this natural key under a different id.
+        await adoptServerOverrideId(
+            table,
+            String(payload.id),
+            String(payload.recurring_rule_id),
+            String(payload.original_date)
+        );
         return;
     }
 
@@ -143,6 +156,43 @@ async function pushInsert(
             return;
         }
         throw new Error(error.message);
+    }
+}
+
+/**
+ * After a natural-key override conflict, point the local row and any still-pending
+ * changes at the id the server actually holds, so later local edits/deletes (matched by
+ * id) target the right row. Best-effort: the server content is already correct, so a
+ * failure here must not fail the push (it would just leave the id divergence for a
+ * future pull/push to resolve).
+ */
+async function adoptServerOverrideId(
+    table: SyncTableName,
+    localId: string,
+    recurringRuleId: string,
+    originalDate: string
+): Promise<void> {
+    try {
+        const { data, error } = await supabase
+            .from(table)
+            .select('id')
+            .eq('recurring_rule_id', recurringRuleId)
+            .eq('original_date', originalDate)
+            .maybeSingle();
+
+        const serverId = data?.id as string | undefined;
+        if (error || !serverId || serverId === localId) return;
+
+        const db = await getDatabaseAsync();
+        await db.query(`UPDATE ${table} SET id = $1 WHERE id = $2`, [serverId, localId]);
+        await db.query(
+            `UPDATE _pending_changes SET record_id = $1
+             WHERE table_name = $2 AND record_id = $3 AND synced_at IS NULL`,
+            [serverId, table, localId]
+        );
+        console.log(`[Sync Push] Adopted server id for ${table} override: ${localId} -> ${serverId}`);
+    } catch (err) {
+        console.warn('[Sync Push] Failed to adopt server override id (will retry later):', err);
     }
 }
 

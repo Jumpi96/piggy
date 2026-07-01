@@ -6,23 +6,41 @@ type SbResult = { data?: Array<{ id: string }>; error: SbError };
 
 // Terminal result for update/delete chains; mutated per test to simulate zero rows.
 let terminalResult: SbResult = { data: [{ id: 'srv-id' }], error: null };
+// Result of the adopt lookup: which server id (if any) owns the occurrence.
+let serverSelectResult: { data: { id: string } | null; error: SbError } = { data: { id: 'srv-id' }, error: null };
 
 // --- Controllable, chainable supabase mock --------------------------------------
 const insertMock = vi.fn((_payload?: unknown): Promise<{ error: SbError }> => Promise.resolve({ error: null }));
+
+// update(...).eq(...).eq(...)  (natural-key update, awaited)
+// update(...).eq(...).select() (pushUpdate/pushDelete)
 const selectMock = vi.fn((_cols?: string) => Promise.resolve(terminalResult));
-const eqMock = vi.fn((_col: string, _val: unknown) => chainObj);
-// chainObj is awaitable (for the override update().eq().eq() path) and also exposes
-// .select() (for the update().eq().select() path used by pushUpdate/pushDelete).
-const chainObj = {
+const eqMock = vi.fn((_col: string, _val: unknown) => updateChain);
+const updateChain = {
     eq: eqMock,
     select: selectMock,
     then: (resolve: (v: SbResult) => void) => resolve(terminalResult),
 };
-const updateMock = vi.fn((_fields: Record<string, unknown>) => chainObj);
+const updateMock = vi.fn((_fields: Record<string, unknown>) => updateChain);
+
+// select('id').eq(...).eq(...).maybeSingle()  (adopt lookup)
+const maybeSingleMock = vi.fn(() => Promise.resolve(serverSelectResult));
+const selectEqMock = vi.fn((_col: string, _val: unknown) => selectChain);
+const selectChain = { eq: selectEqMock, maybeSingle: maybeSingleMock };
+const fromSelectMock = vi.fn((_cols: string) => selectChain);
+
 const upsertMock = vi.fn();
-const fromMock = vi.fn((_table: string) => ({ insert: insertMock, update: updateMock, upsert: upsertMock }));
+const fromMock = vi.fn((_table: string) => ({
+    insert: insertMock,
+    update: updateMock,
+    select: fromSelectMock,
+    upsert: upsertMock,
+}));
+
+const dbQueryMock = vi.fn((_sql: string, _params?: unknown[]) => Promise.resolve({ rows: [] }));
 
 vi.mock('../../supabase', () => ({ supabase: { from: (table: string) => fromMock(table) } }));
+vi.mock('../database', () => ({ getDatabaseAsync: () => Promise.resolve({ query: dbQueryMock }) }));
 vi.mock('./queue', () => ({
     markChangeAsSynced: vi.fn(() => Promise.resolve()),
     recordSyncError: vi.fn(() => Promise.resolve()),
@@ -56,6 +74,7 @@ describe('pushInsert override conflict handling', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         terminalResult = { data: [{ id: 'srv-id' }], error: null };
+        serverSelectResult = { data: { id: 'srv-id' }, error: null };
     });
 
     it('inserts a new override by id (no upsert that could rename the PK)', async () => {
@@ -65,6 +84,7 @@ describe('pushInsert override conflict handling', () => {
         expect(insertMock).toHaveBeenCalledTimes(1);
         expect(upsertMock).not.toHaveBeenCalled();
         expect(updateMock).not.toHaveBeenCalled();
+        expect(dbQueryMock).not.toHaveBeenCalled();
     });
 
     it('on unique conflict, updates by natural key WITHOUT touching id/created_at', async () => {
@@ -81,12 +101,38 @@ describe('pushInsert override conflict handling', () => {
         expect(eqMock).toHaveBeenCalledWith('recurring_rule_id', 'rule-1');
         expect(eqMock).toHaveBeenCalledWith('original_date', '2026-07-30');
     });
+
+    it('adopts the server id locally when it differs (repoints row + pending changes)', async () => {
+        insertMock.mockResolvedValueOnce({ error: { code: '23505', message: 'duplicate key' } });
+        serverSelectResult = { data: { id: 'srv-id' }, error: null };
+
+        const ok = await pushChangeImmediately(change('INSERT', overridePayload));
+        expect(ok).toBe(true);
+
+        const idUpdate = dbQueryMock.mock.calls.find(c => /UPDATE transactions SET id/.test(c[0]));
+        expect(idUpdate).toBeDefined();
+        expect(idUpdate![1]).toEqual(['srv-id', 'local-uuid']);
+
+        const pendingRemap = dbQueryMock.mock.calls.find(c => /_pending_changes SET record_id/.test(c[0]));
+        expect(pendingRemap).toBeDefined();
+        expect(pendingRemap![1]).toEqual(['srv-id', 'transactions', 'local-uuid']);
+    });
+
+    it('does not touch local ids when the server already holds our id', async () => {
+        insertMock.mockResolvedValueOnce({ error: { code: '23505', message: 'duplicate key' } });
+        serverSelectResult = { data: { id: 'local-uuid' }, error: null }; // same id -> nothing to adopt
+
+        const ok = await pushChangeImmediately(change('INSERT', overridePayload));
+        expect(ok).toBe(true);
+        expect(dbQueryMock).not.toHaveBeenCalled();
+    });
 });
 
 describe('pushUpdate / pushDelete zero-row handling', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         terminalResult = { data: [{ id: 'srv-id' }], error: null };
+        serverSelectResult = { data: { id: 'srv-id' }, error: null };
     });
 
     it('succeeds when the update matches a server row', async () => {
