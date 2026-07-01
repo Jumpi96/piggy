@@ -572,6 +572,8 @@ export function Overview() {
                             <DailySpendingChart
                                 transactions={transactions}
                                 apd={apd}
+                                periodStart={periodStartStr}
+                                periodEnd={periodEndExclStr}
                             />
                         </div>
                     </div>

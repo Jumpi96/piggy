@@ -1,4 +1,44 @@
 import type { Transaction } from '../types';
+import { parseLocalDate, formatLocalDate } from './dates';
+
+export interface DailySeriesPoint {
+  date: string;      // YYYY-MM-DD
+  dayLabel: string;  // day-of-month, for the axis
+  fullLabel: string; // e.g. "Aug 5", for the tooltip (a period can span two months)
+  amount: number;
+}
+
+/**
+ * Builds a chronological, one-point-per-day series across a financial period.
+ *
+ * A period can start on any day-of-month, so it may span two calendar months
+ * (e.g. Jul 20 – Aug 19). Bucketing by day-of-month (as the chart used to) scrambles
+ * that timeline; instead we walk the actual date range [startStr, endExclStr) so the
+ * points stay in real chronological order and zero-spend days are included.
+ */
+export function buildDailySeries(
+  amountByDate: Map<string, number>,
+  startStr: string,
+  endExclStr: string
+): DailySeriesPoint[] {
+  const monthFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+  const out: DailySeriesPoint[] = [];
+  const cursor = parseLocalDate(startStr);
+  const end = parseLocalDate(endExclStr);
+  let guard = 0;
+  while (cursor < end && guard < 400) {
+    const dateStr = formatLocalDate(cursor);
+    out.push({
+      date: dateStr,
+      dayLabel: String(cursor.getDate()),
+      fullLabel: monthFmt.format(cursor),
+      amount: amountByDate.get(dateStr) || 0,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+    guard++;
+  }
+  return out;
+}
 
 export interface CategoryData {
   name: string;

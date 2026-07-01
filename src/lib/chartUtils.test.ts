@@ -3,7 +3,8 @@ import {
     getCategoryColor,
     getTagColor,
     aggregateByCategory,
-    aggregateByTag
+    aggregateByTag,
+    buildDailySeries
 } from './chartUtils';
 import type { Transaction } from '../types';
 
@@ -119,6 +120,30 @@ describe('chartUtils', () => {
         it('respects limit', () => {
             const result = aggregateByTag(mockTransactions, 'expense', null, 1);
             expect(result).toHaveLength(1);
+        });
+    });
+
+    describe('buildDailySeries', () => {
+        it('walks the real date range in chronological order across a month boundary', () => {
+            // Period Jul 20 – Aug 19 (start day 20): must stay in real order, not day-of-month.
+            const amounts = new Map<string, number>([
+                ['2026-07-25', 100],
+                ['2026-08-05', 200],
+            ]);
+            const series = buildDailySeries(amounts, '2026-07-20', '2026-08-20');
+
+            expect(series).toHaveLength(31); // Jul 20..31 (12) + Aug 1..19 (19)
+            expect(series[0].date).toBe('2026-07-20');
+            expect(series[series.length - 1].date).toBe('2026-08-19');
+            // July points come before August points (chronological, not 1..31 day-of-month).
+            const jul25 = series.findIndex(p => p.date === '2026-07-25');
+            const aug05 = series.findIndex(p => p.date === '2026-08-05');
+            expect(jul25).toBeLessThan(aug05);
+            expect(series[jul25].amount).toBe(100);
+            expect(series[aug05].amount).toBe(200);
+            expect(series[jul25].fullLabel).toBe('Jul 25');
+            // Zero-spend days are filled in.
+            expect(series.find(p => p.date === '2026-07-21')?.amount).toBe(0);
         });
     });
 });

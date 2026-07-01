@@ -1,15 +1,13 @@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import type { Transaction } from '../../types';
+import { parseLocalDate, formatLocalDate } from '../../lib/dates';
+import { buildDailySeries } from '../../lib/chartUtils';
 
 interface Props {
     transactions: Transaction[];
     apd: number; // Amount per day in USD (not cents)
-}
-
-interface DailyData {
-    day: number;
-    dayLabel: string;
-    amount: number; // in cents
+    periodStart?: string; // YYYY-MM-DD inclusive
+    periodEnd?: string;   // YYYY-MM-DD exclusive
 }
 
 const formatUSD = (cents: number) => {
@@ -23,7 +21,7 @@ const CustomTooltip = ({ active, payload }: any) => {
     return (
         <div className="bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-lg shadow-lg p-3">
             <p className="font-semibold text-sm text-zinc-900 dark:text-white">
-                Day {data.day}
+                {data.fullLabel}
             </p>
             <p className="text-xs text-zinc-600 dark:text-zinc-300 mt-1">
                 Spent: <span className="font-mono font-bold">{formatUSD(data.amount)}</span>
@@ -38,7 +36,7 @@ const CustomTooltip = ({ active, payload }: any) => {
  * - Credit card payments
  * - To-be-balanced expenses
  */
-export function DailySpendingChart({ transactions, apd }: Props) {
+export function DailySpendingChart({ transactions, apd, periodStart, periodEnd }: Props) {
     // Filter transactions:
     // 1. Only expenses
     // 2. Exclude recurring rules (recurring_rule_id is set)
@@ -53,18 +51,15 @@ export function DailySpendingChart({ transactions, apd }: Props) {
         !t.tag?.startsWith('Ahorro#')
     );
 
-    // Group by day of month
-    const dailyMap = new Map<number, number>();
-
+    // Group by the full date. A financial period can start on any day-of-month and thus
+    // span two calendar months, so bucketing by day-of-month alone scrambles the timeline.
+    const dailyMap = new Map<string, number>();
     filteredTransactions.forEach(t => {
-        const day = parseInt(t.date.split('-')[2], 10);
         const amountInBaseCurrency = t.amount_cents / (t.exchange_rate?.rate || 1);
-        dailyMap.set(day, (dailyMap.get(day) || 0) + amountInBaseCurrency);
+        dailyMap.set(t.date, (dailyMap.get(t.date) || 0) + amountInBaseCurrency);
     });
 
-    // Get the month from the first transaction to determine number of days
-    const firstTx = transactions[0];
-    if (!firstTx) {
+    if (transactions.length === 0) {
         return (
             <div className="h-full flex items-center justify-center text-sm text-zinc-400">
                 No spending data available
@@ -72,18 +67,19 @@ export function DailySpendingChart({ transactions, apd }: Props) {
         );
     }
 
-    const [year, month] = firstTx.date.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    // Build chart data for all days in the month
-    const chartData: DailyData[] = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-        chartData.push({
-            day: d,
-            dayLabel: String(d),
-            amount: dailyMap.get(d) || 0
-        });
+    // Resolve the period window. Prefer the explicit bounds passed in; otherwise fall back
+    // to the span of the transactions themselves.
+    const sortedDates = transactions.map(t => t.date).sort();
+    const startStr = periodStart || sortedDates[0];
+    let endExclStr = periodEnd;
+    if (!endExclStr) {
+        const last = parseLocalDate(sortedDates[sortedDates.length - 1]);
+        last.setDate(last.getDate() + 1);
+        endExclStr = formatLocalDate(last);
     }
+
+    const chartData = buildDailySeries(dailyMap, startStr, endExclStr);
+    const daysInRange = chartData.length;
 
     // Calculate ApD in cents for the reference line
     const apdCents = apd * 100;
@@ -117,7 +113,7 @@ export function DailySpendingChart({ transactions, apd }: Props) {
                     stroke="currentColor"
                     tick={{ fill: 'currentColor' }}
                     tickLine={false}
-                    interval={Math.ceil(daysInMonth / 15)}
+                    interval={Math.ceil(daysInRange / 15)}
                 />
                 <YAxis
                     tickFormatter={(value) => formatUSD(value)}
