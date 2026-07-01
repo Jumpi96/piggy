@@ -478,19 +478,23 @@ describe('api', () => {
     });
 
     describe('fetchExchangeRate', () => {
-        it('returns exchange rate id from local database', async () => {
-            const mockData = [{ id: 'rate-123', currency_code: 'USD', rate: 100 }];
+        it('returns the rate that was effective for the transaction month', async () => {
+            const mockData = [
+                { id: 'rate-jun', currency_code: 'ARS', rate: 1200, created_at: '2024-06-10T00:00:00Z' },
+                { id: 'rate-may', currency_code: 'ARS', rate: 1000, created_at: '2024-05-10T00:00:00Z' },
+            ];
             mockQuery.mockResolvedValueOnce({ rows: mockData });
 
-            const rateId = await api.fetchExchangeRate('USD');
+            // A May transaction should keep May's rate, not the later June one.
+            const rateId = await api.fetchExchangeRate('ARS', '2024-05-20');
 
-            expect(rateId).toBe('rate-123');
+            expect(rateId).toBe('rate-may');
         });
 
         it('returns null when no rate found', async () => {
             mockQuery.mockResolvedValueOnce({ rows: [] });
 
-            const rateId = await api.fetchExchangeRate('XYZ');
+            const rateId = await api.fetchExchangeRate('XYZ', '2024-06-01');
 
             expect(rateId).toBeNull();
         });

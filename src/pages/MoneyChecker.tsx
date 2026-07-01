@@ -127,7 +127,7 @@ export function MoneyChecker() {
             setShouldBalance(false);
             try {
                 const today = getTodayLocalDate();
-                const exchangeRateId = await fetchExchangeRate('USD');
+                const exchangeRateId = await fetchExchangeRate('USD', today);
                 const amountCents = Math.round(Math.abs(difference) * 100);
 
                 if (difference < 0) {

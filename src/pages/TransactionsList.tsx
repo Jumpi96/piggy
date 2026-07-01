@@ -72,7 +72,7 @@ export function TransactionsList() {
             if (t.id.startsWith('virtual-')) {
                 // Virtual transaction: need to create a physical override
                 const { insertTransaction, fetchExchangeRate } = await import('../lib/api');
-                const exchangeRateId = await fetchExchangeRate(t.currency_code);
+                const exchangeRateId = await fetchExchangeRate(t.currency_code, t.date);
                 await insertTransaction({
                     direction: t.direction,
                     amount_cents: t.amount_cents,

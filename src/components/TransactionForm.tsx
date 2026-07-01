@@ -150,7 +150,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             const dateStr = formatLocalDate(effectiveDate);
 
             // Exchange Rate
-            const exchangeRateId = await fetchExchangeRate(currencyCode);
+            const exchangeRateId = await fetchExchangeRate(currencyCode, dateStr);
 
             const transactionMeta = {
                 direction,

@@ -4,6 +4,7 @@ import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from
 import { formatLocalDate, getTodayLocalDate } from './dates';
 import { generateOccurrences, mergeTransactions } from './recurringUtils';
 import { normalizeForComparison } from './utils';
+import { pickRateForDate } from './currency';
 
 // Transaction Input without system fields
 export type TransactionInput = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'deleted_at'>;
@@ -237,11 +238,11 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
         ORDER BY t.date DESC
     `, [userId, startStr, endStr]);
 
-    const rates = await fetchLatestRates();
+    const rates = await fetchAllRates();
     const physical = result.rows.map(row => {
         let rate: number | undefined = row.exchange_rate_value ?? undefined;
         if (!rate && row.currency_code !== 'USD') {
-            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate;
+            rate = pickRateForDate(rates, row.currency_code, row.date)?.rate;
         }
         return {
             ...row,
@@ -292,11 +293,11 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
         ORDER BY t.date ASC
     `, [userId, startDate, endDate]);
 
-    const rates = await fetchLatestRates();
+    const rates = await fetchAllRates();
     const physical = result.rows.map(row => {
         let rate: number | undefined = row.exchange_rate_value ?? undefined;
         if (!rate && row.currency_code !== 'USD') {
-            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate;
+            rate = pickRateForDate(rates, row.currency_code, row.date)?.rate;
         }
         return {
             ...row,
@@ -347,11 +348,11 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
         ORDER BY t.date ASC
     `, [userId, cardId, startDate, endDate]);
 
-    const rates = await fetchLatestRates();
+    const rates = await fetchAllRates();
     const physical = result.rows.map(row => {
         let rate = row.exchange_rate_value;
         if (!rate && row.currency_code !== 'USD') {
-            rate = rates.find(r => r.currency_code.trim().toUpperCase() === row.currency_code.trim().toUpperCase())?.rate || undefined;
+            rate = pickRateForDate(rates, row.currency_code, row.date)?.rate || undefined;
         }
         return {
             ...row,
@@ -530,18 +531,20 @@ export async function clearBalancedTransactions(monthStart: string): Promise<num
 // Exchange Rates
 // ============================================================================
 
-export async function fetchExchangeRate(currencyCode: string): Promise<string | null> {
+export async function fetchExchangeRate(currencyCode: string, date: string): Promise<string | null> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
 
-    const result = await db.query<{ id: string }>(`
-        SELECT id FROM exchange_rates
+    // Fetch the currency's full rate history and pick the one effective for `date`'s month.
+    // This keeps backdated transactions on the rate that was in effect that month instead of
+    // always stamping today's latest rate.
+    const result = await db.query<{ id: string; currency_code: string; rate: number; created_at: string }>(`
+        SELECT id, currency_code, rate, created_at FROM exchange_rates
         WHERE currency_code = $1 AND user_id = $2
         ORDER BY created_at DESC
-        LIMIT 1
     `, [currencyCode, userId]);
 
-    return result.rows[0]?.id || null;
+    return pickRateForDate(result.rows, currencyCode, date)?.id ?? null;
 }
 
 export async function insertExchangeRate(currencyCode: string, rate: number): Promise<{ id: string; currency_code: string; rate: number }> {
@@ -589,6 +592,21 @@ export async function fetchLatestRates(): Promise<Array<{ id: string; currency_c
     // Get latest rate for each currency
     const result = await db.query<{ id: string; currency_code: string; rate: number; created_at: string }>(`
         SELECT DISTINCT ON (currency_code) id, currency_code, rate, created_at
+        FROM exchange_rates
+        WHERE user_id = $1
+        ORDER BY currency_code, created_at DESC
+    `, [userId]);
+
+    return result.rows;
+}
+
+// Full rate history (all rows) so rates can be matched to a transaction's month.
+export async function fetchAllRates(): Promise<Array<{ id: string; currency_code: string; rate: number; created_at: string }>> {
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+
+    const result = await db.query<{ id: string; currency_code: string; rate: number; created_at: string }>(`
+        SELECT id, currency_code, rate, created_at
         FROM exchange_rates
         WHERE user_id = $1
         ORDER BY currency_code, created_at DESC

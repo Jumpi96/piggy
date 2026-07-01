@@ -1,5 +1,6 @@
 import type { RecurringRule, Transaction } from '../types';
 import { formatLocalDate, parseLocalDate } from './dates';
+import { pickRateForDate } from './currency';
 
 /**
  * Generates virtual occurrences for a recurring rule within a date range.
@@ -8,14 +9,10 @@ export function generateOccurrences(
     rule: RecurringRule,
     start: string,
     end: string,
-    rates: Array<{ currency_code: string; rate: number }> = []
+    rates: Array<{ currency_code: string; rate: number; created_at: string }> = []
 ): Transaction[] {
     const occurrences: Transaction[] = [];
     if (!rule.active) return occurrences;
-
-    const normalizedCode = rule.currency_code.trim().toUpperCase();
-    const ruleRate = rates.find(r => r.currency_code.trim().toUpperCase() === normalizedCode)?.rate
-        || (normalizedCode === 'USD' ? 1 : null);
 
     const startDate = parseLocalDate(rule.start_date);
     const endDate = rule.end_date ? parseLocalDate(rule.end_date) : null;
@@ -63,6 +60,8 @@ export function generateOccurrences(
         if (endDate && nextDate > endDate) break;
 
         if (nextDate >= rangeStart && !exceptionDates.has(dateStr)) {
+            // Best-effort: use the rate that was effective for this occurrence's month.
+            const ruleRate = pickRateForDate(rates, rule.currency_code, dateStr)?.rate ?? null;
             occurrences.push({
                 id: `virtual-${rule.id}-${dateStr}`,
                 user_id: rule.user_id,
