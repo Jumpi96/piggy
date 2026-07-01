@@ -65,14 +65,12 @@ export function CreditReport() {
         if (!selectedCardId) return;
         setIsLoading(true);
         try {
-            // fetchCreditTransactions is inclusive on both ends, so convert the
-            // period's exclusive end into the last day of the period.
+            // fetchCreditTransactions takes a half-open range [start, end); pass the
+            // period's exclusive end directly so physical and recurring charges on the
+            // period's last day are included consistently.
             const { start: startStr, end: endExclusive } = getPeriodRange(formatLocalMonth(currentMonth));
-            const endDate = parseLocalDate(endExclusive);
-            endDate.setDate(endDate.getDate() - 1);
-            const endStr = formatLocalDate(endDate);
 
-            const txs = await fetchCreditTransactions(selectedCardId, startStr, endStr);
+            const txs = await fetchCreditTransactions(selectedCardId, startStr, endExclusive);
             setTransactions(txs);
         } catch (err) {
             console.error(err);

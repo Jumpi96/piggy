@@ -324,6 +324,9 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
     return mergeTransactions(virtual, physical, movedOverrides.rows);
 }
 
+// startDate/endDate form a half-open range [startDate, endDate): endDate is the first
+// day AFTER the period. Both the physical query and the virtual generator use the same
+// exclusive bound so a charge on the period's last day is counted consistently.
 export async function fetchCreditTransactions(cardId: string, startDate: string, endDate: string): Promise<Transaction[]> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
@@ -340,7 +343,7 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
           AND t.deleted_at IS NULL
           AND t.credit_card_id = $2
           AND t.date >= $3
-          AND t.date <= $4
+          AND t.date < $4
         ORDER BY t.date ASC
     `, [userId, cardId, startDate, endDate]);
 
@@ -367,8 +370,8 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
           AND recurring_rule_id IS NOT NULL
           AND original_date IS NOT NULL
           AND original_date >= $3
-          AND original_date <= $4
-          AND (date < $3 OR date > $4)
+          AND original_date < $4
+          AND (date < $3 OR date >= $4)
     `, [userId, cardId, startDate, endDate]);
 
     const rules = await fetchRecurringRules();
