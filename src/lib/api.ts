@@ -825,25 +825,6 @@ export async function deleteRecurringRule(id: string): Promise<void> {
 }
 
 // ============================================================================
-// Recurring Generation (Local Implementation)
-// ============================================================================
-
-export async function cleanupFutureRecurring(): Promise<void> {
-    const db = await getDatabaseAsync();
-    const userId = await getUserId();
-    const today = getTodayLocalDate();
-
-    await db.query(`
-        UPDATE transactions
-        SET deleted_at = $1
-        WHERE user_id = $2
-          AND recurring_rule_id IS NOT NULL
-          AND date >= $3
-          AND original_date IS NULL
-    `, [now(), userId, today]);
-}
-
-// ============================================================================
 // Month Balance (Local Computation)
 // ============================================================================
 
