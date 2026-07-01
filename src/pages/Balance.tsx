@@ -3,7 +3,7 @@ import { fetchTransactionsRange, fetchParameters, fetchLatestRates } from '../li
 import type { Transaction, Parameter, ExchangeRate } from '../types';
 import { Loader2, Calendar, Wallet, PiggyBank } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { formatLocalDate, formatLocalMonth, parseLocalDate, getCurrentPeriodAnchor, getPeriodRange, getPeriodForDate, getPeriodLabel } from '../lib/dates';
+import { formatLocalDate, formatLocalMonth, parseLocalDate, getCurrentPeriodAnchor, getPeriodRange, getPeriodForDate, getPeriodLabel, getPeriodLabelMonth, anchorFromPeriodLabelMonth } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -182,10 +182,10 @@ export function Balance() {
                         <label className="text-xs font-bold text-gray-400 uppercase">From</label>
                         <input
                             type="month"
-                            value={getPeriodForDate(range.from)}
+                            value={getPeriodLabelMonth(getPeriodForDate(range.from))}
                             onChange={(e) => {
                                 if (!e.target.value) return;
-                                const { start } = getPeriodRange(e.target.value);
+                                const { start } = getPeriodRange(anchorFromPeriodLabelMonth(e.target.value));
                                 setRange(prev => ({ ...prev, from: start }));
                             }}
                             className="bg-transparent border-none p-0 text-sm font-bold focus:ring-0"
@@ -196,10 +196,10 @@ export function Balance() {
                         <label className="text-xs font-bold text-gray-400 uppercase">To</label>
                         <input
                             type="month"
-                            value={getPeriodForDate(range.to)}
+                            value={getPeriodLabelMonth(getPeriodForDate(range.to))}
                             onChange={(e) => {
                                 if (!e.target.value) return;
-                                const { end } = getPeriodRange(e.target.value);
+                                const { end } = getPeriodRange(anchorFromPeriodLabelMonth(e.target.value));
                                 const lastDay = parseLocalDate(end);
                                 lastDay.setDate(lastDay.getDate() - 1); // inclusive last day of the period
                                 setRange(prev => ({ ...prev, to: formatLocalDate(lastDay) }));

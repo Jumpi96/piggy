@@ -142,7 +142,13 @@ export function getCurrentPeriodAnchor(): Date {
  * period's days, defaulting to the END month on a tie (~50/50). Display only —
  * labels are not guaranteed unique across periods, so never key state on them.
  */
-export function getPeriodLabel(anchor: string): string {
+/**
+ * The calendar month (YYYY-MM) a period is labelled by: the month holding the MAJORITY
+ * of the period's days, defaulting to the END month on a tie. For a start day of 1 this
+ * is just the anchor. This is the single source of truth for both the display label and
+ * the filter, so they never disagree.
+ */
+export function getPeriodLabelMonth(anchor: string): string {
     const [year, month] = anchor.split('-').map(Number); // month is 1-indexed
     const startDay = getMonthStartDay();
     const daysInStartMonth = new Date(year, month, 0).getDate(); // last day of the month
@@ -159,8 +165,33 @@ export function getPeriodLabel(anchor: string): string {
             labelYear += 1;
         }
     }
+    return `${labelYear}-${String(labelMonth).padStart(2, '0')}`;
+}
+
+export function getPeriodLabel(anchor: string): string {
+    const [y, m] = getPeriodLabelMonth(anchor).split('-').map(Number);
     return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' })
-        .format(new Date(labelYear, labelMonth - 1, 1));
+        .format(new Date(y, m - 1, 1));
+}
+
+function shiftMonth(ym: string, delta: number): string {
+    let [y, m] = ym.split('-').map(Number);
+    m += delta;
+    while (m > 12) { m -= 12; y += 1; }
+    while (m < 1) { m += 12; y -= 1; }
+    return `${y}-${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Inverse of {@link getPeriodLabelMonth}: given a label month (what the user sees and
+ * picks in the filter), return the period anchor it names. A period labelled month L is
+ * anchored in L, L-1 or L+1 depending on the start day, so we search those candidates.
+ */
+export function anchorFromPeriodLabelMonth(labelMonth: string): string {
+    for (const candidate of [shiftMonth(labelMonth, -1), labelMonth, shiftMonth(labelMonth, 1)]) {
+        if (getPeriodLabelMonth(candidate) === labelMonth) return candidate;
+    }
+    return labelMonth;
 }
 
 /** Short inclusive date-range label for a period, e.g. "Feb 15 – Mar 14". */

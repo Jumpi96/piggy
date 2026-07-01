@@ -11,6 +11,8 @@ import {
     getPeriodForDate,
     getCurrentPeriodAnchor,
     getPeriodLabel,
+    getPeriodLabelMonth,
+    anchorFromPeriodLabelMonth,
     addMonthsClamped,
     shouldDeriveCardEffectiveDate
 } from './dates';
@@ -272,6 +274,34 @@ describe('Financial Period Utilities', () => {
             expect(getPeriodLabel('2026-07')).toBe('August 2026');
             // Dec 20–Jan 19: end month rolls into the next year
             expect(getPeriodLabel('2026-12')).toBe('January 2027');
+        });
+    });
+
+    describe('getPeriodLabelMonth / anchorFromPeriodLabelMonth', () => {
+        afterEach(() => cacheMonthStartDay(null));
+
+        it('labels a period by its majority month and inverts it (start day 20)', () => {
+            cacheMonthStartDay(20);
+            // Period anchored 2026-07 runs Jul 20 – Aug 19: the majority (and label) is August.
+            expect(getPeriodLabelMonth('2026-07')).toBe('2026-08');
+            expect(anchorFromPeriodLabelMonth('2026-08')).toBe('2026-07');
+            // The label the filter shows must map back to the anchor the breakdown groups by.
+            expect(anchorFromPeriodLabelMonth(getPeriodLabelMonth('2026-11'))).toBe('2026-11');
+            // Year boundary.
+            expect(getPeriodLabelMonth('2026-12')).toBe('2027-01');
+            expect(anchorFromPeriodLabelMonth('2027-01')).toBe('2026-12');
+        });
+
+        it('is the identity when the start day is 1', () => {
+            cacheMonthStartDay(1);
+            expect(getPeriodLabelMonth('2026-07')).toBe('2026-07');
+            expect(anchorFromPeriodLabelMonth('2026-07')).toBe('2026-07');
+        });
+
+        it('stays consistent with getPeriodLabel', () => {
+            cacheMonthStartDay(20);
+            expect(getPeriodLabel('2026-07')).toBe('August 2026');
+            expect(getPeriodLabelMonth('2026-07')).toBe('2026-08');
         });
     });
 
