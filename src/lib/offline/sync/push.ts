@@ -102,24 +102,33 @@ async function pushInsert(
     // Remove user_id - Supabase will set it via RLS default
     const { user_id, ...insertPayload } = payload;
 
-    // For transaction overrides, use upsert on the (recurring_rule_id, original_date) constraint
-    // This handles the case where user edits the same occurrence multiple times
+    // For transaction overrides, an occurrence is uniquely identified by
+    // (recurring_rule_id, original_date). We must NOT use supabase upsert on that
+    // constraint: on conflict it runs DO UPDATE SET id = EXCLUDED.id, renaming the
+    // existing server row's primary key to this device's freshly-minted UUID. That
+    // orphans the other device's copy of the same occurrence, which then re-pulls
+    // under a new id and either duplicates it or (with the local UNIQUE constraint)
+    // silently disappears. Instead: try a plain INSERT, and on any unique-constraint
+    // conflict UPDATE the existing row BY NATURAL KEY, leaving its id untouched.
     if (table === 'transactions' && payload.recurring_rule_id && payload.original_date) {
         const { error } = await supabase
             .from(table)
-            .upsert(insertPayload, {
-                onConflict: 'recurring_rule_id,original_date',
-                ignoreDuplicates: false
-            });
+            .insert(insertPayload);
 
-        if (error) {
-            // If upsert fails due to primary key conflict, the record already exists with same ID
-            if (error.code === '23505') {
-                console.log(`[Sync Push] Record already exists, treating as success: ${table}/${payload.id}`);
-                return;
-            }
-            throw new Error(error.message);
-        }
+        if (!error) return;
+        if (error.code !== '23505') throw new Error(error.message);
+
+        // An override for this occurrence already exists on the server (same id
+        // re-synced, or a different id created on another device). Update its content
+        // by natural key, preserving whatever id the server already holds.
+        const { id: _omitId, created_at: _omitCreatedAt, ...updateFields } = insertPayload;
+        const { error: updateError } = await supabase
+            .from(table)
+            .update(updateFields)
+            .eq('recurring_rule_id', payload.recurring_rule_id)
+            .eq('original_date', payload.original_date);
+
+        if (updateError) throw new Error(updateError.message);
         return;
     }
 
