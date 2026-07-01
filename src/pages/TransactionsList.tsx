@@ -4,7 +4,7 @@ import type { Transaction } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate, parseLocalDate, formatLocalMonth, getTodayLocalDate, getPeriodForDate, getPeriodLabel, getPersistentMonth, setPersistentMonth } from '../lib/dates';
+import { formatLocalDate, parseLocalDate, formatLocalMonth, getTodayLocalDate, getPeriodForDate, getPeriodLabel, formatPeriodRangeLabel, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -217,6 +217,9 @@ export function TransactionsList() {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Transactions</h1>
                         <p className="text-gray-500 dark:text-gray-400">Review your income and expenses</p>
+                        <p className="text-sm text-gray-500 font-mono">
+                            🐷 PERIOD: {formatPeriodRangeLabel(formatLocalMonth(currentMonth))}
+                        </p>
                     </div>
 
                     <div className="flex items-center bg-white dark:bg-zinc-900 rounded-lg shadow-sm border border-gray-100 dark:border-zinc-800 p-1 self-start sm:self-auto">

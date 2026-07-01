@@ -3,7 +3,7 @@ import { fetchParameters, fetchLatestRates, fetchTransactions, upsertParameter, 
 import type { ExchangeRate } from '../types';
 import { Loader2, Plus, Trash2, Wallet, ArrowRightLeft, Settings2, CheckCircle2, Scale } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { formatLocalDate, getTodayLocalDate, getPeriodForDate } from '../lib/dates';
+import { formatLocalDate, getTodayLocalDate, getPeriodForDate, formatPeriodRangeLabel } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -245,6 +245,9 @@ export function MoneyChecker() {
                         Money Checker
                     </h1>
                     <p className="text-sm text-gray-500">Reconcile your physical cash with the app</p>
+                    <p className="text-sm text-gray-500 font-mono">
+                        🐷 PERIOD: {formatPeriodRangeLabel(getPeriodForDate(getTodayLocalDate()))}
+                    </p>
                 </div>
                 <button
                     onClick={() => setIsManaging(!isManaging)}
