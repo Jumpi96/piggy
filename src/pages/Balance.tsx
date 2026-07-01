@@ -3,7 +3,7 @@ import { fetchTransactionsRange, fetchParameters, fetchLatestRates } from '../li
 import type { Transaction, Parameter, ExchangeRate } from '../types';
 import { Loader2, Calendar, Wallet, PiggyBank } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { formatLocalDate, formatLocalMonth, parseLocalDate } from '../lib/dates';
+import { formatLocalDate, formatLocalMonth, parseLocalDate, getCurrentPeriodAnchor, getPeriodRange, getPeriodForDate, getPeriodLabel } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -20,15 +20,18 @@ const AHORRO_TAG_COLORS = [
 ];
 
 export function Balance() {
-    // Default range: next month to +12 months
+    // Default range: next financial period through +12 periods
     const getInitialRange = () => {
-        const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-        const end = new Date(now.getFullYear(), now.getMonth() + 12, 1);
-        const lastDay = new Date(end.getFullYear(), end.getMonth() + 1, 0);
+        const base = getCurrentPeriodAnchor(); // 1st of the current period's anchor month
+        const fromAnchor = formatLocalMonth(new Date(base.getFullYear(), base.getMonth() + 1, 1));
+        const toAnchor = formatLocalMonth(new Date(base.getFullYear(), base.getMonth() + 12, 1));
+        const { start } = getPeriodRange(fromAnchor);
+        const { end } = getPeriodRange(toAnchor);
+        const lastDay = parseLocalDate(end);
+        lastDay.setDate(lastDay.getDate() - 1); // inclusive last day of the last period
 
         return {
-            from: formatLocalDate(start),
+            from: start,
             to: formatLocalDate(lastDay)
         };
     };
@@ -75,12 +78,12 @@ export function Balance() {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((isCents ? cents / 100 : cents));
     };
 
-    // Monthly breakdown logic
+    // Breakdown logic (grouped by financial period, keyed on the period anchor)
     const monthlyData: Record<string, number> = {};
     let totalBalanceCents = 0;
 
     transactions.forEach(t => {
-        const monthKey = t.date.substring(0, 7); // YYYY-MM (DB dates are strings)
+        const monthKey = getPeriodForDate(t.date); // period anchor (YYYY-MM)
         const rate = t.exchange_rate?.rate || 1;
         const amountCents = t.amount_cents / rate;
         const value = t.direction === 'income' ? amountCents : -amountCents;
@@ -89,44 +92,47 @@ export function Balance() {
         totalBalanceCents += value;
     });
 
-    const breakdown: { month: string; actual: number; budget: number; value: number }[] = [];
-    const start = parseLocalDate(range.from);
-    const end = parseLocalDate(range.to);
+    const breakdown: { month: string; label: string; actual: number; budget: number; value: number }[] = [];
+    const rStart = parseLocalDate(range.from);
+    const rEnd = parseLocalDate(range.to);
 
-    const current = new Date(start.getFullYear(), start.getMonth(), 1);
-    const last = new Date(end.getFullYear(), end.getMonth(), 1);
+    // Iterate every financial period whose anchor falls within the selected range.
+    const startAnchor = getPeriodForDate(range.from);
+    const endAnchor = getPeriodForDate(range.to);
+    let [cy, cm] = startAnchor.split('-').map(Number);
+    const [ey, em] = endAnchor.split('-').map(Number);
 
-    while (current <= last) {
-        const key = formatLocalMonth(current);
+    while (cy < ey || (cy === ey && cm <= em)) {
+        const anchor = `${cy}-${String(cm).padStart(2, '0')}`;
 
-        // Calculate days in this month within the range
-        const mStart = new Date(current.getFullYear(), current.getMonth(), 1);
-        const mEnd = new Date(current.getFullYear(), current.getMonth() + 1, 0);
+        // Days of this period that fall inside the selected range.
+        const { start: pStartStr, end: pEndExclStr } = getPeriodRange(anchor);
+        const pStart = parseLocalDate(pStartStr);
+        const pEnd = parseLocalDate(pEndExclStr);
+        pEnd.setDate(pEnd.getDate() - 1); // inclusive last day
 
-        const rStart = parseLocalDate(range.from);
-        const rEnd = parseLocalDate(range.to);
-
-        const actualStart = mStart > rStart ? mStart : rStart;
-        const actualEnd = mEnd < rEnd ? mEnd : rEnd;
-
-        // Reset to midnight for day calculation
+        const actualStart = pStart > rStart ? pStart : rStart;
+        const actualEnd = pEnd < rEnd ? pEnd : rEnd;
         actualStart.setHours(0, 0, 0, 0);
         actualEnd.setHours(0, 0, 0, 0);
 
         const diffTime = Math.max(0, actualEnd.getTime() - actualStart.getTime());
         const daysInRange = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-        const rawSum = monthlyData[key] || 0;
+        const rawSum = monthlyData[anchor] || 0;
         const budgetCents = apd * daysInRange * 100;
         const adjustedValue = rawSum - budgetCents;
 
         breakdown.push({
-            month: key,
+            month: anchor,
+            label: getPeriodLabel(anchor),
             actual: rawSum,
             budget: budgetCents,
             value: adjustedValue
         });
-        current.setMonth(current.getMonth() + 1);
+
+        cm += 1;
+        if (cm > 12) { cm = 1; cy += 1; }
     }
 
     // Ahorro# breakdown: per-month + per-tag, signed so allocations (expenses) read positive.
@@ -134,7 +140,7 @@ export function Balance() {
     const ahorroTagSet = new Set<string>();
     for (const t of transactions) {
         if (!t.tag?.startsWith('Ahorro#')) continue;
-        const monthKey = t.date.substring(0, 7);
+        const monthKey = getPeriodForDate(t.date);
         const rate = t.exchange_rate?.rate || 1;
         const cents = t.amount_cents / rate;
         const value = t.direction === 'expense' ? cents : -cents;
@@ -156,7 +162,7 @@ export function Balance() {
     const ahorroMaxRowTotal = Math.max(0, ...ahorroRows.map(r => Math.abs(r.total)));
 
     // Total days in range
-    const totalDiffTime = Math.max(0, end.getTime() - start.getTime());
+    const totalDiffTime = Math.max(0, rEnd.getTime() - rStart.getTime());
     const totalDaysInRange = Math.ceil(totalDiffTime / (1000 * 60 * 60 * 24)) + 1;
     const totalActual = totalBalanceCents;
     const totalBudget = apd * totalDaysInRange * 100;
@@ -176,8 +182,12 @@ export function Balance() {
                         <label className="text-xs font-bold text-gray-400 uppercase">From</label>
                         <input
                             type="month"
-                            value={range.from.substring(0, 7)}
-                            onChange={(e) => setRange(prev => ({ ...prev, from: `${e.target.value}-01` }))}
+                            value={getPeriodForDate(range.from)}
+                            onChange={(e) => {
+                                if (!e.target.value) return;
+                                const { start } = getPeriodRange(e.target.value);
+                                setRange(prev => ({ ...prev, from: start }));
+                            }}
                             className="bg-transparent border-none p-0 text-sm font-bold focus:ring-0"
                         />
                     </div>
@@ -186,11 +196,13 @@ export function Balance() {
                         <label className="text-xs font-bold text-gray-400 uppercase">To</label>
                         <input
                             type="month"
-                            value={range.to.substring(0, 7)}
+                            value={getPeriodForDate(range.to)}
                             onChange={(e) => {
-                                const [y, m] = e.target.value.split('-');
-                                const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
-                                setRange(prev => ({ ...prev, to: `${e.target.value}-${lastDay}` }));
+                                if (!e.target.value) return;
+                                const { end } = getPeriodRange(e.target.value);
+                                const lastDay = parseLocalDate(end);
+                                lastDay.setDate(lastDay.getDate() - 1); // inclusive last day of the period
+                                setRange(prev => ({ ...prev, to: formatLocalDate(lastDay) }));
                             }}
                             className="bg-transparent border-none p-0 text-sm font-bold focus:ring-0"
                         />
@@ -228,7 +240,7 @@ export function Balance() {
                             {breakdown.map((item) => (
                                 <div key={item.month} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-gray-50 dark:hover:bg-zinc-700/30 transition-colors gap-4">
                                     <div className="flex flex-col">
-                                        <span className="font-mono text-sm font-bold">{item.month}</span>
+                                        <span className="font-mono text-sm font-bold">{item.label}</span>
                                         <div className="flex gap-3 text-[10px] whitespace-nowrap opacity-60 font-mono">
                                             <span>Actual: {formatUSD(item.actual)}</span>
                                             <span>Budget: -{formatUSD(item.budget)}</span>

@@ -1,7 +1,7 @@
 import { getDatabaseAsync, getCurrentUserId } from './offline/database';
 import { trackChange, triggerBackgroundSync } from './offline/sync';
 import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
-import { formatLocalDate, getTodayLocalDate } from './dates';
+import { getTodayLocalDate, getPeriodRange, getPeriodForDate, cacheMonthStartDay } from './dates';
 import { generateOccurrences, mergeTransactions } from './recurringUtils';
 import { normalizeForComparison } from './utils';
 import { pickRateForDate } from './currency';
@@ -216,12 +216,8 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
     const db = await getDatabaseAsync();
     const userId = await getUserId();
 
-    // monthStart is already YYYY-MM-01 format, use it directly
-    const startStr = monthStart;
-    // Calculate end of month
-    const [year, month] = monthStart.split('-').map(Number);
-    const endDate = new Date(year, month, 1); // month is 0-indexed, so this gives us first of next month
-    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // monthStart is a period anchor (YYYY-MM or YYYY-MM-01); derive the period window.
+    const { start: startStr, end: endStr } = getPeriodRange(monthStart);
 
     const result = await db.query<Transaction & { exchange_rate_value?: number; credit_card_name?: string }>(`
         SELECT
@@ -268,7 +264,7 @@ export async function fetchTransactions(monthStart: string): Promise<Transaction
     const rules = await fetchRecurringRules();
     let virtual: Transaction[] = [];
     for (const rule of rules) {
-        virtual = virtual.concat(generateOccurrences(rule, monthStart, endStr, rates));
+        virtual = virtual.concat(generateOccurrences(rule, startStr, endStr, rates));
     }
 
     return mergeTransactions(virtual, physical, movedOverrides.rows);
@@ -490,12 +486,10 @@ export async function clearBalancedTransactions(monthStart: string): Promise<num
     const userId = await getUserId();
     const timestamp = now();
 
-    // Calculate end of month
-    const [year, month] = monthStart.split('-').map(Number);
-    const endDate = new Date(year, month, 1);
-    const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-01`;
+    // monthStart is a period anchor; derive the period window.
+    const { start: startStr, end: endStr } = getPeriodRange(monthStart);
 
-    // Get all balanced transactions for the month
+    // Get all balanced transactions for the period
     const result = await db.query<{ id: string }>(`
         SELECT id FROM transactions
         WHERE user_id = $1
@@ -503,7 +497,7 @@ export async function clearBalancedTransactions(monthStart: string): Promise<num
           AND to_be_balanced = true
           AND date >= $2
           AND date < $3
-    `, [userId, monthStart, endStr]);
+    `, [userId, startStr, endStr]);
 
     // Update each transaction and track changes
     for (const row of result.rows) {
@@ -566,10 +560,8 @@ export async function insertExchangeRate(currencyCode: string, rate: number): Pr
         VALUES ($1, $2, $3, $4, $5)
     `, [id, userId, currencyCode, rate, timestamp]);
 
-    // Repoint transactions from the start of the current month (local operation)
-    const nowDate = new Date();
-    const startOfMonth = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
-    const dateStr = formatLocalDate(startOfMonth);
+    // Repoint transactions from the start of the current financial period (local operation)
+    const { start: dateStr } = getPeriodRange(getPeriodForDate(getTodayLocalDate()));
 
     await db.query(`
         UPDATE transactions
@@ -830,17 +822,9 @@ export async function cleanupFutureRecurring(): Promise<void> {
 // ============================================================================
 
 export async function computeMonthBalance(month: string): Promise<{ income: number; expense: number; balance: number; taxes: number }> {
-    // month is already YYYY-MM-01 format, use it directly
-    const [year, monthNum] = month.split('-').map(Number);
-
-    // We fetch a range that includes everything in the month
-    // fetchTransactionsRange uses startDate <= date <= endDate or similar?
-    // Actually fetchTransactionsRange uses t.date < $3, so we need first of NEXT month
-    const nextMonth = monthNum === 12 ? 1 : monthNum + 1;
-    const nextYear = monthNum === 12 ? year + 1 : year;
-    const nextMonthStr = `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`;
-
-    const txs = await fetchTransactionsRange(month, nextMonthStr);
+    // `month` is a period anchor (YYYY-MM or YYYY-MM-01); resolve its half-open window.
+    const { start, end } = getPeriodRange(month);
+    const txs = await fetchTransactionsRange(start, end);
 
     let income = 0;
     let expense = 0;
@@ -879,10 +863,17 @@ export async function fetchParameters(): Promise<Parameter[]> {
         SELECT * FROM parameters WHERE user_id = $1
     `, [userId]);
 
-    return result.rows.map(row => ({
+    const params = result.rows.map(row => ({
         ...row,
         value: typeof row.value === 'string' ? JSON.parse(row.value) : row.value
     }));
+
+    // Mirror the financial-month start day into localStorage so the synchronous
+    // period helpers in dates.ts can read it. Absent → reset to the default (1).
+    const startDayParam = params.find(p => p.key === 'month_start_day');
+    cacheMonthStartDay(startDayParam != null ? Number(startDayParam.value) : null);
+
+    return params;
 }
 
 export async function upsertParameter(key: string, value: unknown): Promise<Parameter> {
