@@ -24,11 +24,16 @@ export interface MonthlySummary {
 }
 
 /**
- * Convert transaction amount to USD cents
+ * Convert a transaction amount to USD cents in FULL precision (no rounding).
+ *
+ * Rounding is deferred to each function's output so we accumulate in full precision
+ * and round once — matching computeMonthBalance and the AnnualReport summary cards.
+ * Rounding per transaction (as before) accumulated up to ~0.5c of error per row, so
+ * the monthly table disagreed with the cards and with the Overview totals.
  */
 function convertToUSD(transaction: Transaction): number {
   const rate = transaction.exchange_rate?.rate || 1;
-  return Math.round(transaction.amount_cents / rate);
+  return transaction.amount_cents / rate;
 }
 
 /**
@@ -88,13 +93,20 @@ export function aggregateExpensesByMonth(
     }
   });
 
-  // Convert to array (already sorted by month due to initialization order)
+  // Convert to array (already sorted by month due to initialization order).
+  // Round each category once at the boundary and derive the total from the rounded
+  // category values so the displayed total always equals the sum of the visible rows.
   const result = Array.from(monthMap.entries())
-    .map(([month, categories]) => ({
-      month,
-      categories,
-      total: Object.values(categories).reduce((sum, val) => sum + val, 0),
-    }));
+    .map(([month, categories]) => {
+      const roundedCategories: Record<string, number> = {};
+      let total = 0;
+      for (const [cat, val] of Object.entries(categories)) {
+        const rounded = Math.round(val);
+        roundedCategories[cat] = rounded;
+        total += rounded;
+      }
+      return { month, categories: roundedCategories, total };
+    });
 
   return result;
 }
@@ -122,14 +134,14 @@ export function aggregateIncomeByCategory(
     categoryMap.set(t.category, current + convertToUSD(t));
   });
 
-  // Calculate total income for percentages
+  // Calculate total income for percentages (full precision).
   const totalIncome = Array.from(categoryMap.values()).reduce((sum, val) => sum + val, 0);
 
-  // Convert to array with percentages
+  // Convert to array with percentages; round the displayed amount once.
   const result = Array.from(categoryMap.entries())
     .map(([category, amount]) => ({
       category,
-      amount,
+      amount: Math.round(amount),
       percentage: totalIncome > 0 ? (amount / totalIncome) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount); // Sort by amount descending
@@ -163,14 +175,14 @@ export function aggregateExpensesByCategory(
     categoryMap.set(t.category, current + convertToUSD(t));
   });
 
-  // Calculate total expense for percentages
+  // Calculate total expense for percentages (full precision).
   const totalExpense = Array.from(categoryMap.values()).reduce((sum, val) => sum + val, 0);
 
-  // Convert to array with percentages
+  // Convert to array with percentages; round the displayed amount once.
   const result = Array.from(categoryMap.entries())
     .map(([category, amount]) => ({
       category,
-      amount,
+      amount: Math.round(amount),
       percentage: totalExpense > 0 ? (amount / totalExpense) * 100 : 0,
     }))
     .filter(item => item.amount > 0) // Only include categories with spending
@@ -219,15 +231,15 @@ export function calculateMonthlySummary(
     }
   });
 
-  // Convert to array with balance
-  // Income is reduced by taxes, expenses exclude taxes
+  // Convert to array with balance. Income is reduced by taxes, expenses exclude taxes.
+  // Round the displayed income and expense once, then derive balance from those rounded
+  // values so each row reconciles (balance === displayed income - displayed expense).
   const result = Array.from(monthMap.entries())
-    .map(([month, data]) => ({
-      month,
-      income: data.income - data.taxes, // Net income after taxes
-      expense: data.expense,            // Expenses excluding taxes
-      balance: (data.income - data.taxes) - data.expense,
-    }));
+    .map(([month, data]) => {
+      const income = Math.round(data.income - data.taxes); // Net income after taxes
+      const expense = Math.round(data.expense);            // Expenses excluding taxes
+      return { month, income, expense, balance: income - expense };
+    });
 
   return result;
 }
@@ -236,9 +248,10 @@ export function calculateMonthlySummary(
  * Calculate total taxes for the year
  */
 export function calculateTotalTaxes(transactions: Transaction[]): number {
-  return transactions
+  const raw = transactions
     .filter(t => t.category === 'Taxes')
     .reduce((sum, t) => sum + convertToUSD(t), 0);
+  return Math.round(raw);
 }
 
 /**

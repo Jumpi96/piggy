@@ -83,6 +83,21 @@ describe('annualReportUtils', () => {
             const result = aggregateExpensesByMonth(mockTransactions, 2023);
             expect(result).toHaveLength(12);
         });
+
+        it('rounds once after summing rather than per transaction (no drift)', () => {
+            const mk = (id: string, cents: number): Transaction => ({
+                id, user_id: 'u1', direction: 'expense', amount_cents: cents,
+                category: 'Recreation', tag: 't', date: '2024-03-15', note: '',
+                created_at: '', updated_at: '', payment_method: 'cash',
+                currency_code: 'ARS', exchange_rate: { rate: 3 }, to_be_balanced: false,
+            });
+            // Each row is 100/3 = 33.33: per-transaction rounding would give 33+33=66;
+            // summing first gives round(200/3)=67.
+            const result = aggregateExpensesByMonth([mk('a', 100), mk('b', 100)], 2024);
+            const march = result.find(r => r.month === '2024-03');
+            expect(march?.categories['Recreation']).toBe(67);
+            expect(march?.total).toBe(67);
+        });
     });
 
     describe('aggregateIncomeByCategory', () => {
