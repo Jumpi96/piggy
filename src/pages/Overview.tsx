@@ -28,6 +28,7 @@ export function Overview() {
     const [taxes, setTaxes] = useState(0);
     const [toBeBalancedTotal, setToBeBalancedTotal] = useState(0);
     const [availableCash, setAvailableCash] = useState(0);
+    const [cashIfCardsPaid, setCashIfCardsPaid] = useState(0);
 
     // Visualization filters
     const [visualizationMode, setVisualizationMode] = useState<'income' | 'expense'>('expense');
@@ -152,6 +153,18 @@ export function Overview() {
                         return acc + (t.direction === 'income' ? amount : -amount);
                     }, 0);
                 setAvailableCash(cashUntilToday);
+
+                // Available cash if all pending credit-card charges were paid now.
+                // Card purchases are stored under their future payment date, so any
+                // card transaction dated after today is an outstanding balance not yet
+                // deducted from the "until today" figure. Pull those into the present.
+                const pendingCardImpact = txs
+                    .filter(t => t.credit_card_id && t.date > todayStr)
+                    .reduce((acc, t) => {
+                        const amount = t.amount_cents / (t.exchange_rate?.rate || 1);
+                        return acc + (t.direction === 'income' ? amount : -amount);
+                    }, 0);
+                setCashIfCardsPaid(cashUntilToday + pendingCardImpact);
 
             } catch (err) {
                 console.error("Failed to load data", err);
@@ -374,7 +387,7 @@ export function Overview() {
                                     {formatUSD(availableCash)}
                                 </p>
                                 <p className="text-[10px] text-zinc-400 mt-1">
-                                    (Until today)
+                                    (If credit cards paid: {formatUSD(cashIfCardsPaid)})
                                 </p>
                             </div>
                         </div>
