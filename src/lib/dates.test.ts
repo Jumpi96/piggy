@@ -10,7 +10,9 @@ import {
     getPeriodRange,
     getPeriodForDate,
     getCurrentPeriodAnchor,
-    getPeriodLabel
+    getPeriodLabel,
+    addMonthsClamped,
+    shouldDeriveCardEffectiveDate
 } from './dates';
 
 describe('Date Utilities', () => {
@@ -270,6 +272,57 @@ describe('Financial Period Utilities', () => {
             expect(getPeriodLabel('2026-07')).toBe('August 2026');
             // Dec 20–Jan 19: end month rolls into the next year
             expect(getPeriodLabel('2026-12')).toBe('January 2027');
+        });
+    });
+
+    describe('addMonthsClamped', () => {
+        it('clamps day-31 to the last valid day of the target month', () => {
+            expect(formatLocalDate(addMonthsClamped(parseLocalDate('2024-01-31'), 1))).toBe('2024-02-29'); // leap
+            expect(formatLocalDate(addMonthsClamped(parseLocalDate('2025-01-31'), 1))).toBe('2025-02-28');
+            expect(formatLocalDate(addMonthsClamped(parseLocalDate('2024-01-31'), 3))).toBe('2024-04-30');
+        });
+
+        it('is anchored to the original day, not accumulated (no drift)', () => {
+            // Reaching March directly keeps day 31; stepping through Feb must not drift.
+            expect(formatLocalDate(addMonthsClamped(parseLocalDate('2024-01-31'), 2))).toBe('2024-03-31');
+        });
+
+        it('handles year rollover and preserves days <= 28', () => {
+            expect(formatLocalDate(addMonthsClamped(parseLocalDate('2023-11-15'), 3))).toBe('2024-02-15');
+        });
+    });
+
+    describe('shouldDeriveCardEffectiveDate', () => {
+        it('derives for a brand-new transaction', () => {
+            expect(shouldDeriveCardEffectiveDate({
+                isNew: true, enteredDate: '2026-06-24', cardId: 'c1'
+            })).toBe(true);
+        });
+
+        it('does NOT re-derive when editing an unrelated field on the same card', () => {
+            // The core bug: editing a note must not shift the stored effective date.
+            expect(shouldDeriveCardEffectiveDate({
+                isNew: false, enteredDate: '2026-07-10', storedDate: '2026-07-10',
+                storedMethod: 'card', storedCardId: 'c1', cardId: 'c1'
+            })).toBe(false);
+        });
+
+        it('derives when the user changes the date', () => {
+            expect(shouldDeriveCardEffectiveDate({
+                isNew: false, enteredDate: '2026-08-01', storedDate: '2026-07-10',
+                storedMethod: 'card', storedCardId: 'c1', cardId: 'c1'
+            })).toBe(true);
+        });
+
+        it('derives when the card is (re)assigned or converted from cash', () => {
+            expect(shouldDeriveCardEffectiveDate({
+                isNew: false, enteredDate: '2026-07-10', storedDate: '2026-07-10',
+                storedMethod: 'card', storedCardId: 'c1', cardId: 'c2'
+            })).toBe(true);
+            expect(shouldDeriveCardEffectiveDate({
+                isNew: false, enteredDate: '2026-07-10', storedDate: '2026-07-10',
+                storedMethod: 'cash', storedCardId: null, cardId: 'c1'
+            })).toBe(true);
         });
     });
 });

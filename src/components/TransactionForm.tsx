@@ -10,7 +10,7 @@ import {
     insertRecurringRule, updateRecurringRule, fetchRecurringRule, migrateFutureTransactions,
     type TransactionInput
 } from '../lib/api';
-import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate } from '../lib/dates';
+import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
 import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
@@ -140,11 +140,25 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             const amountCents = Math.round(parseFloat(amount) * 100);
 
             // Effective Date Logic
+            // Only derive the card effective date from a genuinely new/raw purchase date.
+            // Re-applying it to an already-shifted stored date is non-idempotent and would
+            // silently push the transaction one month forward on every edit (see
+            // shouldDeriveCardEffectiveDate).
             let effectiveDate = parseLocalDate(date);
             if (method === 'card') {
                 const card = creditCards.find(c => c.id === cardId);
                 if (!card) throw new Error("Selected card not found");
-                effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
+                const shouldDerive = shouldDeriveCardEffectiveDate({
+                    isNew: !initialData,
+                    enteredDate: date,
+                    storedDate: initialData?.date,
+                    storedMethod: initialData?.payment_method,
+                    storedCardId: initialData?.credit_card_id,
+                    cardId,
+                });
+                if (shouldDerive) {
+                    effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
+                }
             }
 
             const dateStr = formatLocalDate(effectiveDate);

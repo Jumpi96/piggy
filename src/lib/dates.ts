@@ -215,6 +215,31 @@ export function calculateCreditCardEffectiveDate(
     return nextPaymentDate;
 }
 
+/**
+ * Decides whether a credit-card transaction's effective date should be (re)derived
+ * from the entered date via {@link calculateCreditCardEffectiveDate}.
+ *
+ * That function is NOT idempotent — applying it to an already-shifted stored date
+ * marches the transaction forward a month on every save (and compounds), because it
+ * keys off today's date. So on edit we only recompute when the user actually entered
+ * a new raw purchase date, or (re)assigned the card. Editing any other field (note,
+ * amount, category…) preserves the stored effective date.
+ */
+export function shouldDeriveCardEffectiveDate(params: {
+    isNew: boolean;
+    enteredDate: string;
+    storedDate?: string | null;
+    storedMethod?: string | null;
+    storedCardId?: string | null;
+    cardId: string;
+}): boolean {
+    const { isNew, enteredDate, storedDate, storedMethod, storedCardId, cardId } = params;
+    if (isNew) return true;
+    if (enteredDate !== storedDate) return true;
+    const wasSameCard = storedMethod === 'card' && (storedCardId || '') === cardId;
+    return !wasSameCard;
+}
+
 export function getPersistentMonth(): Date {
     const saved = localStorage.getItem('selected_month');
     if (saved) {
