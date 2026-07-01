@@ -5,7 +5,7 @@ import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
-import { Plus, Trash2, Edit2, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Copy, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
 
 const SCHEDULE_TYPES = [
     { value: 'monthly_day', label: 'Monthly on Date' },
@@ -149,6 +149,31 @@ export function RecurringRulesPage() {
         setShowForm(true);
     };
 
+    // Duplicate a rule as a fresh, ongoing rule (new id on save). Used to change payday
+    // or cadence going forward without rewriting the original rule's history: duplicate,
+    // set the new start date, then end-date the original.
+    const handleDuplicate = (rule: RecurringRule) => {
+        setEditingId(null);
+        setFormData({
+            direction: rule.direction,
+            amount_cents: rule.amount_cents,
+            currency_code: rule.currency_code,
+            category: rule.category,
+            tag: rule.tag,
+            payment_method: rule.payment_method,
+            credit_card_id: rule.credit_card_id,
+            schedule_type: rule.schedule_type,
+            schedule_config: rule.schedule_config,
+            start_date: rule.start_date,
+            end_date: null,
+            active: true,
+            note: rule.note,
+            exception_dates: [],
+        });
+        setOccurrencesHelper('');
+        setShowForm(true);
+    };
+
     const handleDelete = async (id: string) => {
         if (!confirm("Deleting this rule will remove all future transactions. Past transactions will remain unchanged.\n\nContinue?")) return;
         try {
@@ -168,6 +193,11 @@ export function RecurringRulesPage() {
 
     // Filter & Sort
     const today = getTodayLocalDate();
+
+    // A rule that has already started owns a history of virtual occurrences generated
+    // from its start date; editing that start date would retroactively move/erase them.
+    // So lock the start date once a rule is initiated and steer changes through Duplicate.
+    const startIsLocked = !!editingId && !!formData.start_date && formData.start_date <= today;
 
     // Helper to check if rule is "past" (inactive or ended)
     const isPast = (rule: RecurringRule) => {
@@ -199,16 +229,20 @@ export function RecurringRulesPage() {
                                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white mb-2">How it works</h3>
                                 <ul className="space-y-3">
                                     <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Deleting a rule</strong>
-                                        Future occurrences disappear. Past manual edits (overrides) are safely kept in history.
+                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Modifying a rule</strong>
+                                        Amount, tag and note changes apply to every occurrence. Once a rule has started, its start date is locked so history isn't rewritten.
                                     </li>
                                     <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
-                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Modifying a rule</strong>
-                                        Changes apply to all future dates. Existing fixed transactions remain as they are.
+                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Changing the day / cadence</strong>
+                                        Duplicate the rule with the new start date, then set an End Date on the old one. History stays intact and the new schedule takes over.
                                     </li>
                                     <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
                                         <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Ending a rule</strong>
-                                        Transactions stop appearing naturally after your chosen end date.
+                                        Occurrences stop after the End Date (that date is still included).
+                                    </li>
+                                    <li className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                                        <strong className="text-zinc-900 dark:text-zinc-200 block mb-0.5">Deleting a rule</strong>
+                                        Future occurrences disappear. Past manual edits (overrides) are safely kept in history.
                                     </li>
                                 </ul>
                             </div>
@@ -239,6 +273,7 @@ export function RecurringRulesPage() {
                                 key={rule.id}
                                 rule={rule}
                                 onEdit={() => handleEdit(rule)}
+                                onDuplicate={() => handleDuplicate(rule)}
                                 onDelete={() => handleDelete(rule.id)}
                                 creditCards={creditCards}
                             />
@@ -272,6 +307,7 @@ export function RecurringRulesPage() {
                                             key={rule.id}
                                             rule={rule}
                                             onEdit={() => handleEdit(rule)}
+                                            onDuplicate={() => handleDuplicate(rule)}
                                             onDelete={() => handleDelete(rule.id)}
                                             creditCards={creditCards}
                                         />
@@ -451,8 +487,8 @@ export function RecurringRulesPage() {
                                             type="date"
                                             value={formData.start_date || ''}
                                             onChange={e => setFormData({ ...formData, start_date: e.target.value })}
-                                            min={getTodayLocalDate()}
-                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
+                                            disabled={startIsLocked}
+                                            className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                                             required
                                         />
                                     </div>
@@ -462,10 +498,22 @@ export function RecurringRulesPage() {
                                             type="date"
                                             value={formData.end_date || ''}
                                             onChange={e => setFormData({ ...formData, end_date: e.target.value || null })}
+                                            min={formData.start_date || undefined}
                                             className="w-full p-2 text-sm rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-900 focus:ring-2 focus:ring-emerald-500 outline-none"
                                         />
                                     </div>
                                 </div>
+
+                                {startIsLocked && (
+                                    <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                                        This rule has already started, so its start date is locked — changing it would move or erase past occurrences. To shift the day going forward, <span className="font-semibold">Duplicate</span> the rule with a new start date, then set an End Date here to stop the old one.
+                                    </p>
+                                )}
+                                {formData.end_date && (
+                                    <p className="text-[10px] leading-snug text-gray-400">
+                                        The last occurrence is on or before this date.
+                                    </p>
+                                )}
 
                                 <div className="flex items-center gap-2">
                                     <input
@@ -542,7 +590,7 @@ export function RecurringRulesPage() {
     );
 }
 
-function RuleCard({ rule, onEdit, onDelete, creditCards }: { rule: RecurringRule, onEdit: () => void, onDelete: () => void, creditCards: CreditCard[] }) {
+function RuleCard({ rule, onEdit, onDuplicate, onDelete, creditCards }: { rule: RecurringRule, onEdit: () => void, onDuplicate: () => void, onDelete: () => void, creditCards: CreditCard[] }) {
     return (
         <div className={cn(
             "bg-white dark:bg-zinc-900 p-5 rounded-xl border border-gray-100 dark:border-zinc-800 shadow-sm relative transition-all",
@@ -556,6 +604,9 @@ function RuleCard({ rule, onEdit, onDelete, creditCards }: { rule: RecurringRule
                 <div className="flex gap-1 ml-2">
                     <button onClick={onEdit} className="p-1.5 text-gray-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors" title="Edit">
                         <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button onClick={onDuplicate} className="p-1.5 text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors" title="Duplicate rule">
+                        <Copy className="w-4 h-4" />
                     </button>
                     <button onClick={onDelete} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors" title="Delete Rule">
                         <Trash2 className="w-4 h-4" />
