@@ -313,7 +313,7 @@ export function Balance() {
                                     const denom = row.segments.reduce((s, x) => s + Math.abs(x.value), 0);
                                     return (
                                         <div key={row.month} className="px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                            <span className="font-mono text-sm font-bold w-20 shrink-0">{row.month}</span>
+                                            <span className="font-mono text-sm font-bold w-32 shrink-0">{getPeriodLabel(row.month)}</span>
                                             <div className="flex-1 flex items-center gap-3">
                                                 <div className="flex-1 h-2 bg-gray-100 dark:bg-zinc-700 rounded-full overflow-hidden hidden md:block">
                                                     <div className="h-full flex" style={{ width: `${outerWidthPct}%` }}>
