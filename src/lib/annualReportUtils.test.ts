@@ -3,6 +3,7 @@ import {
     aggregateExpensesByMonth,
     aggregateIncomeByCategory,
     calculateMonthlySummary,
+    calculateTotalTaxes,
     getAvailableYears
 } from './annualReportUtils';
 import type { Transaction } from '../types';
@@ -83,6 +84,21 @@ describe('annualReportUtils', () => {
             const result = aggregateExpensesByMonth(mockTransactions, 2023);
             expect(result).toHaveLength(12);
         });
+
+        it('rounds once after summing rather than per transaction (no drift)', () => {
+            const mk = (id: string, cents: number): Transaction => ({
+                id, user_id: 'u1', direction: 'expense', amount_cents: cents,
+                category: 'Recreation', tag: 't', date: '2024-03-15', note: '',
+                created_at: '', updated_at: '', payment_method: 'cash',
+                currency_code: 'ARS', exchange_rate: { rate: 3 }, to_be_balanced: false,
+            });
+            // Each row is 100/3 = 33.33: per-transaction rounding would give 33+33=66;
+            // summing first gives round(200/3)=67.
+            const result = aggregateExpensesByMonth([mk('a', 100), mk('b', 100)], 2024);
+            const march = result.find(r => r.month === '2024-03');
+            expect(march?.categories['Recreation']).toBe(67);
+            expect(march?.total).toBe(67);
+        });
     });
 
     describe('aggregateIncomeByCategory', () => {
@@ -117,6 +133,19 @@ describe('annualReportUtils', () => {
             expect(feb?.income).toBe(0);
             expect(feb?.expense).toBe(20000);
             expect(feb?.balance).toBe(-20000);
+        });
+    });
+
+    describe('calculateTotalTaxes', () => {
+        it('counts only expense-direction Taxes (ignores income mis-tagged as Taxes)', () => {
+            const mk = (id: string, dir: 'income' | 'expense', cents: number): Transaction => ({
+                id, user_id: 'u1', direction: dir, amount_cents: cents,
+                category: 'Taxes', tag: 't', date: '2024-01-15', note: '',
+                created_at: '', updated_at: '', payment_method: 'cash',
+                currency_code: 'USD', exchange_rate: { rate: 1 }, to_be_balanced: false,
+            });
+            const total = calculateTotalTaxes([mk('a', 'expense', 5000), mk('b', 'income', 3000)]);
+            expect(total).toBe(5000);
         });
     });
 

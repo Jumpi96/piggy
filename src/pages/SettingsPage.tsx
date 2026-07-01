@@ -425,8 +425,13 @@ function RatesSettings() {
     const handleSave = async (code: string) => {
         const val = inputs[code];
         if (!val) return;
+        const parsed = parseFloat(val);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            alert("Please enter a rate greater than 0.");
+            return;
+        }
         try {
-            await insertExchangeRate(code, parseFloat(val));
+            await insertExchangeRate(code, parsed);
             alert(`Rate for ${code} updated! Transactions from this month onwards will now use this rate.`);
             load();
         } catch (err) {

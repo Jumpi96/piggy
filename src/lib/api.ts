@@ -324,6 +324,9 @@ export async function fetchTransactionsRange(startDate: string, endDate: string)
     return mergeTransactions(virtual, physical, movedOverrides.rows);
 }
 
+// startDate/endDate form a half-open range [startDate, endDate): endDate is the first
+// day AFTER the period. Both the physical query and the virtual generator use the same
+// exclusive bound so a charge on the period's last day is counted consistently.
 export async function fetchCreditTransactions(cardId: string, startDate: string, endDate: string): Promise<Transaction[]> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
@@ -340,7 +343,7 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
           AND t.deleted_at IS NULL
           AND t.credit_card_id = $2
           AND t.date >= $3
-          AND t.date <= $4
+          AND t.date < $4
         ORDER BY t.date ASC
     `, [userId, cardId, startDate, endDate]);
 
@@ -367,8 +370,8 @@ export async function fetchCreditTransactions(cardId: string, startDate: string,
           AND recurring_rule_id IS NOT NULL
           AND original_date IS NOT NULL
           AND original_date >= $3
-          AND original_date <= $4
-          AND (date < $3 OR date > $4)
+          AND original_date < $4
+          AND (date < $3 OR date >= $4)
     `, [userId, cardId, startDate, endDate]);
 
     const rules = await fetchRecurringRules();
@@ -542,6 +545,13 @@ export async function fetchExchangeRate(currencyCode: string, date: string): Pro
 }
 
 export async function insertExchangeRate(currencyCode: string, rate: number): Promise<{ id: string; currency_code: string; rate: number }> {
+    // Reject non-positive/invalid rates: a 0 rate would later be swallowed by the
+    // `rate || 1` fallbacks in the balance math and silently value a foreign-currency
+    // amount as if it were USD (e.g. 12,000 ARS shown as $120 instead of ~$10).
+    if (!Number.isFinite(rate) || rate <= 0) {
+        throw new Error('Exchange rate must be a positive number');
+    }
+
     const db = await getDatabaseAsync();
     const userId = await getUserId();
     const id = generateId();
@@ -560,18 +570,34 @@ export async function insertExchangeRate(currencyCode: string, rate: number): Pr
         VALUES ($1, $2, $3, $4, $5)
     `, [id, userId, currencyCode, rate, timestamp]);
 
-    // Repoint transactions from the start of the current financial period (local operation)
+    // Repoint transactions from the start of the current financial period to the new rate.
     const { start: dateStr } = getPeriodRange(getPeriodForDate(getTodayLocalDate()));
 
-    await db.query(`
+    const repointed = await db.query<{ id: string }>(`
         UPDATE transactions
-        SET exchange_rate_id = $1
+        SET exchange_rate_id = $1,
+            updated_at = $5
         WHERE currency_code = $2
           AND user_id = $3
           AND date >= $4
-    `, [id, currencyCode, userId, dateStr]);
+          AND deleted_at IS NULL
+        RETURNING id
+    `, [id, currencyCode, userId, dateStr, timestamp]);
 
     await trackChange('exchange_rates', id, 'INSERT', exchangeRate);
+
+    // The repoint mutates each transaction locally; queue those changes too. Without
+    // this the new rate never reaches the server, so other devices keep the old rate
+    // and a later full resync silently reverts the local re-valuation — the balances
+    // that "change on their own a couple times a month".
+    for (const row of repointed.rows) {
+        await trackChange('transactions', row.id, 'UPDATE', {
+            id: row.id,
+            exchange_rate_id: id,
+            updated_at: timestamp,
+        });
+    }
+
     triggerBackgroundSync();
 
     return exchangeRate;
@@ -796,25 +822,6 @@ export async function deleteRecurringRule(id: string): Promise<void> {
 
     await trackChange('recurring_rules', id, 'DELETE', { id, deleted_at: timestamp });
     triggerBackgroundSync();
-}
-
-// ============================================================================
-// Recurring Generation (Local Implementation)
-// ============================================================================
-
-export async function cleanupFutureRecurring(): Promise<void> {
-    const db = await getDatabaseAsync();
-    const userId = await getUserId();
-    const today = getTodayLocalDate();
-
-    await db.query(`
-        UPDATE transactions
-        SET deleted_at = $1
-        WHERE user_id = $2
-          AND recurring_rule_id IS NOT NULL
-          AND date >= $3
-          AND original_date IS NULL
-    `, [now(), userId, today]);
 }
 
 // ============================================================================

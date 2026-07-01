@@ -24,6 +24,13 @@ export async function pullChanges(): Promise<PullResult> {
     };
 
     const lastSync = await getLastSyncTimestamp();
+    // Capture the watermark BEFORE issuing any query. The next pull filters on the
+    // server's updated_at >= this value, so it must be a lower bound on "when this pull
+    // observed the server". Stamping it AFTER the queries (as before) skipped any row
+    // written during the pull window: its updated_at landed between a table's query and
+    // the post-loop stamp, so it was in neither this result set nor the next pull's
+    // filter — a permanent silent divergence.
+    const watermark = new Date().toISOString();
     console.log(`[Sync Pull] Starting pull, last sync: ${lastSync || 'never'}`);
     const pendingChanges = await getPendingChanges();
     const pendingByTable = new Map<SyncTableName, Set<string>>(
@@ -49,9 +56,9 @@ export async function pullChanges(): Promise<PullResult> {
         }
     }
 
-    // Update last sync timestamp if successful
+    // Update last sync timestamp if successful (using the pre-query watermark).
     if (result.success) {
-        await setLastSyncTimestamp(new Date().toISOString());
+        await setLastSyncTimestamp(watermark);
     }
 
     console.log(`[Sync Pull] Complete: ${result.recordsProcessed} records from ${result.tablesUpdated} tables`);
@@ -212,6 +219,9 @@ export async function initialHydration(
     }
 
     console.log('[Sync] Starting initial hydration...');
+    // Capture the watermark before downloading so any row written during the (possibly
+    // long) hydration is picked up by the first incremental pull rather than skipped.
+    const watermark = new Date().toISOString();
     const db = await getDatabaseAsync();
 
     for (let i = 0; i < SYNC_TABLES.length; i++) {
@@ -231,13 +241,14 @@ export async function initialHydration(
         }
     }
 
-    await setLastSyncTimestamp(new Date().toISOString());
+    await setLastSyncTimestamp(watermark);
     console.log('[Sync] Initial hydration complete');
 }
 
 async function hydrateTable(
     db: Awaited<ReturnType<typeof getDatabaseAsync>>,
-    table: SyncTableName
+    table: SyncTableName,
+    pendingRecordIds?: Set<string>
 ): Promise<void> {
     const { data, error } = await supabase
         .from(table)
@@ -247,7 +258,7 @@ async function hydrateTable(
     if (!data || data.length === 0) return;
 
     for (const record of data) {
-        await upsertLocalRecord(db, table, record);
+        await upsertLocalRecord(db, table, record, pendingRecordIds);
     }
 
     console.log(`[Sync] Hydrated ${table}: ${data.length} records`);
@@ -256,7 +267,8 @@ async function hydrateTable(
 async function hydrateTablePaginated(
     db: Awaited<ReturnType<typeof getDatabaseAsync>>,
     table: SyncTableName,
-    pageSize: number = 1000
+    pageSize: number = 1000,
+    pendingRecordIds?: Set<string>
 ): Promise<void> {
     let offset = 0;
     let hasMore = true;
@@ -281,7 +293,7 @@ async function hydrateTablePaginated(
 
 
         for (const record of data) {
-            await upsertLocalRecord(db, table, record);
+            await upsertLocalRecord(db, table, record, pendingRecordIds);
         }
 
         totalRecords += data.length;
@@ -336,15 +348,30 @@ export async function fullTableResync(table: SyncTableName): Promise<number> {
     // Ensure FK dependencies are populated before clearing and resyncing
     await ensureDependenciesPopulated(db, table);
 
-    // Clear local table data
-    await db.query(`DELETE FROM ${table}`);
-    console.log(`[Sync] Cleared local ${table} table`);
+    // Preserve rows that still have unsynced local changes: a blind DELETE +
+    // re-hydrate would revert a pending soft-delete (row comes back) or drop a
+    // locally-created row whose insert hasn't reached the server yet. Keep those
+    // rows and skip their server copies during re-hydrate so local stays authoritative
+    // until the pending change is pushed.
+    const pending = await getPendingChanges();
+    const pkColumn = getPrimaryKeyColumn(table);
+    const pendingIds = new Set(
+        pending.filter(c => c.table_name === table).map(c => c.record_id)
+    );
+
+    // Clear local table data (except rows with pending local changes)
+    if (pendingIds.size > 0) {
+        await db.query(`DELETE FROM ${table} WHERE NOT (${pkColumn} = ANY($1))`, [[...pendingIds]]);
+    } else {
+        await db.query(`DELETE FROM ${table}`);
+    }
+    console.log(`[Sync] Cleared local ${table} table (${pendingIds.size} pending rows preserved)`);
 
     // Re-hydrate from server
     if (table === 'transactions') {
-        await hydrateTablePaginated(db, table);
+        await hydrateTablePaginated(db, table, 1000, pendingIds);
     } else {
-        await hydrateTable(db, table);
+        await hydrateTable(db, table, pendingIds);
     }
 
     // Get new count

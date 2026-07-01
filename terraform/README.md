@@ -3,7 +3,10 @@
 This directory contains Terraform configuration for deploying AWS infrastructure for Piggy Finance, including:
 
 - **Database Backup Lambda**: Weekly backups to S3 with 30-day retention
-- **Recurring Transaction Generator Lambda**: Monthly generation of recurring transactions
+
+> Note: recurring transactions are generated client-side ("virtual" occurrences in
+> `src/lib/recurringUtils.ts`); there is no longer a recurring-generator Lambda or an
+> `ensure_recurring_generated` RPC.
 
 ## Prerequisites
 
@@ -19,11 +22,6 @@ This directory contains Terraform configuration for deploying AWS infrastructure
 - **Retention**: 30 days (managed by S3 lifecycle policy + lambda cleanup)
 - **Runtime**: Python 3.11
 
-### Recurring Generator Lambda
-- **Trigger**: Monthly (1st day of month at 2 AM UTC)
-- **Function**: Calls `ensure_recurring_generated` RPC with 24-month horizon
-- **Runtime**: Python 3.11
-
 ## Deployment via GitHub Actions
 
 The infrastructure is automatically deployed when changes are pushed to the `main` branch:
@@ -35,7 +33,7 @@ The infrastructure is automatically deployed when changes are pushed to the `mai
 
 When updating lambda code:
 
-1. Modify files in `lambdas/backup/` or `lambdas/recurring_generator/`
+1. Modify files in `lambdas/backup/`
 2. Push to `main` branch
 3. GitHub Actions will automatically rebuild and deploy
 
@@ -49,12 +47,6 @@ aws lambda invoke \
   --function-name piggy_db_backup \
   --region us-east-1 \
   response.json
-
-# Test recurring generator lambda
-aws lambda invoke \
-  --function-name piggy_recurring_generator \
-  --region us-east-1 \
-  response.json
 ```
 
 ## Troubleshooting
@@ -64,7 +56,6 @@ aws lambda invoke \
 Check CloudWatch Logs:
 ```bash
 aws logs tail /aws/lambda/piggy_db_backup --follow
-aws logs tail /aws/lambda/piggy_recurring_generator --follow
 ```
 
 ### State Lock Issues

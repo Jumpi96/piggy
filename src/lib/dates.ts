@@ -32,6 +32,26 @@ export function getTodayLocalDate(): string {
     return formatLocalDate(new Date());
 }
 
+/**
+ * Adds `months` to a date, clamping the day-of-month to the last valid day of the
+ * target month.
+ *
+ * Unlike `Date.prototype.setMonth` — which rolls e.g. Jan 31 + 1 month over into
+ * early March, and drifts further on every subsequent step — this keeps a monthly
+ * occurrence anchored to its intended day: Jan 31 + 1 => Feb 28/29, + 2 => Mar 31.
+ * Because the result depends only on (anchor, months) and never on how many
+ * intermediate steps were taken, occurrence dates are stable and independent of the
+ * window you iterate over. Handles negative `months` too.
+ */
+export function addMonthsClamped(date: Date, months: number): Date {
+    const monthIndex = date.getMonth() + months;
+    const targetYear = date.getFullYear() + Math.floor(monthIndex / 12);
+    const targetMonth = ((monthIndex % 12) + 12) % 12;
+    const daysInTarget = new Date(targetYear, targetMonth + 1, 0).getDate();
+    const day = Math.min(date.getDate(), daysInTarget);
+    return new Date(targetYear, targetMonth, day);
+}
+
 // ============================================================================
 // Financial period (custom month start day)
 // ============================================================================
@@ -193,6 +213,31 @@ export function calculateCreditCardEffectiveDate(
     }
 
     return nextPaymentDate;
+}
+
+/**
+ * Decides whether a credit-card transaction's effective date should be (re)derived
+ * from the entered date via {@link calculateCreditCardEffectiveDate}.
+ *
+ * That function is NOT idempotent — applying it to an already-shifted stored date
+ * marches the transaction forward a month on every save (and compounds), because it
+ * keys off today's date. So on edit we only recompute when the user actually entered
+ * a new raw purchase date, or (re)assigned the card. Editing any other field (note,
+ * amount, category…) preserves the stored effective date.
+ */
+export function shouldDeriveCardEffectiveDate(params: {
+    isNew: boolean;
+    enteredDate: string;
+    storedDate?: string | null;
+    storedMethod?: string | null;
+    storedCardId?: string | null;
+    cardId: string;
+}): boolean {
+    const { isNew, enteredDate, storedDate, storedMethod, storedCardId, cardId } = params;
+    if (isNew) return true;
+    if (enteredDate !== storedDate) return true;
+    const wasSameCard = storedMethod === 'card' && (storedCardId || '') === cardId;
+    return !wasSameCard;
 }
 
 export function getPersistentMonth(): Date {

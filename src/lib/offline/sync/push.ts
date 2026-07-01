@@ -1,4 +1,5 @@
 import { supabase } from '../../supabase';
+import { getDatabaseAsync } from '../database';
 import { SYNC_TABLES, type SyncTableName } from '../schema';
 import {
     getPendingChanges,
@@ -102,24 +103,45 @@ async function pushInsert(
     // Remove user_id - Supabase will set it via RLS default
     const { user_id, ...insertPayload } = payload;
 
-    // For transaction overrides, use upsert on the (recurring_rule_id, original_date) constraint
-    // This handles the case where user edits the same occurrence multiple times
+    // For transaction overrides, an occurrence is uniquely identified by
+    // (recurring_rule_id, original_date). We must NOT use supabase upsert on that
+    // constraint: on conflict it runs DO UPDATE SET id = EXCLUDED.id, renaming the
+    // existing server row's primary key to this device's freshly-minted UUID. That
+    // orphans the other device's copy of the same occurrence, which then re-pulls
+    // under a new id and either duplicates it or (with the local UNIQUE constraint)
+    // silently disappears. Instead: try a plain INSERT, and on any unique-constraint
+    // conflict UPDATE the existing row BY NATURAL KEY, leaving its id untouched.
     if (table === 'transactions' && payload.recurring_rule_id && payload.original_date) {
         const { error } = await supabase
             .from(table)
-            .upsert(insertPayload, {
-                onConflict: 'recurring_rule_id,original_date',
-                ignoreDuplicates: false
-            });
+            .insert(insertPayload);
 
-        if (error) {
-            // If upsert fails due to primary key conflict, the record already exists with same ID
-            if (error.code === '23505') {
-                console.log(`[Sync Push] Record already exists, treating as success: ${table}/${payload.id}`);
-                return;
-            }
-            throw new Error(error.message);
-        }
+        if (!error) return;
+        if (error.code !== '23505') throw new Error(error.message);
+
+        // An override for this occurrence already exists on the server (same id
+        // re-synced, or a different id created on another device). Update its content
+        // by natural key, preserving whatever id the server already holds.
+        const { id: _omitId, created_at: _omitCreatedAt, ...updateFields } = insertPayload;
+        const { error: updateError } = await supabase
+            .from(table)
+            .update(updateFields)
+            .eq('recurring_rule_id', payload.recurring_rule_id)
+            .eq('original_date', payload.original_date);
+
+        if (updateError) throw new Error(updateError.message);
+
+        // If another device created this occurrence first, the server row keeps ITS id,
+        // not ours. Converge the local row (and any queued changes) onto the server id,
+        // otherwise our later edits/deletes would be keyed by our stale local id, match
+        // zero server rows, and retry forever — and pull can't repair it because the
+        // local table already holds this natural key under a different id.
+        await adoptServerOverrideId(
+            table,
+            String(payload.id),
+            String(payload.recurring_rule_id),
+            String(payload.original_date)
+        );
         return;
     }
 
@@ -137,6 +159,43 @@ async function pushInsert(
     }
 }
 
+/**
+ * After a natural-key override conflict, point the local row and any still-pending
+ * changes at the id the server actually holds, so later local edits/deletes (matched by
+ * id) target the right row. Best-effort: the server content is already correct, so a
+ * failure here must not fail the push (it would just leave the id divergence for a
+ * future pull/push to resolve).
+ */
+async function adoptServerOverrideId(
+    table: SyncTableName,
+    localId: string,
+    recurringRuleId: string,
+    originalDate: string
+): Promise<void> {
+    try {
+        const { data, error } = await supabase
+            .from(table)
+            .select('id')
+            .eq('recurring_rule_id', recurringRuleId)
+            .eq('original_date', originalDate)
+            .maybeSingle();
+
+        const serverId = data?.id as string | undefined;
+        if (error || !serverId || serverId === localId) return;
+
+        const db = await getDatabaseAsync();
+        await db.query(`UPDATE ${table} SET id = $1 WHERE id = $2`, [serverId, localId]);
+        await db.query(
+            `UPDATE _pending_changes SET record_id = $1
+             WHERE table_name = $2 AND record_id = $3 AND synced_at IS NULL`,
+            [serverId, table, localId]
+        );
+        console.log(`[Sync Push] Adopted server id for ${table} override: ${localId} -> ${serverId}`);
+    } catch (err) {
+        console.warn('[Sync Push] Failed to adopt server override id (will retry later):', err);
+    }
+}
+
 async function pushUpdate(
     table: SyncTableName,
     recordId: string,
@@ -145,13 +204,20 @@ async function pushUpdate(
     // Remove system fields that shouldn't be updated
     const { id, user_id, created_at, ...updatePayload } = payload;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from(table)
         .update(updatePayload)
-        .eq('id', recordId);
+        .eq('id', recordId)
+        .select('id');
 
     if (error) {
         throw new Error(error.message);
+    }
+    // A Supabase update that matches no row returns success with an empty set. That
+    // happens when the target row's INSERT hasn't reached the server yet. Treat it as
+    // a retryable failure instead of marking it synced, otherwise the update is lost.
+    if (!data || data.length === 0) {
+        throw new Error(`No server row matched update for ${table}/${recordId} (insert not yet synced?)`);
     }
 }
 
@@ -161,13 +227,20 @@ async function pushDelete(
     payload: Record<string, unknown>
 ): Promise<void> {
     // Soft delete - update deleted_at timestamp
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from(table)
         .update({ deleted_at: payload.deleted_at })
-        .eq('id', recordId);
+        .eq('id', recordId)
+        .select('id');
 
     if (error) {
         throw new Error(error.message);
+    }
+    // Same guard as pushUpdate: a delete matching zero rows means the row's INSERT
+    // hasn't been pushed yet. Retrying (rather than succeeding) prevents the classic
+    // resurrection where the delete is dropped and the later insert brings the row back.
+    if (!data || data.length === 0) {
+        throw new Error(`No server row matched delete for ${table}/${recordId} (insert not yet synced?)`);
     }
 }
 

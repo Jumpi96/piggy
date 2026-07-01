@@ -110,7 +110,7 @@ Piggy follows an **offline-first architecture** where all reads and writes go th
 
 **Backend (`/supabase/`)**
 - **Tables**: transactions, credit_cards, currencies, exchange_rates, recurring_rules, parameters
-- **RPCs**: `compute_month_balance()`, `ensure_recurring_generated()`, `repoint_exchange_rate()`
+- **RPCs**: `compute_month_balance()`, `get_sync_counts()`, `repoint_exchange_rate()`
 - **Security**: Row Level Security policies ensuring users only access their own data
 
 **Infrastructure (`/terraform/`)**
@@ -381,8 +381,10 @@ npm run build
 ### Key Database Functions (RPCs)
 
 - `compute_month_balance(year, month, user_id)`: Calculates monthly income, expenses, and net balance in USD
-- `ensure_recurring_generated(user_id)`: Generates recurring transactions up to 24 months ahead (idempotent)
 - `repoint_exchange_rate(year, month, currency, user_id)`: Updates exchange rate references for a month
+
+> Recurring transactions are generated client-side as virtual occurrences
+> (`src/lib/recurringUtils.ts`); there is no `ensure_recurring_generated` RPC.
 
 ## Savings Feature (Ledger Integration)
 

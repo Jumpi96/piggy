@@ -1,9 +1,19 @@
 import type { RecurringRule, Transaction } from '../types';
-import { formatLocalDate, parseLocalDate } from './dates';
+import { formatLocalDate, parseLocalDate, addMonthsClamped } from './dates';
 import { pickRateForDate } from './currency';
+
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 /**
  * Generates virtual occurrences for a recurring rule within a date range.
+ *
+ * Each occurrence's date is a pure function of the rule's start date and the
+ * occurrence index, so the same logical occurrence always yields the same date
+ * regardless of the window queried. This is critical: physical overrides are
+ * matched to virtuals by `original_date`, so a window-dependent date would let a
+ * virtual escape its override and get counted twice (see recurringUtils tests).
+ * Monthly schedules clamp to the last valid day (via `addMonthsClamped`) instead
+ * of drifting through `Date.setMonth` day-rollover.
  */
 export function generateOccurrences(
     rule: RecurringRule,
@@ -14,44 +24,45 @@ export function generateOccurrences(
     const occurrences: Transaction[] = [];
     if (!rule.active) return occurrences;
 
+    const scheduleType = rule.schedule_type;
+    if (scheduleType !== 'monthly_day' && scheduleType !== 'every_n_months' && scheduleType !== 'every_n_days') {
+        return occurrences;
+    }
+
     const startDate = parseLocalDate(rule.start_date);
     const endDate = rule.end_date ? parseLocalDate(rule.end_date) : null;
     const rangeStart = parseLocalDate(start);
     const rangeEnd = parseLocalDate(end);
+    const exceptionDates = new Set(rule.exception_dates || []);
+    const n = Math.max(1, Number(rule.schedule_config.n || 1));
 
-    let nextDate = new Date(startDate);
+    // Occurrence date as a pure function of the integer index — window-independent.
+    const dateForIndex = (index: number): Date => {
+        if (scheduleType === 'monthly_day') return addMonthsClamped(startDate, index);
+        if (scheduleType === 'every_n_months') return addMonthsClamped(startDate, index * n);
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + index * n);
+        return d;
+    };
 
-    // Skip ahead as much as possible if startDate is far behind rangeStart
-    if (nextDate < rangeStart) {
-        if (rule.schedule_type === 'monthly_day') {
-            const monthsDiff = (rangeStart.getFullYear() - nextDate.getFullYear()) * 12 + (rangeStart.getMonth() - nextDate.getMonth());
-            if (monthsDiff > 1) {
-                nextDate.setMonth(nextDate.getMonth() + monthsDiff - 1);
-            }
-        } else if (rule.schedule_type === 'every_n_months') {
-            const n = Math.max(1, Number(rule.schedule_config.n || 1));
-            const totalMonthsDiff = (rangeStart.getFullYear() - nextDate.getFullYear()) * 12 + (rangeStart.getMonth() - nextDate.getMonth());
-            if (totalMonthsDiff > n) {
-                const jumps = Math.floor(totalMonthsDiff / n);
-                nextDate.setMonth(nextDate.getMonth() + (jumps - 1) * n);
-            }
-        } else if (rule.schedule_type === 'every_n_days') {
-            const n = Math.max(1, Number(rule.schedule_config.n || 1));
-            const diffTime = rangeStart.getTime() - nextDate.getTime();
-            const daysDiff = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-            if (daysDiff > n) {
-                const jumps = Math.floor(daysDiff / n);
-                nextDate.setDate(nextDate.getDate() + (jumps - 1) * n);
-            }
+    // Jump the index close to rangeStart without changing any resulting date.
+    // Deliberately undershoots by one step so we never skip a boundary occurrence.
+    let index = 0;
+    if (startDate < rangeStart) {
+        if (scheduleType === 'every_n_days') {
+            const daysDiff = Math.floor((rangeStart.getTime() - startDate.getTime()) / MS_PER_DAY);
+            index = Math.max(0, Math.floor(daysDiff / n) - 1);
+        } else {
+            const stepMonths = scheduleType === 'every_n_months' ? n : 1;
+            const monthsDiff = (rangeStart.getFullYear() - startDate.getFullYear()) * 12 + (rangeStart.getMonth() - startDate.getMonth());
+            index = Math.max(0, Math.floor(monthsDiff / stepMonths) - 1);
         }
     }
-
-    const exceptionDates = new Set(rule.exception_dates || []);
 
     // A safety limit to prevent infinite loops or excessive memory usage
     let count = 0;
     while (count < 1000) {
-        const dateStr = formatLocalDate(nextDate);
+        const nextDate = dateForIndex(index);
 
         // If we past the end range, we can stop (exclusive)
         if (nextDate >= rangeEnd) break;
@@ -59,42 +70,34 @@ export function generateOccurrences(
         // If we have an end date and we past it, we can stop
         if (endDate && nextDate > endDate) break;
 
-        if (nextDate >= rangeStart && !exceptionDates.has(dateStr)) {
-            // Best-effort: use the rate that was effective for this occurrence's month.
-            const ruleRate = pickRateForDate(rates, rule.currency_code, dateStr)?.rate ?? null;
-            occurrences.push({
-                id: `virtual-${rule.id}-${dateStr}`,
-                user_id: rule.user_id,
-                date: dateStr,
-                original_date: dateStr,
-                direction: rule.direction,
-                amount_cents: rule.amount_cents,
-                currency_code: rule.currency_code,
-                category: rule.category,
-                tag: rule.tag,
-                payment_method: rule.payment_method,
-                credit_card_id: rule.credit_card_id,
-                recurring_rule_id: rule.id,
-                to_be_balanced: false,
-                note: rule.note,
-                exchange_rate: ruleRate ? { rate: ruleRate } : null,
-                created_at: rule.created_at,
-                updated_at: rule.created_at,
-            });
+        if (nextDate >= rangeStart) {
+            const dateStr = formatLocalDate(nextDate);
+            if (!exceptionDates.has(dateStr)) {
+                // Best-effort: use the rate that was effective for this occurrence's month.
+                const ruleRate = pickRateForDate(rates, rule.currency_code, dateStr)?.rate ?? null;
+                occurrences.push({
+                    id: `virtual-${rule.id}-${dateStr}`,
+                    user_id: rule.user_id,
+                    date: dateStr,
+                    original_date: dateStr,
+                    direction: rule.direction,
+                    amount_cents: rule.amount_cents,
+                    currency_code: rule.currency_code,
+                    category: rule.category,
+                    tag: rule.tag,
+                    payment_method: rule.payment_method,
+                    credit_card_id: rule.credit_card_id,
+                    recurring_rule_id: rule.id,
+                    to_be_balanced: false,
+                    note: rule.note,
+                    exchange_rate: ruleRate ? { rate: ruleRate } : null,
+                    created_at: rule.created_at,
+                    updated_at: rule.created_at,
+                });
+            }
         }
 
-        // Advance nextDate based on schedule type
-        const n = Math.max(1, Number(rule.schedule_config.n || 1));
-        if (rule.schedule_type === 'monthly_day') {
-            nextDate.setMonth(nextDate.getMonth() + 1);
-        } else if (rule.schedule_type === 'every_n_days') {
-            nextDate.setDate(nextDate.getDate() + n);
-        } else if (rule.schedule_type === 'every_n_months') {
-            nextDate.setMonth(nextDate.getMonth() + n);
-        } else {
-            break;
-        }
-
+        index++;
         count++;
     }
 

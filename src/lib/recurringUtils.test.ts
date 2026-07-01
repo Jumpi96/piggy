@@ -59,6 +59,40 @@ describe('recurringUtils', () => {
             expect(occurrences).toHaveLength(3);
             expect(occurrences.map(o => o.date)).toEqual(['2024-01-01', '2024-04-01', '2024-07-01']);
         });
+
+        // Regression: monthly rules on day 29–31 must clamp to the last valid day of
+        // each month rather than drifting via Date.setMonth day-rollover.
+        it('clamps day-31 monthly rules to the last valid day of each month', () => {
+            const rule: RecurringRule = {
+                ...baseRule,
+                start_date: '2024-01-31',
+                schedule_type: 'monthly_day',
+                schedule_config: {}
+            };
+            const occurrences = generateOccurrences(rule, '2024-01-01', '2024-06-01');
+            // Feb clamps to 29 (2024 leap), Apr clamps to 30, others keep 31.
+            expect(occurrences.map(o => o.date)).toEqual([
+                '2024-01-31', '2024-02-29', '2024-03-31', '2024-04-30', '2024-05-31'
+            ]);
+        });
+
+        // Regression: the SAME occurrence must have the SAME date whether reached via a
+        // narrow single-month window or a wide multi-month window. A window-dependent
+        // date breaks override de-duplication and double-counts the occurrence.
+        it('produces window-independent dates for day-30 monthly rules', () => {
+            const rule: RecurringRule = {
+                ...baseRule,
+                start_date: '2026-01-30',
+                schedule_type: 'monthly_day',
+                schedule_config: {}
+            };
+            const wide = generateOccurrences(rule, '2026-01-01', '2027-01-01');
+            const julyFromWide = wide.find(o => o.date.startsWith('2026-07'))?.date;
+            const narrowJuly = generateOccurrences(rule, '2026-07-01', '2026-08-01');
+            expect(narrowJuly).toHaveLength(1);
+            expect(narrowJuly[0].date).toBe('2026-07-30');
+            expect(julyFromWide).toBe('2026-07-30');
+        });
     });
 
     describe('mergeTransactions', () => {

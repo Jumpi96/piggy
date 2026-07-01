@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as api from './api';
+import { trackChange } from './offline/sync/queue';
 import type { RecurringRule } from '../types';
 
 // Mock the offline database module
@@ -385,6 +386,35 @@ describe('api', () => {
             expect(params[1]).toBe('rule-1');
             expect(params[2]).toBe('2024-01-15');
             expect(params[3]).toBe('test-user-123');
+        });
+    });
+
+    describe('insertExchangeRate', () => {
+        it('repoints affected transactions AND queues those updates for sync', async () => {
+            mockQuery
+                .mockResolvedValueOnce({ rows: [] })                              // INSERT exchange_rates
+                .mockResolvedValueOnce({ rows: [{ id: 'tx-1' }, { id: 'tx-2' }] }); // UPDATE ... RETURNING id
+
+            await api.insertExchangeRate('ARS', 1200);
+
+            const updateCall = mockQuery.mock.calls.find(
+                c => /UPDATE transactions/.test(c[0]) && /exchange_rate_id/.test(c[0])
+            );
+            expect(updateCall).toBeDefined();
+            // Durable repoint: capture affected rows and stamp updated_at so the change syncs.
+            expect(updateCall![0]).toContain('RETURNING id');
+            expect(updateCall![0]).toContain('updated_at');
+
+            // The rate INSERT and every repointed transaction must be tracked for sync.
+            expect(vi.mocked(trackChange)).toHaveBeenCalledWith('exchange_rates', expect.any(String), 'INSERT', expect.any(Object));
+            expect(vi.mocked(trackChange)).toHaveBeenCalledWith('transactions', 'tx-1', 'UPDATE', expect.objectContaining({ exchange_rate_id: expect.any(String) }));
+            expect(vi.mocked(trackChange)).toHaveBeenCalledWith('transactions', 'tx-2', 'UPDATE', expect.objectContaining({ exchange_rate_id: expect.any(String) }));
+        });
+
+        it('rejects a non-positive or invalid rate', async () => {
+            await expect(api.insertExchangeRate('ARS', 0)).rejects.toThrow(/positive/i);
+            await expect(api.insertExchangeRate('ARS', -5)).rejects.toThrow(/positive/i);
+            await expect(api.insertExchangeRate('ARS', NaN)).rejects.toThrow(/positive/i);
         });
     });
 

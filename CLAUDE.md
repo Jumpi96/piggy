@@ -125,13 +125,16 @@ Schema defined in `src/lib/offline/schema.ts` - mirrors Supabase tables plus syn
 
 Key RPCs:
 - `compute_month_balance()` - Monthly income/expense totals in USD
-- `ensure_recurring_generated()` - Generate recurring transactions
+- `get_sync_counts()` - Per-table row counts for sync reconciliation
+
+Recurring transactions are generated client-side as virtual occurrences
+(`src/lib/recurringUtils.ts`) — there is no `ensure_recurring_generated` RPC.
 
 ## Deployment
 
 - **Frontend**: GitHub Pages (via `.github/workflows/deploy.yml`)
 - **Backend**: Supabase (PostgreSQL + Auth)
-- **Infrastructure**: AWS Lambda for backups and recurring generation
+- **Infrastructure**: AWS Lambda for weekly database backups
 
 Base URL: `/piggy/` (configured in `vite.config.ts`)
 
