@@ -13,7 +13,14 @@ export function MoneyChecker() {
     const [latestRates, setLatestRates] = useState<ExchangeRate[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [expectedCash, setExpectedCash] = useState(0);
+    const [expectedIfCardsPaid, setExpectedIfCardsPaid] = useState(0);
     const [availableCurrencies, setAvailableCurrencies] = useState<string[]>([]);
+
+    // "Assume credit cards paid" toggle (mirrors the Overview figure): when on, Expected
+    // includes pending credit-card charges dated after today, as if you settled them now.
+    const [cardsPaid, setCardsPaid] = useState<boolean>(() => {
+        try { return localStorage.getItem('moneychecker_cards_paid') === 'true'; } catch { return false; }
+    });
 
     // Management mode
     const [isManaging, setIsManaging] = useState(false);
@@ -61,6 +68,11 @@ export function MoneyChecker() {
         };
     }, []);
 
+    // Remember the toggle across visits.
+    useEffect(() => {
+        try { localStorage.setItem('moneychecker_cards_paid', String(cardsPaid)); } catch { /* ignore */ }
+    }, [cardsPaid]);
+
     useEffect(() => {
         async function load() {
             try {
@@ -91,6 +103,18 @@ export function MoneyChecker() {
                     }, 0);
 
                 setExpectedCash(cashUntilToday / 100);
+
+                // Pending credit-card charges are stored under their future payment date,
+                // so a card transaction dated after today is an outstanding balance not yet
+                // deducted. "If cards paid" pulls those into the present (same as Overview).
+                const pendingCardImpact = txs
+                    .filter(t => t.credit_card_id && t.date > todayStr)
+                    .reduce((acc, t) => {
+                        const amount = t.amount_cents / (t.exchange_rate?.rate || 1);
+                        return acc + (t.direction === 'income' ? amount : -amount);
+                    }, 0);
+
+                setExpectedIfCardsPaid((cashUntilToday + pendingCardImpact) / 100);
             } catch (err) {
                 console.error("Failed to load Money Checker data", err);
             } finally {
@@ -114,7 +138,8 @@ export function MoneyChecker() {
         }, 0);
     }, [accountValues, accounts, latestRates]);
 
-    const difference = totalCountedUSD - expectedCash;
+    const effectiveExpected = cardsPaid ? expectedIfCardsPaid : expectedCash;
+    const difference = totalCountedUSD - effectiveExpected;
 
     // Handle balance when shouldBalance becomes true
     useEffect(() => {
@@ -320,10 +345,30 @@ export function MoneyChecker() {
                         <p className="text-3xl font-black">{formatUSD(totalCountedUSD)}</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/20">
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={cardsPaid}
+                        onClick={() => setCardsPaid(v => !v)}
+                        className="w-full flex items-center justify-between gap-4 pt-4 border-t border-white/20 text-left"
+                    >
+                        <div>
+                            <span className="text-[10px] font-black uppercase opacity-70 tracking-widest block">Assume credit cards paid</span>
+                            <span className="text-[10px] opacity-60">
+                                {cardsPaid ? 'Expected includes pending card charges' : 'Expected is cash available now'}
+                            </span>
+                        </div>
+                        <span className={cn("relative w-11 h-6 rounded-full transition-colors shrink-0", cardsPaid ? "bg-white" : "bg-white/30")}>
+                            <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 rounded-full transition-transform", cardsPaid ? "bg-emerald-600 translate-x-5" : "bg-white")} />
+                        </span>
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                            <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">Expected (Overview)</span>
-                            <p className="text-xl font-bold">{formatUSD(expectedCash)}</p>
+                            <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">
+                                {cardsPaid ? 'Expected (cards paid)' : 'Expected (now)'}
+                            </span>
+                            <p className="text-xl font-bold">{formatUSD(effectiveExpected)}</p>
                         </div>
                         <div className="space-y-1 text-right">
                             <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">Difference</span>
