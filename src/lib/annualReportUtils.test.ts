@@ -3,6 +3,7 @@ import {
     aggregateExpensesByMonth,
     aggregateIncomeByCategory,
     calculateMonthlySummary,
+    calculateTotalTaxes,
     getAvailableYears
 } from './annualReportUtils';
 import type { Transaction } from '../types';
@@ -132,6 +133,19 @@ describe('annualReportUtils', () => {
             expect(feb?.income).toBe(0);
             expect(feb?.expense).toBe(20000);
             expect(feb?.balance).toBe(-20000);
+        });
+    });
+
+    describe('calculateTotalTaxes', () => {
+        it('counts only expense-direction Taxes (ignores income mis-tagged as Taxes)', () => {
+            const mk = (id: string, dir: 'income' | 'expense', cents: number): Transaction => ({
+                id, user_id: 'u1', direction: dir, amount_cents: cents,
+                category: 'Taxes', tag: 't', date: '2024-01-15', note: '',
+                created_at: '', updated_at: '', payment_method: 'cash',
+                currency_code: 'USD', exchange_rate: { rate: 1 }, to_be_balanced: false,
+            });
+            const total = calculateTotalTaxes([mk('a', 'expense', 5000), mk('b', 'income', 3000)]);
+            expect(total).toBe(5000);
         });
     });
 

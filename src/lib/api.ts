@@ -545,6 +545,13 @@ export async function fetchExchangeRate(currencyCode: string, date: string): Pro
 }
 
 export async function insertExchangeRate(currencyCode: string, rate: number): Promise<{ id: string; currency_code: string; rate: number }> {
+    // Reject non-positive/invalid rates: a 0 rate would later be swallowed by the
+    // `rate || 1` fallbacks in the balance math and silently value a foreign-currency
+    // amount as if it were USD (e.g. 12,000 ARS shown as $120 instead of ~$10).
+    if (!Number.isFinite(rate) || rate <= 0) {
+        throw new Error('Exchange rate must be a positive number');
+    }
+
     const db = await getDatabaseAsync();
     const userId = await getUserId();
     const id = generateId();

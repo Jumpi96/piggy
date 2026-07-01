@@ -248,8 +248,11 @@ export function calculateMonthlySummary(
  * Calculate total taxes for the year
  */
 export function calculateTotalTaxes(transactions: Transaction[]): number {
+  // Only expense-direction Taxes count. Without the direction guard an income row
+  // mis-categorised as "Taxes" (e.g. a refund) would be subtracted from gross income,
+  // inconsistent with calculateMonthlySummary which only taxes the expense branch.
   const raw = transactions
-    .filter(t => t.category === 'Taxes')
+    .filter(t => t.direction === 'expense' && t.category === 'Taxes')
     .reduce((sum, t) => sum + convertToUSD(t), 0);
   return Math.round(raw);
 }

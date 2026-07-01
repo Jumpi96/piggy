@@ -410,6 +410,12 @@ describe('api', () => {
             expect(vi.mocked(trackChange)).toHaveBeenCalledWith('transactions', 'tx-1', 'UPDATE', expect.objectContaining({ exchange_rate_id: expect.any(String) }));
             expect(vi.mocked(trackChange)).toHaveBeenCalledWith('transactions', 'tx-2', 'UPDATE', expect.objectContaining({ exchange_rate_id: expect.any(String) }));
         });
+
+        it('rejects a non-positive or invalid rate', async () => {
+            await expect(api.insertExchangeRate('ARS', 0)).rejects.toThrow(/positive/i);
+            await expect(api.insertExchangeRate('ARS', -5)).rejects.toThrow(/positive/i);
+            await expect(api.insertExchangeRate('ARS', NaN)).rejects.toThrow(/positive/i);
+        });
     });
 
     describe('fetchDistinctTags', () => {
