@@ -51,10 +51,14 @@ export async function trackChange(
 
 export async function getPendingChanges(): Promise<PendingChange[]> {
     const db = await getDatabaseAsync();
+    // Order by the monotonic SERIAL id as a tiebreaker: created_at has only
+    // millisecond precision, so two changes to the same record in the same ms would
+    // otherwise be returned in an arbitrary order and an UPDATE could be pushed before
+    // its INSERT.
     const result = await db.query<PendingChange>(`
         SELECT * FROM _pending_changes
         WHERE synced_at IS NULL
-        ORDER BY created_at ASC
+        ORDER BY created_at ASC, id ASC
     `);
     return result.rows;
 }

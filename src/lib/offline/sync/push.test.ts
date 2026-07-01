@@ -1,12 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PendingChange } from './queue';
 
-// --- Controllable supabase mock -------------------------------------------------
 type SbError = { code: string; message: string } | null;
+type SbResult = { data?: Array<{ id: string }>; error: SbError };
+
+// Terminal result for update/delete chains; mutated per test to simulate zero rows.
+let terminalResult: SbResult = { data: [{ id: 'srv-id' }], error: null };
+
+// --- Controllable, chainable supabase mock --------------------------------------
 const insertMock = vi.fn((_payload?: unknown): Promise<{ error: SbError }> => Promise.resolve({ error: null }));
-const eqInner = vi.fn((_col: string, _val: unknown) => Promise.resolve({ error: null }));
-const eqOuter = vi.fn((_col: string, _val: unknown) => ({ eq: eqInner }));
-const updateMock = vi.fn((_fields: Record<string, unknown>) => ({ eq: eqOuter }));
+const selectMock = vi.fn((_cols?: string) => Promise.resolve(terminalResult));
+const eqMock = vi.fn((_col: string, _val: unknown) => chainObj);
+// chainObj is awaitable (for the override update().eq().eq() path) and also exposes
+// .select() (for the update().eq().select() path used by pushUpdate/pushDelete).
+const chainObj = {
+    eq: eqMock,
+    select: selectMock,
+    then: (resolve: (v: SbResult) => void) => resolve(terminalResult),
+};
+const updateMock = vi.fn((_fields: Record<string, unknown>) => chainObj);
 const upsertMock = vi.fn();
 const fromMock = vi.fn((_table: string) => ({ insert: insertMock, update: updateMock, upsert: upsertMock }));
 
@@ -20,21 +32,13 @@ vi.mock('./queue', () => ({
 
 import { pushChangeImmediately } from './push';
 
-function overrideChange(): PendingChange {
+function change(op: PendingChange['operation'], payload: Record<string, unknown>): PendingChange {
     return {
         id: 1,
         table_name: 'transactions',
-        record_id: 'local-uuid',
-        operation: 'INSERT',
-        payload: JSON.stringify({
-            id: 'local-uuid',
-            user_id: 'u1',
-            recurring_rule_id: 'rule-1',
-            original_date: '2026-07-30',
-            date: '2026-07-30',
-            amount_cents: 1000,
-            created_at: '2026-07-30T00:00:00Z',
-        }),
+        record_id: String(payload.id ?? 'rec'),
+        operation: op,
+        payload: JSON.stringify(payload),
         created_at: '2026-07-30T00:00:00Z',
         synced_at: null,
         retry_count: 0,
@@ -42,12 +46,21 @@ function overrideChange(): PendingChange {
     };
 }
 
+const overridePayload = {
+    id: 'local-uuid', user_id: 'u1', recurring_rule_id: 'rule-1',
+    original_date: '2026-07-30', date: '2026-07-30', amount_cents: 1000,
+    created_at: '2026-07-30T00:00:00Z',
+};
+
 describe('pushInsert override conflict handling', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        terminalResult = { data: [{ id: 'srv-id' }], error: null };
+    });
 
     it('inserts a new override by id (no upsert that could rename the PK)', async () => {
         insertMock.mockResolvedValueOnce({ error: null });
-        const ok = await pushChangeImmediately(overrideChange());
+        const ok = await pushChangeImmediately(change('INSERT', overridePayload));
         expect(ok).toBe(true);
         expect(insertMock).toHaveBeenCalledTimes(1);
         expect(upsertMock).not.toHaveBeenCalled();
@@ -56,18 +69,41 @@ describe('pushInsert override conflict handling', () => {
 
     it('on unique conflict, updates by natural key WITHOUT touching id/created_at', async () => {
         insertMock.mockResolvedValueOnce({ error: { code: '23505', message: 'duplicate key' } });
-        const ok = await pushChangeImmediately(overrideChange());
+        const ok = await pushChangeImmediately(change('INSERT', overridePayload));
         expect(ok).toBe(true);
 
         expect(upsertMock).not.toHaveBeenCalled();
         expect(updateMock).toHaveBeenCalledTimes(1);
         const updatePayload = updateMock.mock.calls[0][0];
-        // The id must never be part of the update — that is the PK-rewrite bug.
         expect(updatePayload).not.toHaveProperty('id');
         expect(updatePayload).not.toHaveProperty('created_at');
         expect(updatePayload).toMatchObject({ amount_cents: 1000 });
-        // Targeted by the natural key, not by id.
-        expect(eqOuter).toHaveBeenCalledWith('recurring_rule_id', 'rule-1');
-        expect(eqInner).toHaveBeenCalledWith('original_date', '2026-07-30');
+        expect(eqMock).toHaveBeenCalledWith('recurring_rule_id', 'rule-1');
+        expect(eqMock).toHaveBeenCalledWith('original_date', '2026-07-30');
+    });
+});
+
+describe('pushUpdate / pushDelete zero-row handling', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        terminalResult = { data: [{ id: 'srv-id' }], error: null };
+    });
+
+    it('succeeds when the update matches a server row', async () => {
+        const ok = await pushChangeImmediately(change('UPDATE', { id: 't1', amount_cents: 5, updated_at: 'x' }));
+        expect(ok).toBe(true);
+        expect(selectMock).toHaveBeenCalled();
+    });
+
+    it('fails (retries) when the update matches NO server row', async () => {
+        terminalResult = { data: [], error: null };
+        const ok = await pushChangeImmediately(change('UPDATE', { id: 't1', amount_cents: 5, updated_at: 'x' }));
+        expect(ok).toBe(false);
+    });
+
+    it('fails (retries) when a delete matches NO server row — prevents resurrection', async () => {
+        terminalResult = { data: [], error: null };
+        const ok = await pushChangeImmediately(change('DELETE', { id: 't1', deleted_at: 'x' }));
+        expect(ok).toBe(false);
     });
 });

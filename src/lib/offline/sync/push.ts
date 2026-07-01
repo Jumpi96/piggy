@@ -154,13 +154,20 @@ async function pushUpdate(
     // Remove system fields that shouldn't be updated
     const { id, user_id, created_at, ...updatePayload } = payload;
 
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from(table)
         .update(updatePayload)
-        .eq('id', recordId);
+        .eq('id', recordId)
+        .select('id');
 
     if (error) {
         throw new Error(error.message);
+    }
+    // A Supabase update that matches no row returns success with an empty set. That
+    // happens when the target row's INSERT hasn't reached the server yet. Treat it as
+    // a retryable failure instead of marking it synced, otherwise the update is lost.
+    if (!data || data.length === 0) {
+        throw new Error(`No server row matched update for ${table}/${recordId} (insert not yet synced?)`);
     }
 }
 
@@ -170,13 +177,20 @@ async function pushDelete(
     payload: Record<string, unknown>
 ): Promise<void> {
     // Soft delete - update deleted_at timestamp
-    const { error } = await supabase
+    const { data, error } = await supabase
         .from(table)
         .update({ deleted_at: payload.deleted_at })
-        .eq('id', recordId);
+        .eq('id', recordId)
+        .select('id');
 
     if (error) {
         throw new Error(error.message);
+    }
+    // Same guard as pushUpdate: a delete matching zero rows means the row's INSERT
+    // hasn't been pushed yet. Retrying (rather than succeeding) prevents the classic
+    // resurrection where the delete is dropped and the later insert brings the row back.
+    if (!data || data.length === 0) {
+        throw new Error(`No server row matched delete for ${table}/${recordId} (insert not yet synced?)`);
     }
 }
 
