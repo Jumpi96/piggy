@@ -24,6 +24,13 @@ export async function pullChanges(): Promise<PullResult> {
     };
 
     const lastSync = await getLastSyncTimestamp();
+    // Capture the watermark BEFORE issuing any query. The next pull filters on the
+    // server's updated_at >= this value, so it must be a lower bound on "when this pull
+    // observed the server". Stamping it AFTER the queries (as before) skipped any row
+    // written during the pull window: its updated_at landed between a table's query and
+    // the post-loop stamp, so it was in neither this result set nor the next pull's
+    // filter — a permanent silent divergence.
+    const watermark = new Date().toISOString();
     console.log(`[Sync Pull] Starting pull, last sync: ${lastSync || 'never'}`);
     const pendingChanges = await getPendingChanges();
     const pendingByTable = new Map<SyncTableName, Set<string>>(
@@ -49,9 +56,9 @@ export async function pullChanges(): Promise<PullResult> {
         }
     }
 
-    // Update last sync timestamp if successful
+    // Update last sync timestamp if successful (using the pre-query watermark).
     if (result.success) {
-        await setLastSyncTimestamp(new Date().toISOString());
+        await setLastSyncTimestamp(watermark);
     }
 
     console.log(`[Sync Pull] Complete: ${result.recordsProcessed} records from ${result.tablesUpdated} tables`);
@@ -212,6 +219,9 @@ export async function initialHydration(
     }
 
     console.log('[Sync] Starting initial hydration...');
+    // Capture the watermark before downloading so any row written during the (possibly
+    // long) hydration is picked up by the first incremental pull rather than skipped.
+    const watermark = new Date().toISOString();
     const db = await getDatabaseAsync();
 
     for (let i = 0; i < SYNC_TABLES.length; i++) {
@@ -231,7 +241,7 @@ export async function initialHydration(
         }
     }
 
-    await setLastSyncTimestamp(new Date().toISOString());
+    await setLastSyncTimestamp(watermark);
     console.log('[Sync] Initial hydration complete');
 }
 
