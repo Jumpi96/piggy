@@ -560,18 +560,34 @@ export async function insertExchangeRate(currencyCode: string, rate: number): Pr
         VALUES ($1, $2, $3, $4, $5)
     `, [id, userId, currencyCode, rate, timestamp]);
 
-    // Repoint transactions from the start of the current financial period (local operation)
+    // Repoint transactions from the start of the current financial period to the new rate.
     const { start: dateStr } = getPeriodRange(getPeriodForDate(getTodayLocalDate()));
 
-    await db.query(`
+    const repointed = await db.query<{ id: string }>(`
         UPDATE transactions
-        SET exchange_rate_id = $1
+        SET exchange_rate_id = $1,
+            updated_at = $5
         WHERE currency_code = $2
           AND user_id = $3
           AND date >= $4
-    `, [id, currencyCode, userId, dateStr]);
+          AND deleted_at IS NULL
+        RETURNING id
+    `, [id, currencyCode, userId, dateStr, timestamp]);
 
     await trackChange('exchange_rates', id, 'INSERT', exchangeRate);
+
+    // The repoint mutates each transaction locally; queue those changes too. Without
+    // this the new rate never reaches the server, so other devices keep the old rate
+    // and a later full resync silently reverts the local re-valuation — the balances
+    // that "change on their own a couple times a month".
+    for (const row of repointed.rows) {
+        await trackChange('transactions', row.id, 'UPDATE', {
+            id: row.id,
+            exchange_rate_id: id,
+            updated_at: timestamp,
+        });
+    }
+
     triggerBackgroundSync();
 
     return exchangeRate;
