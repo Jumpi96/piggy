@@ -7,7 +7,7 @@ import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 import { TagBarChart } from '../components/charts/TagBarChart';
 import { aggregateByCategory, aggregateByTag } from '../lib/chartUtils';
 import { DailySpendingChart } from '../components/charts/DailySpendingChart';
-import { formatLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
+import { formatLocalDate, getTodayLocalDate, formatLocalMonth, parseLocalDate, getPeriodRange, getPeriodForDate, getPeriodLabel, formatPeriodRangeLabel, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -163,9 +163,7 @@ export function Overview() {
         load();
     }, [currentMonth, lastDataUpdate]);
 
-    const formatMonth = (d: Date) => {
-        return new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(d);
-    };
+    const formatMonth = (d: Date) => getPeriodLabel(formatLocalMonth(d));
 
     const formatUSD = (cents: number, isCents = true) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((isCents ? cents / 100 : cents));
@@ -188,33 +186,42 @@ export function Overview() {
         );
     }, [transactions, visualizationMode, selectedCategory, showTopTagsOnly]);
 
-    // Calculations for the new overview
-    const today = new Date();
-    const currentMonthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const todayMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    // Calculations for the new overview (period-aware: the "month" may start on
+    // any day-of-month, so all day math is relative to the period boundaries).
+    const anchor = formatLocalMonth(currentMonth);
+    const { start: periodStartStr, end: periodEndExclStr } = getPeriodRange(anchor);
+    const periodStart = parseLocalDate(periodStartStr);
+    const periodEndExcl = parseLocalDate(periodEndExclStr);
+    const MS_PER_DAY = 1000 * 60 * 60 * 24;
+    const periodLength = Math.round((periodEndExcl.getTime() - periodStart.getTime()) / MS_PER_DAY);
 
-    const isPastMonth = currentMonthStart < todayMonthStart;
-    const isCurrentMonth = currentMonthStart.getTime() === todayMonthStart.getTime();
-    const isFutureMonth = currentMonthStart > todayMonthStart;
+    const todayStr = getTodayLocalDate();
+    const currentAnchor = getPeriodForDate(todayStr);
+    const isPastMonth = anchor < currentAnchor;
+    const isCurrentMonth = anchor === currentAnchor;
+    const isFutureMonth = anchor > currentAnchor;
 
-    const dayOfMonth = isCurrentMonth ? today.getDate() : 1;
-    const lastDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
-    const remainingDays = lastDayOfMonth - dayOfMonth + 1;
+    // 1-based index of "today" within the period (day 1 for future periods, the
+    // final day for past periods). For a start day of 1 this equals the calendar
+    // day-of-month, preserving the original behaviour.
+    const dayOfMonth = isCurrentMonth
+        ? Math.round((parseLocalDate(todayStr).getTime() - periodStart.getTime()) / MS_PER_DAY) + 1
+        : (isFutureMonth ? 1 : periodLength);
+    const remainingDays = periodLength - dayOfMonth + 1;
 
-    // For "Expected vs Today", we subtract the expected spend for the remaining days of the month.
-    // For a past month, there are no remaining days, so it should equal the total balance.
-    // For the current month, we subtract days *after* today.
+    // For "Expected vs Today", we subtract the expected spend for the remaining
+    // days of the period. Past period → none; current → days strictly after today.
     const effectiveRemainingDays = isCurrentMonth
-        ? Math.max(0, lastDayOfMonth - today.getDate())
-        : (isFutureMonth ? lastDayOfMonth : 0);
+        ? Math.max(0, periodLength - dayOfMonth)
+        : (isFutureMonth ? periodLength : 0);
 
     const differenceWithExpected = totalBalance - (apd * effectiveRemainingDays * 100);
     const perRemainingDay = isPastMonth ? 0 : totalBalance / remainingDays;
 
     const projectionDays = [];
     if (!isPastMonth) {
-        for (let d = dayOfMonth; d <= lastDayOfMonth; d++) {
-            const left = lastDayOfMonth - d + 1;
+        for (let d = dayOfMonth; d <= periodLength; d++) {
+            const left = periodLength - d + 1;
             projectionDays.push({
                 day: d,
                 value: totalBalance / left
@@ -232,7 +239,7 @@ export function Overview() {
                         Financial Overview
                     </h1>
                     <p className="text-sm text-gray-500 font-mono">
-                        🐷 PERIOD: {currentMonth.getFullYear()}-{String(currentMonth.getMonth() + 1).padStart(2, '0')}
+                        🐷 PERIOD: {formatPeriodRangeLabel(formatLocalMonth(currentMonth))}
                     </p>
                 </div>
                 <div className="flex items-center gap-4 bg-white dark:bg-zinc-800 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-zinc-700">

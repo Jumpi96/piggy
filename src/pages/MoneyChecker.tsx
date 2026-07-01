@@ -3,7 +3,7 @@ import { fetchParameters, fetchLatestRates, fetchTransactions, upsertParameter, 
 import type { ExchangeRate } from '../types';
 import { Loader2, Plus, Trash2, Wallet, ArrowRightLeft, Settings2, CheckCircle2, Scale } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { formatLocalDate, getTodayLocalDate } from '../lib/dates';
+import { formatLocalDate, getTodayLocalDate, getPeriodForDate } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -78,10 +78,9 @@ export function MoneyChecker() {
                 setLatestRates(rates as ExchangeRate[]);
                 setAvailableCurrencies(currenciesData.map(c => c.code));
 
-                // Expected cash (same as Overview for current month until today)
+                // Expected cash (same as Overview for the current period until today)
                 const today = new Date();
-                const monthStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-                const txs = await fetchTransactions(monthStr);
+                const txs = await fetchTransactions(getPeriodForDate(formatLocalDate(today)));
                 const todayStr = formatLocalDate(today);
 
                 const cashUntilToday = txs

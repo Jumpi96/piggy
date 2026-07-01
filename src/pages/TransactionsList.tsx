@@ -4,7 +4,7 @@ import type { Transaction } from '../types';
 import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate, parseLocalDate, getPersistentMonth, setPersistentMonth } from '../lib/dates';
+import { formatLocalDate, parseLocalDate, formatLocalMonth, getTodayLocalDate, getPeriodForDate, getPeriodLabel, getPersistentMonth, setPersistentMonth } from '../lib/dates';
 
 import { useSyncData } from '../hooks/useSyncData';
 
@@ -20,10 +20,8 @@ export function TransactionsList() {
     const lastDataUpdate = useSyncData();
 
     useEffect(() => {
-        const today = new Date();
-        const isCurrentMonth = currentMonth.getMonth() === today.getMonth() &&
-            currentMonth.getFullYear() === today.getFullYear();
-        setShowFuture(!isCurrentMonth);
+        const isCurrentPeriod = formatLocalMonth(currentMonth) === getPeriodForDate(getTodayLocalDate());
+        setShowFuture(!isCurrentPeriod);
     }, [currentMonth]);
 
     useEffect(() => {
@@ -34,10 +32,7 @@ export function TransactionsList() {
         // ... rest of function
         setIsLoading(true);
         try {
-            const year = currentMonth.getFullYear();
-            const month = String(currentMonth.getMonth() + 1).padStart(2, '0');
-            const monthStr = `${year}-${month}-01`;
-            const data = await fetchTransactions(monthStr);
+            const data = await fetchTransactions(formatLocalMonth(currentMonth));
             setTransactions(data);
         } catch (err) {
             console.error(err);
@@ -58,7 +53,7 @@ export function TransactionsList() {
         setPersistentMonth(prev);
     };
 
-    const monthLabel = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const monthLabel = getPeriodLabel(formatLocalMonth(currentMonth));
 
     const formatCurrency = (cents: number, currency: string) => {
         return new Intl.NumberFormat('en-US', {

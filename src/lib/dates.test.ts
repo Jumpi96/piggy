@@ -4,7 +4,13 @@ import {
     formatLocalDate,
     formatLocalMonth,
     parseLocalDate,
-    getTodayLocalDate
+    getTodayLocalDate,
+    getMonthStartDay,
+    cacheMonthStartDay,
+    getPeriodRange,
+    getPeriodForDate,
+    getCurrentPeriodAnchor,
+    getPeriodLabel
 } from './dates';
 
 describe('Date Utilities', () => {
@@ -136,6 +142,134 @@ describe('Date Utilities', () => {
             expect(effective.getMonth()).toBe(2); // March
             expect(effective.getDate()).toBe(5);
             vi.useRealTimers();
+        });
+    });
+});
+
+describe('Financial Period Utilities', () => {
+    afterEach(() => {
+        localStorage.clear();
+    });
+
+    describe('getMonthStartDay / cacheMonthStartDay', () => {
+        it('defaults to 1 when unset', () => {
+            expect(getMonthStartDay()).toBe(1);
+        });
+
+        it('reads a cached value', () => {
+            cacheMonthStartDay(15);
+            expect(getMonthStartDay()).toBe(15);
+        });
+
+        it('clamps out-of-range values to [1, 28]', () => {
+            cacheMonthStartDay(40);
+            expect(getMonthStartDay()).toBe(28);
+            cacheMonthStartDay(0);
+            expect(getMonthStartDay()).toBe(1);
+        });
+
+        it('clears back to default when passed null', () => {
+            cacheMonthStartDay(15);
+            cacheMonthStartDay(null);
+            expect(getMonthStartDay()).toBe(1);
+        });
+    });
+
+    describe('getPeriodRange', () => {
+        it('is a plain calendar month when start day is 1 (parity)', () => {
+            expect(getPeriodRange('2026-07')).toEqual({ start: '2026-07-01', end: '2026-08-01' });
+            expect(getPeriodRange('2026-12')).toEqual({ start: '2026-12-01', end: '2027-01-01' });
+        });
+
+        it('shifts to the configured start day', () => {
+            cacheMonthStartDay(15);
+            expect(getPeriodRange('2026-07')).toEqual({ start: '2026-07-15', end: '2026-08-15' });
+        });
+
+        it('handles the year boundary', () => {
+            cacheMonthStartDay(15);
+            expect(getPeriodRange('2026-12')).toEqual({ start: '2026-12-15', end: '2027-01-15' });
+        });
+
+        it('accepts a YYYY-MM-DD anchor (ignores the day part)', () => {
+            cacheMonthStartDay(15);
+            expect(getPeriodRange('2026-07-01')).toEqual({ start: '2026-07-15', end: '2026-08-15' });
+        });
+    });
+
+    describe('getPeriodForDate', () => {
+        it('is the calendar month when start day is 1 (parity)', () => {
+            expect(getPeriodForDate('2026-07-20')).toBe('2026-07');
+            expect(getPeriodForDate('2026-07-01')).toBe('2026-07');
+        });
+
+        it('assigns dates on/after the start day to their own month', () => {
+            cacheMonthStartDay(15);
+            expect(getPeriodForDate('2026-07-15')).toBe('2026-07');
+            expect(getPeriodForDate('2026-07-20')).toBe('2026-07');
+        });
+
+        it('assigns dates before the start day to the previous month', () => {
+            cacheMonthStartDay(15);
+            expect(getPeriodForDate('2026-07-10')).toBe('2026-06');
+        });
+
+        it('handles the year boundary', () => {
+            cacheMonthStartDay(15);
+            expect(getPeriodForDate('2026-01-05')).toBe('2025-12');
+        });
+    });
+
+    describe('getCurrentPeriodAnchor', () => {
+        beforeEach(() => vi.useFakeTimers());
+        afterEach(() => vi.useRealTimers());
+
+        it('returns the anchor month (pinned to the 1st) for today', () => {
+            cacheMonthStartDay(15);
+            vi.setSystemTime(new Date(2026, 6, 3)); // Jul 3 -> before start day -> June period
+            const anchor = getCurrentPeriodAnchor();
+            expect(anchor.getFullYear()).toBe(2026);
+            expect(anchor.getMonth()).toBe(5); // June
+            expect(anchor.getDate()).toBe(1);
+        });
+
+        it('uses the current month once the start day has passed', () => {
+            cacheMonthStartDay(15);
+            vi.setSystemTime(new Date(2026, 6, 20)); // Jul 20 -> July period
+            const anchor = getCurrentPeriodAnchor();
+            expect(anchor.getMonth()).toBe(6); // July
+        });
+    });
+
+    describe('getPeriodLabel (majority of days, tie -> end month)', () => {
+        it('is the calendar month when start day is 1', () => {
+            expect(getPeriodLabel('2026-07')).toBe('July 2026');
+        });
+
+        it('uses the start month when it holds the majority (31-day month, start 15)', () => {
+            cacheMonthStartDay(15);
+            // Jul 15–Aug 14: 17 days in July vs 14 in August -> July
+            expect(getPeriodLabel('2026-07')).toBe('July 2026');
+        });
+
+        it('defaults to the end month on a tie (28-day Feb, start 15)', () => {
+            cacheMonthStartDay(15);
+            // Feb 15–Mar 14 (non-leap): 14 vs 14 -> tie -> March
+            expect(getPeriodLabel('2026-02')).toBe('March 2026');
+        });
+
+        it('uses the start month for a leap February (start 15)', () => {
+            cacheMonthStartDay(15);
+            // Feb 15–Mar 14 (leap): 15 vs 14 -> February
+            expect(getPeriodLabel('2024-02')).toBe('February 2024');
+        });
+
+        it('uses the end month when it holds the majority (start 20)', () => {
+            cacheMonthStartDay(20);
+            // Jul 20–Aug 19: 12 vs 19 -> August
+            expect(getPeriodLabel('2026-07')).toBe('August 2026');
+            // Dec 20–Jan 19: end month rolls into the next year
+            expect(getPeriodLabel('2026-12')).toBe('January 2027');
         });
     });
 });

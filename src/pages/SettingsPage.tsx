@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchCreditCards, insertCreditCard, deleteCreditCard, updateCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
+import { cacheMonthStartDay } from '../lib/dates';
 import type { CreditCard, Currency, Parameter } from '../types';
 import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, Loader2, Check, AlertCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -81,6 +82,7 @@ export function SettingsPage() {
 
 function GeneralSettings() {
     const [apd, setApd] = useState<string>('');
+    const [startDay, setStartDay] = useState<string>('1');
     const [isLoading, setIsLoading] = useState(false);
     const [debugEnabled, setDebugEnabled] = useState(false);
     const [debugError, setDebugError] = useState<string | null>(null);
@@ -92,6 +94,8 @@ function GeneralSettings() {
                 const params: Parameter[] = await fetchParameters();
                 const apdParam = params.find(p => p.key === 'amount_per_day');
                 if (apdParam) setApd(apdParam.value.toString());
+                const startDayParam = params.find(p => p.key === 'month_start_day');
+                if (startDayParam) setStartDay(startDayParam.value.toString());
             } catch (err) {
                 console.error(err);
             } finally {
@@ -112,7 +116,12 @@ function GeneralSettings() {
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            const day = Math.min(28, Math.max(1, Math.round(parseFloat(startDay) || 1)));
             await upsertParameter('amount_per_day', parseFloat(apd));
+            await upsertParameter('month_start_day', day);
+            // Update the synchronous cache immediately so period math reflects the change.
+            cacheMonthStartDay(day);
+            setStartDay(String(day));
             alert("Settings saved!");
         } catch (err) {
             console.error(err);
@@ -159,6 +168,25 @@ function GeneralSettings() {
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
                             This base value is used to calculate your expected daily balance.
+                        </p>
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Month Start Day
+                        </label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="28"
+                            step="1"
+                            value={startDay}
+                            onChange={(e) => setStartDay(e.target.value)}
+                            className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900"
+                            placeholder="1"
+                            required
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                            The day your financial month begins (1–28). Use 1 for a regular calendar month.
                         </p>
                     </div>
                     <button

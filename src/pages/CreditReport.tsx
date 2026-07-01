@@ -4,21 +4,16 @@ import type { Transaction, CreditCard } from '../types';
 import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate, getPersistentMonth, setPersistentMonth, parseLocalDate } from '../lib/dates';
+import { formatLocalDate, getPersistentMonth, setPersistentMonth, parseLocalDate, getCurrentPeriodAnchor, formatLocalMonth, getPeriodRange, getPeriodLabel, formatPeriodRangeLabel } from '../lib/dates';
 import { useSyncData } from '../hooks/useSyncData';
 
 export function CreditReport() {
-    // Default logic: next month if > 15, current month if <= 15
+    // Default to the current financial period (which already reflects the
+    // configured month start day); card transactions land here via their payment day.
     const getInitialMonth = () => {
         const saved = localStorage.getItem('selected_month');
         if (saved) return getPersistentMonth();
-
-        const now = new Date();
-        const d = new Date(now.getFullYear(), now.getMonth(), 1);
-        if (now.getDate() > 15) {
-            d.setMonth(d.getMonth() + 1);
-        }
-        return d;
+        return getCurrentPeriodAnchor();
     };
 
     const [currentMonth, setCurrentMonth] = useState(getInitialMonth());
@@ -60,8 +55,12 @@ export function CreditReport() {
         if (!selectedCardId) return;
         setIsLoading(true);
         try {
-            const startStr = formatLocalDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1));
-            const endStr = formatLocalDate(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0));
+            // fetchCreditTransactions is inclusive on both ends, so convert the
+            // period's exclusive end into the last day of the period.
+            const { start: startStr, end: endExclusive } = getPeriodRange(formatLocalMonth(currentMonth));
+            const endDate = parseLocalDate(endExclusive);
+            endDate.setDate(endDate.getDate() - 1);
+            const endStr = formatLocalDate(endDate);
 
             const txs = await fetchCreditTransactions(selectedCardId, startStr, endStr);
             setTransactions(txs);
@@ -219,7 +218,7 @@ export function CreditReport() {
                         Credit Report
                     </h1>
                     <p className="text-sm text-gray-500 font-mono">
-                        🐷 PERIOD: {currentMonth.getFullYear()}-{String(currentMonth.getMonth() + 1).padStart(2, '0')}
+                        🐷 PERIOD: {formatPeriodRangeLabel(formatLocalMonth(currentMonth))}
                     </p>
                 </div>
 
@@ -229,7 +228,7 @@ export function CreditReport() {
                             <ChevronLeft className="w-4 h-4" />
                         </button>
                         <span className="text-sm font-bold min-w-[100px] text-center">
-                            {new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric' }).format(currentMonth)}
+                            {getPeriodLabel(formatLocalMonth(currentMonth))}
                         </span>
                         <button onClick={() => changeMonth(1)} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-700 rounded transition-colors">
                             <ChevronRight className="w-4 h-4" />
