@@ -13,6 +13,7 @@ import { MoneyChecker } from './pages/MoneyChecker';
 import { Savings } from './pages/Savings';
 import { Login } from './pages/Login';
 import { supabase } from './lib/supabase';
+import { fetchParameters } from './lib/api';
 import type { Session } from '@supabase/supabase-js';
 import { Loader2 } from 'lucide-react';
 
@@ -35,6 +36,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const [dbReady, setDbReady] = useState(false);
   const [hasLocalData, setHasLocalData] = useState<boolean | null>(null);
   const [firstSyncDone, setFirstSyncDone] = useState(false);
+  const [paramsPrimed, setParamsPrimed] = useState(false);
 
   // Initialize database
   useEffect(() => {
@@ -126,6 +128,20 @@ function RequireAuth({ children }: { children: ReactNode }) {
     return () => stopPeriodicSync();
   }, [dbReady, session?.user?.id, hasLocalData]);
 
+  // Prime the financial-period settings cache (month_start_day) once data is
+  // ready, before any page mounts. Pages read this cache synchronously at mount
+  // to pick the current period, so on a fresh device or a deep link they would
+  // otherwise fall back to calendar months until another page loaded the params.
+  useEffect(() => {
+    if (!dbReady || !firstSyncDone) return;
+    if (!session?.user?.id && !hasLocalData) return; // headed to /login instead
+    let cancelled = false;
+    fetchParameters()
+      .catch(err => console.error('[App] Failed to prime settings cache:', err))
+      .finally(() => { if (!cancelled) setParamsPrimed(true); });
+    return () => { cancelled = true; };
+  }, [dbReady, firstSyncDone, session?.user?.id, hasLocalData]);
+
   // Determine what to show
   // If we have local data, don't wait for auth - show app immediately (offline-first)
   const canShowApp = hasLocalData && firstSyncDone;
@@ -152,6 +168,16 @@ function RequireAuth({ children }: { children: ReactNode }) {
 
   // If we have local data, allow access even without session (offline mode)
   if (!session && !hasLocalData) return <Navigate to="/login" replace />;
+
+  // Wait for the financial-period settings cache before mounting pages, so the
+  // initial period they pick reflects the user's configured month start day.
+  if (!paramsPrimed) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-3 bg-gray-50 dark:bg-zinc-900">
+        <Loader2 className="w-10 h-10 animate-spin text-emerald-600" />
+      </div>
+    );
+  }
 
   return children;
 }

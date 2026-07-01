@@ -4,16 +4,26 @@ import type { Transaction, CreditCard } from '../types';
 import { Loader2, Calendar, CreditCard as CardIcon, Plus, CheckCircle2, Circle, Edit2, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
-import { formatLocalDate, getPersistentMonth, setPersistentMonth, parseLocalDate, getCurrentPeriodAnchor, formatLocalMonth, getPeriodRange, getPeriodLabel, formatPeriodRangeLabel } from '../lib/dates';
+import { formatLocalDate, getPersistentMonth, setPersistentMonth, parseLocalDate, getCurrentPeriodAnchor, getMonthStartDay, formatLocalMonth, getPeriodRange, getPeriodLabel, formatPeriodRangeLabel } from '../lib/dates';
 import { useSyncData } from '../hooks/useSyncData';
 
 export function CreditReport() {
-    // Default to the current financial period (which already reflects the
-    // configured month start day); card transactions land here via their payment day.
+    // Default to the current financial period (card transactions land here via
+    // their payment day). With a custom start day the period already models the
+    // cycle; on the default calendar month (start day 1) keep the historical
+    // "review next month once past the 15th" behaviour so credit users still land
+    // on the upcoming payment period.
     const getInitialMonth = () => {
         const saved = localStorage.getItem('selected_month');
         if (saved) return getPersistentMonth();
-        return getCurrentPeriodAnchor();
+        if (getMonthStartDay() > 1) return getCurrentPeriodAnchor();
+
+        const now = new Date();
+        const d = new Date(now.getFullYear(), now.getMonth(), 1);
+        if (now.getDate() > 15) {
+            d.setMonth(d.getMonth() + 1);
+        }
+        return d;
     };
 
     const [currentMonth, setCurrentMonth] = useState(getInitialMonth());
