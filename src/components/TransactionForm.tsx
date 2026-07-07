@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
-export function TransactionForm({ initialData, onSuccess, onCancel }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void }) {
+export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit' }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void, mode?: 'edit' | 'clone' }) {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -180,7 +180,9 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
                 note: note || null
             };
 
-            if (initialData?.recurring_rule_id) {
+            if (mode === 'clone') {
+                await insertTransaction({ ...transactionMeta, recurring_rule_id: null });
+            } else if (initialData?.recurring_rule_id) {
                 if (editType === 'this' || !editType) {
                     // Edit this instance: save as physical with original_date
                     const tx: TransactionInput = {
@@ -283,7 +285,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel }: { initialD
             </div>
 
             {/* Recurring Edit Choice */}
-            {initialData?.recurring_rule_id && (
+            {mode !== 'clone' && initialData?.recurring_rule_id && (
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-4 rounded-xl space-y-3">
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">This is a recurring transaction. How do you want to save changes?</p>
                     <div className="flex gap-2">
