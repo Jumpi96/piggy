@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment, useMemo } from 'react';
 import { fetchTransactions, deleteTransaction, updateTransaction, skipRecurringOccurrence, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
 import type { Transaction } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat, Copy } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { formatLocalDate, parseLocalDate, formatLocalMonth, getTodayLocalDate, getPeriodForDate, getPeriodLabel, formatPeriodRangeLabel, getPersistentMonth, setPersistentMonth } from '../lib/dates';
@@ -13,6 +13,7 @@ export function TransactionsList() {
     const [isLoading, setIsLoading] = useState(false);
     const [currentMonth, setCurrentMonth] = useState(getPersistentMonth());
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+    const [cloningTransaction, setCloningTransaction] = useState<Transaction | null>(null);
     const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
     const [showFuture, setShowFuture] = useState(false);
 
@@ -301,7 +302,7 @@ export function TransactionsList() {
                                                     </div>
                                                     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden divide-y divide-gray-50 dark:divide-zinc-800">
                                                         {txs.map(t => (
-                                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} toggleBalanced={toggleBalanced} setEditingTransaction={setEditingTransaction} handleDelete={handleDelete} />
+                                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} toggleBalanced={toggleBalanced} setEditingTransaction={setEditingTransaction} setCloningTransaction={setCloningTransaction} handleDelete={handleDelete} />
                                                         ))}
                                                     </div>
                                                 </div>
@@ -321,7 +322,7 @@ export function TransactionsList() {
                                     </div>
                                     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md border border-gray-100 dark:border-zinc-800 overflow-hidden divide-y divide-gray-50 dark:divide-zinc-800">
                                         {txs.map(t => (
-                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} toggleBalanced={toggleBalanced} setEditingTransaction={setEditingTransaction} handleDelete={handleDelete} />
+                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} toggleBalanced={toggleBalanced} setEditingTransaction={setEditingTransaction} setCloningTransaction={setCloningTransaction} handleDelete={handleDelete} />
                                         ))}
                                     </div>
                                 </div>
@@ -399,11 +400,44 @@ export function TransactionsList() {
                     </div>
                 </div>
             )}
+            {cloningTransaction && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 dark:border-zinc-800">
+                        <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Clone Transaction</h2>
+                            <button onClick={() => setCloningTransaction(null)} className="p-1 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-lg transition-colors">
+                                <X className="w-6 h-6 text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto max-h-[80vh]">
+                            <TransactionForm
+                                initialData={cloningTransaction}
+                                mode="clone"
+                                onSuccess={() => {
+                                    setCloningTransaction(null);
+                                    loadTransactions();
+                                }}
+                                onCancel={() => setCloningTransaction(null)}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </Fragment>
     );
 }
 
-function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransaction, handleDelete }: { t: Transaction, formatCurrency: any, toggleBalanced: any, setEditingTransaction: any, handleDelete: any }) {
+type TransactionItemProps = {
+    t: Transaction;
+    formatCurrency: (cents: number, currency: string) => string;
+    toggleBalanced: (transaction: Transaction) => void;
+    setEditingTransaction: (transaction: Transaction) => void;
+    setCloningTransaction: (transaction: Transaction) => void;
+    handleDelete: (transaction: Transaction) => void;
+};
+
+function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransaction, setCloningTransaction, handleDelete }: TransactionItemProps) {
     return (
         <div className="p-4 hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors group">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -478,6 +512,15 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                     >
                         <Edit2 className="w-4 h-4" />
                     </button>
+                    {!t.recurring_rule_id && (
+                        <button
+                            onClick={() => setCloningTransaction(t)}
+                            className="p-2 text-gray-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20 rounded-lg transition-all"
+                            title="Clone transaction"
+                        >
+                            <Copy className="w-4 h-4" />
+                        </button>
+                    )}
                     <button
                         onClick={() => handleDelete(t)}
                         className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
