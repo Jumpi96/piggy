@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { List, FolderTree, ChevronRight, ChevronDown } from 'lucide-react';
+import { List, FolderTree, ChevronRight, ChevronDown, Search, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { type AccountBalance, type BalanceNode, buildBalanceTree, Decimal } from '../../lib/ledger';
 
@@ -86,14 +86,26 @@ function TreeNode({ node, depth = 0 }: { node: BalanceNode; depth?: number }) {
 
 export function RawDataTab({ balances }: Props) {
     const [viewMode, setViewMode] = useState<ViewMode>('flat');
+    const [search, setSearch] = useState('');
+
+    // Substring match on account name, like SQL '%search%' (case-insensitive)
+    const filteredBalances = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        if (!query) return balances;
+        return balances.filter(b => b.account.toLowerCase().includes(query));
+    }, [balances, search]);
+
+    const filteredTotal = useMemo(() => {
+        return filteredBalances.reduce((sum, b) => sum.plus(b.usdValue), new Decimal(0));
+    }, [filteredBalances]);
 
     // Build tree structure
-    const tree = useMemo(() => buildBalanceTree(balances), [balances]);
+    const tree = useMemo(() => buildBalanceTree(filteredBalances), [filteredBalances]);
 
     // Sort balances by account name for flat view
     const sortedBalances = useMemo(() => {
-        return [...balances].sort((a, b) => a.account.localeCompare(b.account));
-    }, [balances]);
+        return [...filteredBalances].sort((a, b) => a.account.localeCompare(b.account));
+    }, [filteredBalances]);
 
     // Root children for tree view (skip the empty root node)
     const rootChildren = useMemo(() => {
@@ -132,9 +144,53 @@ export function RawDataTab({ balances }: Props) {
                 </div>
 
                 <span className="text-xs text-gray-500">
-                    {balances.length} accounts
+                    {search.trim()
+                        ? `${filteredBalances.length} of ${balances.length} accounts`
+                        : `${balances.length} accounts`}
                 </span>
             </div>
+
+            {/* Search */}
+            <div className="relative">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search accounts (e.g. IOL:USD)"
+                    className="w-full pl-9 pr-9 py-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-sm font-mono"
+                />
+                {search && (
+                    <button
+                        onClick={() => setSearch('')}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        aria-label="Clear search"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+
+            {/* Search result sum */}
+            {search.trim() && (
+                <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-3">
+                    <span className="text-sm text-emerald-800 dark:text-emerald-300 font-medium">
+                        {filteredBalances.length === 0
+                            ? 'No matching accounts'
+                            : `Total of ${filteredBalances.length} matching account${filteredBalances.length === 1 ? '' : 's'}`}
+                    </span>
+                    {filteredBalances.length > 0 && (
+                        <span className={cn(
+                            "font-mono font-bold",
+                            filteredTotal.isNegative()
+                                ? "text-red-600 dark:text-red-400"
+                                : "text-emerald-700 dark:text-emerald-400"
+                        )}>
+                            {formatUSD(filteredTotal)}
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Flat View */}
             {viewMode === 'flat' && (

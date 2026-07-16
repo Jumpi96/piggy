@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
     AreaChart,
     Area,
@@ -9,7 +9,7 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
-import { Loader2, Calendar, Search, Filter } from 'lucide-react';
+import { Loader2, Calendar, Filter, LineChart as LineChartIcon } from 'lucide-react';
 import {
     type ParsedLedger,
     type SimplePrice,
@@ -128,11 +128,6 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
             setIsComputing(false);
         }
     };
-
-    // Initial compute and whenever parsed/prices change
-    useEffect(() => {
-        compute();
-    }, [parsed, prices]);
 
     // Find data point by date label
     const getDataPointByLabel = (label: string) => {
@@ -277,7 +272,7 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
                         </select>
                     </div>
 
-                    {/* Update Button */}
+                    {/* Graph Button */}
                     <div className="space-y-1">
                         <label className="text-xs font-medium text-transparent select-none">Action</label>
                         <button
@@ -288,9 +283,9 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
                             {isComputing ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                                <Search className="w-4 h-4" />
+                                <LineChartIcon className="w-4 h-4" />
                             )}
-                            {isComputing ? 'Computing...' : 'Update'}
+                            {isComputing ? 'Computing...' : 'Graph'}
                         </button>
                     </div>
                 </div>
@@ -388,8 +383,16 @@ function AssetsEvolutionTab({ parsed, prices }: Props) {
                 </div>
             )}
 
+            {/* Not computed yet */}
+            {!isComputing && chartData === null && (
+                <div className="text-center p-12 text-gray-500 bg-gray-50 dark:bg-zinc-900/50 rounded-2xl border-2 border-dashed border-gray-200 dark:border-zinc-800">
+                    <LineChartIcon className="w-8 h-8 mx-auto mb-3 text-gray-400" />
+                    Pick a date range and press <span className="font-medium">Graph</span> to compute the evolution charts.
+                </div>
+            )}
+
             {/* Empty state */}
-            {!isComputing && (!chartData || chartData.length === 0) && (
+            {!isComputing && chartData !== null && chartData.length === 0 && (
                 <div className="text-center p-12 text-gray-500 bg-gray-50 dark:bg-zinc-900/50 rounded-2xl border-2 border-dashed border-gray-200 dark:border-zinc-800">
                     No evolution data available for the selected date range.
                 </div>
