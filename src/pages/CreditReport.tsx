@@ -350,6 +350,7 @@ export function CreditReport() {
                         <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto">
                             <TransactionForm
                                 initialData={editingTransaction}
+                                defaultCardId={selectedCardId}
                                 onSuccess={() => { setIsFormOpen(false); loadTransactions(); }}
                                 onCancel={() => setIsFormOpen(false)}
                             />
