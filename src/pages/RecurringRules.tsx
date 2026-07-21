@@ -197,7 +197,12 @@ export function RecurringRulesPage() {
     // A rule that has already started owns a history of virtual occurrences generated
     // from its start date; editing that start date would retroactively move/erase them.
     // So lock the start date once a rule is initiated and steer changes through Duplicate.
-    const startIsLocked = !!editingId && !!formData.start_date && formData.start_date <= today;
+    // Key off the rule's *saved* start date, not the live form value: editing a native
+    // date input fires intermediate onChange values (e.g. changing the month 08 -> 10
+    // briefly passes through 01), so using formData here would disable the field mid-edit
+    // the moment an in-progress value dips to/under today and trap the user.
+    const editingStartDate = editingId ? rules.find(r => r.id === editingId)?.start_date : undefined;
+    const startIsLocked = !!editingStartDate && editingStartDate <= today;
 
     // Helper to check if rule is "past" (inactive or ended)
     const isPast = (rule: RecurringRule) => {
