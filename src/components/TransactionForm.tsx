@@ -16,7 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
-export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit' }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void, mode?: 'edit' | 'clone' }) {
+export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void, mode?: 'edit' | 'clone', defaultCardId?: string }) {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -33,8 +33,10 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [date, setDate] = useState(initialData?.date || getTodayLocalDate());
     const [category, setCategory] = useState(initialData?.category || '');
     const [tag, setTag] = useState(initialData?.tag || '');
-    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || 'cash');
-    const [cardId, setCardId] = useState(initialData?.credit_card_id || '');
+    // When opening a fresh form from the Credit Report (no initialData), preselect
+    // the card the user is currently reviewing so a new item lands on that card.
+    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || (!initialData && defaultCardId ? 'card' : 'cash'));
+    const [cardId, setCardId] = useState(initialData?.credit_card_id || (!initialData ? defaultCardId ?? '' : ''));
     const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
     const [note, setNote] = useState(initialData?.note || '');
     const [editType, setEditType] = useState<'this' | 'future' | null>(null);
