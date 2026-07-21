@@ -9,10 +9,15 @@ import {
     editTransaction,
     deleteTransaction,
     getTransactionsForEditing,
+    getPricesForEditing,
+    editPrice,
+    deletePrice,
+    formatPriceLine,
     commitLedger,
     type FormPosting,
     type ParsedLedger,
     type EditableTransaction,
+    type EditablePrice,
 } from '../../lib/ledger';
 
 interface Props {
@@ -91,6 +96,7 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
     const [originalDescription, setOriginalDescription] = useState('');
 
     // Price state
+    const [priceMode, setPriceMode] = useState<'add' | 'edit'>('add');
     const [priceDate, setPriceDate] = useState(getTodayDate());
     const [priceInputs, setPriceInputs] = useState<PriceInput[]>([
         { id: crypto.randomUUID(), commodity: '', price: '' },
@@ -98,6 +104,14 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
     const [priceSubmitting, setPriceSubmitting] = useState(false);
     const [priceError, setPriceError] = useState<string | null>(null);
     const [priceSuccess, setPriceSuccess] = useState(false);
+
+    // Price edit mode state (one price at a time, mirroring transaction editing)
+    const [currentPriceIndex, setCurrentPriceIndex] = useState(0);
+    const [editPriceDate, setEditPriceDate] = useState(getTodayDate());
+    const [editPriceCommodity, setEditPriceCommodity] = useState('');
+    const [editPriceValue, setEditPriceValue] = useState('');
+    const [editPriceOriginalLine, setEditPriceOriginalLine] = useState('');
+    const [showPriceDeleteConfirm, setShowPriceDeleteConfirm] = useState(false);
 
     // Get known commodities for autocomplete
     const knownCommodities = useMemo(() => {
@@ -108,6 +122,11 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
     const editableTransactions = useMemo((): EditableTransaction[] => {
         return getTransactionsForEditing(parsed.transactions);
     }, [parsed.transactions]);
+
+    // Get editable prices (sorted newest first) from the raw ledger content
+    const editablePrices = useMemo((): EditablePrice[] => {
+        return getPricesForEditing(currentContent);
+    }, [currentContent]);
 
     // Sort accounts for autocomplete
     const sortedAccounts = useMemo(() => [...accounts].sort(), [accounts]);
@@ -145,6 +164,19 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
             setOriginalDescription('');
         }
     }, [mode]);
+
+    // Load price into the edit form when navigating in price edit mode
+    useEffect(() => {
+        if (priceMode === 'edit' && editablePrices.length > 0) {
+            const p = editablePrices[currentPriceIndex];
+            if (p) {
+                setEditPriceDate(p.dateInput);
+                setEditPriceCommodity(p.commodity);
+                setEditPriceValue(p.price);
+                setEditPriceOriginalLine(p.originalLine);
+            }
+        }
+    }, [priceMode, currentPriceIndex, editablePrices]);
 
     // Convert inputs to Posting objects for validation
     const parsedPostings = useMemo((): FormPosting[] => {
@@ -224,6 +256,17 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
         }
         return { isValid: true, message: '' };
     }, [priceInputs]);
+
+    // Validate the single price being edited
+    const editPriceValidation = useMemo(() => {
+        if (!editPriceCommodity.trim()) {
+            return { isValid: false, message: 'Commodity required' };
+        }
+        if (!editPriceValue.trim() || isNaN(parseFloat(editPriceValue))) {
+            return { isValid: false, message: 'Invalid price' };
+        }
+        return { isValid: true, message: '' };
+    }, [editPriceCommodity, editPriceValue]);
 
     // Add new posting row
     const addPosting = () => {
@@ -354,6 +397,77 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
         }
     };
 
+    // Navigate prices (list is newest first)
+    const goToPreviousPrice = () => {
+        if (currentPriceIndex < editablePrices.length - 1) {
+            setCurrentPriceIndex(currentPriceIndex + 1);
+        }
+    };
+
+    const goToNextPrice = () => {
+        if (currentPriceIndex > 0) {
+            setCurrentPriceIndex(currentPriceIndex - 1);
+        }
+    };
+
+    // Handle price edit submission
+    const handlePriceEditSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!editPriceValidation.isValid) return;
+
+        setPriceSubmitting(true);
+        setPriceError(null);
+        setPriceSuccess(false);
+
+        try {
+            const newLine = formatPriceLine(editPriceDate, editPriceCommodity, editPriceValue);
+            const commitMessage = `Edit price: ${editPriceCommodity.trim()} ${editPriceDate.replace(/-/g, '/')}`;
+            const updatedContent = await editPrice(currentContent, editPriceOriginalLine, newLine, commitMessage);
+
+            // Point the edit form at the new line so further edits keep working
+            setEditPriceOriginalLine(newLine);
+            setPriceSuccess(true);
+            onTransactionAdded(updatedContent);
+            setTimeout(() => setPriceSuccess(false), 3000);
+        } catch (err) {
+            console.error('Failed to edit price:', err);
+            setPriceError(err instanceof Error ? err.message : 'Failed to save');
+        } finally {
+            setPriceSubmitting(false);
+        }
+    };
+
+    // Handle price delete
+    const handlePriceDelete = async () => {
+        if (!editPriceOriginalLine) return;
+
+        setPriceSubmitting(true);
+        setPriceError(null);
+
+        try {
+            const commitMessage = `Delete price: ${editPriceCommodity.trim()} ${editPriceDate.replace(/-/g, '/')}`;
+            const updatedContent = await deletePrice(currentContent, editPriceOriginalLine, commitMessage);
+
+            setShowPriceDeleteConfirm(false);
+            setPriceSuccess(true);
+
+            if (editablePrices.length <= 1) {
+                setPriceMode('add');
+            } else if (currentPriceIndex >= editablePrices.length - 1) {
+                setCurrentPriceIndex(Math.max(0, currentPriceIndex - 1));
+            }
+
+            onTransactionAdded(updatedContent);
+            setTimeout(() => setPriceSuccess(false), 3000);
+        } catch (err) {
+            console.error('Failed to delete price:', err);
+            setPriceError(err instanceof Error ? err.message : 'Failed to delete');
+        } finally {
+            setPriceSubmitting(false);
+        }
+    };
+
     // Handle delete
     const handleDelete = async () => {
         if (!originalDate || !originalDescription) return;
@@ -391,6 +505,7 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
     };
 
     const currentTx = mode === 'edit' ? editableTransactions[currentTxIndex] : null;
+    const currentPrice = priceMode === 'edit' ? editablePrices[currentPriceIndex] : null;
 
     return (
         <div className="space-y-6">
@@ -736,7 +851,92 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
 
             {/* ===== PRICES TAB ===== */}
             {activeTab === 'prices' && (
-                <form onSubmit={handlePriceSubmit} className="space-y-6">
+                <>
+                    {/* Mode Toggle: Add New / Edit Existing */}
+                    <div className="flex gap-2 p-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg w-fit">
+                        <button
+                            type="button"
+                            onClick={() => setPriceMode('add')}
+                            className={cn(
+                                "px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1.5",
+                                priceMode === 'add'
+                                    ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                                    : "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700"
+                            )}
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add New
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setPriceMode('edit');
+                                setCurrentPriceIndex(0);
+                                setPriceError(null);
+                            }}
+                            disabled={editablePrices.length === 0}
+                            className={cn(
+                                "px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1.5",
+                                priceMode === 'edit'
+                                    ? "bg-white dark:bg-zinc-700 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                                    : "text-emerald-600 dark:text-emerald-400 hover:text-emerald-700",
+                                editablePrices.length === 0 && "opacity-50 cursor-not-allowed"
+                            )}
+                        >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            Edit Existing
+                        </button>
+                    </div>
+
+                    {/* Price Navigator (Edit Mode) */}
+                    {priceMode === 'edit' && editablePrices.length > 0 && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                                <button
+                                    type="button"
+                                    onClick={goToPreviousPrice}
+                                    disabled={currentPriceIndex >= editablePrices.length - 1}
+                                    className={cn(
+                                        "p-2 rounded-lg transition-colors",
+                                        currentPriceIndex >= editablePrices.length - 1
+                                            ? "text-gray-300 dark:text-zinc-600 cursor-not-allowed"
+                                            : "text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                                    )}
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+
+                                <div className="text-center">
+                                    <p className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                                        Price {currentPriceIndex + 1} of {editablePrices.length}
+                                    </p>
+                                    {currentPrice && (
+                                        <p className="text-xs text-blue-600 dark:text-blue-400 mt-1 font-mono">
+                                            {currentPrice.date} · {currentPrice.commodity} · ${currentPrice.price}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={goToNextPrice}
+                                    disabled={currentPriceIndex <= 0}
+                                    className={cn(
+                                        "p-2 rounded-lg transition-colors",
+                                        currentPriceIndex <= 0
+                                            ? "text-gray-300 dark:text-zinc-600 cursor-not-allowed"
+                                            : "text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                                    )}
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ADD MODE */}
+                    {priceMode === 'add' && (
+                    <form onSubmit={handlePriceSubmit} className="space-y-6">
                     {/* Date */}
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -885,7 +1085,173 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
                             Example: <code className="font-mono">P 2026/01/20 BTC $ 90059.30</code>
                         </p>
                     </div>
-                </form>
+                    </form>
+                    )}
+
+                    {/* EDIT MODE */}
+                    {priceMode === 'edit' && editablePrices.length > 0 && (
+                        <form onSubmit={handlePriceEditSubmit} className="space-y-6">
+                            {/* Date */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Price Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={editPriceDate}
+                                    onChange={(e) => setEditPriceDate(e.target.value)}
+                                    className="w-full md:w-auto p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900"
+                                    required
+                                />
+                            </div>
+
+                            {/* Commodity + Price */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    Price (in USD)
+                                </label>
+                                <div className="flex gap-3 items-center">
+                                    <div className="w-32">
+                                        <input
+                                            type="text"
+                                            value={editPriceCommodity}
+                                            onChange={(e) => setEditPriceCommodity(e.target.value.toUpperCase())}
+                                            placeholder="BTC, EUR..."
+                                            list="edit-commodities"
+                                            className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 font-mono text-sm"
+                                        />
+                                        <datalist id="edit-commodities">
+                                            {knownCommodities.map(c => (
+                                                <option key={c} value={c} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+                                    <span className="text-gray-500">=</span>
+                                    <div className="flex-1 flex items-center gap-2">
+                                        <span className="text-gray-500">$</span>
+                                        <input
+                                            type="text"
+                                            value={editPriceValue}
+                                            onChange={(e) => setEditPriceValue(e.target.value)}
+                                            placeholder="0.00"
+                                            className="flex-1 p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 font-mono text-sm text-right"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Validation */}
+                            <div className={cn(
+                                "flex items-center gap-2 p-3 rounded-lg",
+                                editPriceValidation.isValid
+                                    ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                                    : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300"
+                            )}>
+                                {editPriceValidation.isValid ? (
+                                    <>
+                                        <Check className="w-5 h-5" />
+                                        <span className="text-sm font-medium">Ready to save</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <AlertCircle className="w-5 h-5" />
+                                        <span className="text-sm font-medium">{editPriceValidation.message}</span>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Error */}
+                            {priceError && (
+                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-red-700 dark:text-red-300 text-sm">
+                                    {priceError}
+                                </div>
+                            )}
+
+                            {/* Success */}
+                            {priceSuccess && (
+                                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 text-emerald-700 dark:text-emerald-300 text-sm flex items-center gap-2">
+                                    <Check className="w-4 h-4" />
+                                    Price saved successfully!
+                                </div>
+                            )}
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-3 justify-between">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPriceDeleteConfirm(true)}
+                                    disabled={priceSubmitting}
+                                    className="px-4 py-3 rounded-lg font-medium transition-colors flex items-center gap-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-200 dark:border-red-800"
+                                >
+                                    <Trash2 className="w-5 h-5" />
+                                    Delete
+                                </button>
+
+                                <button
+                                    type="submit"
+                                    disabled={!editPriceValidation.isValid || priceSubmitting}
+                                    className={cn(
+                                        "flex-1 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2",
+                                        editPriceValidation.isValid && !priceSubmitting
+                                            ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                            : "bg-gray-200 dark:bg-zinc-700 text-gray-500 dark:text-zinc-500 cursor-not-allowed"
+                                    )}
+                                >
+                                    {priceSubmitting ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            Saving...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-5 h-5" />
+                                            Save Changes
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    )}
+
+                    {/* Price Delete Confirmation Dialog */}
+                    {showPriceDeleteConfirm && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 max-w-md w-full shadow-xl">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                                    Delete Price?
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                    Are you sure you want to delete the price
+                                    {currentPrice && (
+                                        <span className="font-mono"> {currentPrice.commodity} @ ${currentPrice.price} ({currentPrice.date})</span>
+                                    )}? This action cannot be undone.
+                                </p>
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPriceDeleteConfirm(false)}
+                                        className="px-4 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handlePriceDelete}
+                                        disabled={priceSubmitting}
+                                        className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 flex items-center gap-2"
+                                    >
+                                        {priceSubmitting ? (
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                        ) : (
+                                            <Trash2 className="w-4 h-4" />
+                                        )}
+                                        Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
