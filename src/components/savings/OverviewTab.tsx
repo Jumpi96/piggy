@@ -341,6 +341,84 @@ export function OverviewTab({ kpis, balances }: Props) {
                     )}
                 </div>
             </div>
+
+            {/* Shorter-horizon funds: actual distribution vs target */}
+            {kpis.funds.size > 0 && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {Array.from(kpis.funds.entries()).map(([key, fund]) => (
+                        <div
+                            key={key}
+                            className="bg-white dark:bg-zinc-900 rounded-xl border border-gray-200 dark:border-zinc-800 p-6 space-y-4"
+                        >
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <Target className="w-4 h-4 text-gray-400 shrink-0" />
+                                    <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                        {fund.label}
+                                    </h3>
+                                    <span className="text-xs text-gray-400 truncate">· {fund.subtitle}</span>
+                                </div>
+                                <span className="font-mono text-sm font-bold shrink-0">
+                                    {formatUSD(fund.total)}
+                                </span>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">{fund.note}</p>
+
+                            <div className="space-y-4">
+                                {fund.splits.map((split) => {
+                                    const ratio = split.expected > 0 ? split.percentage / split.expected : 0;
+                                    const statusColor =
+                                        ratio < 0.5 ? 'text-red-600' : ratio < 0.8 ? 'text-amber-600' : 'text-emerald-600';
+                                    const barColor =
+                                        ratio < 0.5 ? '#EF4444' : ratio < 0.8 ? '#F59E0B' : '#10B981';
+                                    return (
+                                        <div key={split.ticker} className="space-y-1.5">
+                                            <div className="flex items-baseline justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <span className="text-sm font-medium">{split.name}</span>
+                                                    <span className="ml-2 font-mono text-xs text-gray-400">
+                                                        {split.ticker}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-baseline gap-2 shrink-0">
+                                                    <span className={cn('font-mono text-sm font-bold', statusColor)}>
+                                                        {formatPercent(split.percentage)}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400">
+                                                        / {formatPercent(split.expected)}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            {/* Bar: fill = actual share of fund; marker = target share */}
+                                            <div className="relative h-2 bg-gray-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full transition-all"
+                                                    style={{ width: `${Math.min(split.percentage, 100)}%`, backgroundColor: barColor }}
+                                                />
+                                                <div
+                                                    className="absolute top-[-2px] bottom-[-2px] w-0.5 bg-gray-700 dark:bg-gray-200"
+                                                    style={{ left: `${Math.min(split.expected, 100)}%` }}
+                                                    title={`Target ${formatPercent(split.expected)}`}
+                                                />
+                                            </div>
+                                            <div className="flex items-baseline justify-between gap-3">
+                                                {split.description ? (
+                                                    <p className="text-xs text-gray-400 min-w-0 truncate">{split.description}</p>
+                                                ) : (
+                                                    <span />
+                                                )}
+                                                <span className="text-xs text-gray-400 font-mono shrink-0">
+                                                    {formatUSD(split.current)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }

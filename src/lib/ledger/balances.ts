@@ -1,6 +1,7 @@
 import {
     Decimal,
     BalanceCalculator,
+    DEFAULT_ALLOCATION_CONFIG,
     type ParsedLedger,
     type AccountBalance,
     type BalanceNode,
@@ -162,6 +163,20 @@ export interface SavingsKPIs {
         expected: number;
         splits?: Map<string, { current: Decimal; percentage: number; expected: number }>;
     }>;
+    funds: Map<string, {
+        label: string;
+        subtitle: string;
+        note: string;
+        total: Decimal;
+        splits: Array<{
+            name: string;
+            ticker: string;
+            current: Decimal;
+            percentage: number; // actual share of the fund
+            expected: number;   // target share of the fund
+            description?: string;
+        }>;
+    }>;
     totalStocksPercentage: number;
     stocksExpected: number;
 }
@@ -243,6 +258,54 @@ export function computeKPIs(
         ? 0
         : totalStocksValue.div(retirementAssets).times(100).toNumber();
 
+    // Shorter-horizon funds (Ahorro #2, Ahorro #IIGG): show how much of each target
+    // distribution is accomplished. Percentages are relative to the fund's own total
+    // (not total assets). Fall back to the defaults when a stored config predates funds.
+    const fundsConfig = config.funds ?? DEFAULT_ALLOCATION_CONFIG.funds ?? {};
+    const funds = new Map<string, {
+        label: string;
+        subtitle: string;
+        note: string;
+        total: Decimal;
+        splits: Array<{
+            name: string;
+            ticker: string;
+            current: Decimal;
+            percentage: number;
+            expected: number;
+            description?: string;
+        }>;
+    }>();
+
+    for (const [key, fund] of Object.entries(fundsConfig)) {
+        // Total is the whole fund (including any idle cash), so an instrument sitting
+        // below target reads as under-allocated rather than being hidden — mirroring how
+        // retirement categories are measured against the whole retirement balance.
+        const total = balances
+            .filter(b => b.account === fund.pattern || b.account.startsWith(fund.pattern + ':'))
+            .reduce((sum, b) => sum.plus(b.usdValue), new Decimal(0));
+
+        const splitCurrents = fund.splits.map(split => ({
+            split,
+            current: sumByPatterns(balances, [split.pattern]),
+        }));
+
+        funds.set(key, {
+            label: fund.label,
+            subtitle: fund.subtitle,
+            note: fund.note,
+            total,
+            splits: splitCurrents.map(({ split, current }) => ({
+                name: split.name,
+                ticker: split.ticker,
+                current,
+                percentage: total.isZero() ? 0 : current.div(total).times(100).toNumber(),
+                expected: split.expected_ratio * 100,
+                description: split.description,
+            })),
+        });
+    }
+
     return {
         totalAssets,
         retirementAssets,
@@ -250,6 +313,7 @@ export function computeKPIs(
         netWorth,
         goals,
         allocations,
+        funds,
         totalStocksPercentage,
         stocksExpected: config.expected * 100,
     };

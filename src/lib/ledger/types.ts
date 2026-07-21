@@ -54,10 +54,30 @@ export interface AllocationGoal {
     pattern: string;
 }
 
+// A shorter-horizon fund (e.g. Ahorro #2, Ahorro #IIGG) with a target distribution
+// across instruments. Actual holdings are matched by `pattern` and compared to
+// `expected_ratio` to show how much of the target distribution is accomplished.
+export interface FundSplit {
+    name: string;           // instrument display name
+    ticker: string;         // commodity/ticker symbol
+    pattern: string;        // account pattern to match holdings
+    expected_ratio: number; // 0..1 target share of the fund
+    description?: string;   // optional asset-class note
+}
+
+export interface FundAllocation {
+    label: string;
+    subtitle: string;
+    note: string;
+    pattern: string;        // account prefix for the whole fund (used for its total)
+    splits: FundSplit[];
+}
+
 export interface AllocationConfig {
     expected: number;
     categories: Record<string, AllocationCategory>;
     goals: Record<string, AllocationGoal>;
+    funds?: Record<string, FundAllocation>;
     liabilities_pattern: string;
 }
 
@@ -163,7 +183,53 @@ export const DEFAULT_ALLOCATION_CONFIG: AllocationConfig = {
     },
     goals: {
         security: { target: 12000, pattern: "Assets:1_Security" },
-        discretionary: { target: 8000, pattern: "Assets:0_Discretionary" }
+        discretionary: { target: 9000, pattern: "Assets:0_Discretionary" }
+    },
+    funds: {
+        ahorro_2: {
+            label: "Ahorro #2",
+            subtitle: "Short & medium term",
+            note: "Distribution isn't critical, but aim for:",
+            pattern: "Assets:2_BigItems",
+            splits: [
+                {
+                    name: "IOL Dólar Ahorro Plus",
+                    ticker: "IOLDOLD",
+                    pattern: "Assets:2_BigItems:(.*:)?IOLDOLD",
+                    expected_ratio: 0.7,
+                    description: "USD / short-term USD fixed-income fund"
+                },
+                {
+                    name: "Premier Renta Fija Ahorro",
+                    ticker: "PRFAHOB",
+                    pattern: "Assets:2_BigItems:(.*:)?PRFAHOB",
+                    expected_ratio: 0.3,
+                    description: "Inflation-linked pesos (CER/UVA)"
+                }
+            ]
+        },
+        ahorro_iigg: {
+            label: "Ahorro #IIGG",
+            subtitle: "IIGG fund",
+            note: "Maintain:",
+            pattern: "Assets:0_IIGG",
+            splits: [
+                {
+                    name: "BONCER TZX27",
+                    ticker: "TZX27",
+                    pattern: "Assets:0_IIGG:(.*:)?TZX27",
+                    expected_ratio: 0.8,
+                    description: "Inflation-linked sovereign bond (CER, 2027)"
+                },
+                {
+                    name: "IOL Cash Management",
+                    ticker: "IOLCAMA",
+                    pattern: "Assets:0_IIGG:(.*:)?IOLCAMA",
+                    expected_ratio: 0.2,
+                    description: "Money-market fund for immediate liquidity"
+                }
+            ]
+        }
     },
     liabilities_pattern: "Liabilities"
 };
