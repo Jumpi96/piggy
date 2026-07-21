@@ -213,9 +213,19 @@ export interface EditableTransaction {
     postings: Array<{ account: string; amountStr: string }>;
 }
 
+// Minimal posting shape needed for editing. Structurally satisfied by grootboek's
+// Posting (account: Account has `.name`; amount: Money has `.commodity`/`.quantity`).
+interface EditingPosting {
+    account: string | { name: string };
+    amount?: {
+        commodity?: string;
+        quantity?: { toString(): string };
+    };
+}
+
 // Get transactions sorted by date (newest first) for editing
 export function getTransactionsForEditing(
-    transactions: Array<{ date: Date; description: string; postings: readonly any[] }>
+    transactions: Array<{ date: Date; description: string; postings: readonly EditingPosting[] }>
 ): EditableTransaction[] {
     // Sort by date descending (newest first)
     const sorted = [...transactions].sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -257,6 +267,93 @@ export function getTransactionsForEditing(
             }),
         };
     });
+}
+
+// ===== Price directives =====
+
+// Matches a price line: "P YYYY/MM/DD COMMODITY $ PRICE" (the "$" and its spacing
+// are optional so hand-edited lines still parse).
+const PRICE_LINE_RE = /^P\s+(\d{4})\/(\d{2})\/(\d{2})\s+(\S+)\s+\$?\s*(-?[\d.]+)\s*$/;
+
+// Editable price format for the UI. `originalLine` is the exact raw line, used to
+// locate the directive unambiguously for edit/delete (avoids substring collisions).
+export interface EditablePrice {
+    index: number;
+    date: string;         // YYYY/MM/DD
+    dateInput: string;    // YYYY-MM-DD for <input type="date">
+    commodity: string;
+    price: string;        // numeric string
+    originalLine: string;
+}
+
+// Format a single price directive line for the ledger.
+export function formatPriceLine(dateInput: string, commodity: string, price: string): string {
+    const formattedDate = dateInput.replace(/-/g, '/');
+    return `P ${formattedDate} ${commodity.trim()} $ ${price.trim()}`;
+}
+
+// Parse all price directives from raw content, newest first (then by commodity).
+export function getPricesForEditing(content: string): EditablePrice[] {
+    const lines = content.split('\n');
+    const prices: Omit<EditablePrice, 'index'>[] = [];
+
+    for (const line of lines) {
+        const m = line.match(PRICE_LINE_RE);
+        if (!m) continue;
+        const [, y, mo, d, commodity, price] = m;
+        prices.push({
+            date: `${y}/${mo}/${d}`,
+            dateInput: `${y}-${mo}-${d}`,
+            commodity,
+            price,
+            originalLine: line,
+        });
+    }
+
+    prices.sort((a, b) =>
+        a.date === b.date ? a.commodity.localeCompare(b.commodity) : b.date.localeCompare(a.date)
+    );
+
+    return prices.map((p, index) => ({ ...p, index }));
+}
+
+// Edit a price directive: replace the exact original line with a new one.
+export async function editPrice(
+    currentContent: string,
+    originalLine: string,
+    newLine: string,
+    commitMessage: string
+): Promise<string> {
+    const lines = currentContent.split('\n');
+    const i = lines.findIndex(l => l === originalLine);
+    if (i === -1) {
+        throw new Error(`Price not found: ${originalLine}`);
+    }
+
+    lines[i] = newLine;
+    const updatedContent = lines.join('\n');
+
+    await commitLedger(updatedContent, commitMessage);
+    return updatedContent;
+}
+
+// Delete a price directive by its exact original line.
+export async function deletePrice(
+    currentContent: string,
+    originalLine: string,
+    commitMessage: string
+): Promise<string> {
+    const lines = currentContent.split('\n');
+    const i = lines.findIndex(l => l === originalLine);
+    if (i === -1) {
+        throw new Error(`Price not found: ${originalLine}`);
+    }
+
+    lines.splice(i, 1);
+    const updatedContent = lines.join('\n').replace(/\n{3,}/g, '\n\n');
+
+    await commitLedger(updatedContent, commitMessage);
+    return updatedContent;
 }
 
 // Test connection to GitHub repo
