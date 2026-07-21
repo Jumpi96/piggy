@@ -13,6 +13,7 @@ import {
     editPrice,
     deletePrice,
     formatPriceLine,
+    insertPricesInOrder,
     commitLedger,
     type FormPosting,
     type ParsedLedger,
@@ -62,15 +63,6 @@ function parseAmountInput(str: string) {
     }
 
     return null;
-}
-
-// Format price lines for ledger
-function formatPriceLines(date: string, prices: PriceInput[]): string {
-    const formattedDate = date.replace(/-/g, '/');
-    return prices
-        .filter(p => p.commodity.trim() && p.price.trim())
-        .map(p => `P ${formattedDate} ${p.commodity.trim()} $ ${p.price.trim()}`)
-        .join('\n');
 }
 
 export function AddTransactionTab({ accounts, currentContent, parsed, onTransactionAdded }: Props) {
@@ -373,13 +365,13 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
         setPriceSuccess(false);
 
         try {
-            const priceLines = formatPriceLines(priceDate, priceInputs);
+            const priceLines = priceInputs
+                .filter(p => p.commodity.trim() && p.price.trim())
+                .map(p => formatPriceLine(priceDate, p.commodity, p.price));
 
-            // Append price lines to content
-            const normalizedContent = currentContent.endsWith('\n')
-                ? currentContent
-                : currentContent + '\n';
-            const updatedContent = normalizedContent + '\n' + priceLines + '\n';
+            // Insert in chronological order (not just appended) so ledger processing
+            // that relies on date ordering stays correct for back-dated prices.
+            const updatedContent = insertPricesInOrder(currentContent, priceDate, priceLines);
 
             await commitLedger(updatedContent, `Add prices for ${priceDate}`);
 
@@ -974,7 +966,7 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
                                         <input
                                             type="text"
                                             value={price.commodity}
-                                            onChange={(e) => updatePriceRow(price.id, 'commodity', e.target.value.toUpperCase())}
+                                            onChange={(e) => updatePriceRow(price.id, 'commodity', e.target.value)}
                                             placeholder="BTC, EUR..."
                                             list={`commodities-${price.id}`}
                                             className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 font-mono text-sm"
@@ -1115,7 +1107,7 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
                                         <input
                                             type="text"
                                             value={editPriceCommodity}
-                                            onChange={(e) => setEditPriceCommodity(e.target.value.toUpperCase())}
+                                            onChange={(e) => setEditPriceCommodity(e.target.value)}
                                             placeholder="BTC, EUR..."
                                             list="edit-commodities"
                                             className="w-full p-2 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 font-mono text-sm"

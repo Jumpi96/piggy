@@ -292,6 +292,52 @@ export function formatPriceLine(dateInput: string, commodity: string, price: str
     return `P ${formattedDate} ${commodity.trim()} $ ${price.trim()}`;
 }
 
+// Insert price directives into the ledger keeping it in chronological order.
+// Ledger processing expects entries ordered by date; appending a (possibly
+// back-dated) price at the end breaks that ordering, so place the block right
+// before the first entry dated strictly after `dateInput` (append if none).
+export function insertPricesInOrder(
+    content: string,
+    dateInput: string,
+    priceLines: string[]
+): string {
+    const block = priceLines.filter(l => l.trim());
+    if (block.length === 0) return content;
+
+    const targetDate = dateInput.replace(/-/g, '/');
+    const lines = content.split('\n');
+
+    // First entry (transaction header or price directive) dated after the target.
+    // Posting lines are indented, so they never match this start-anchored regex.
+    let insertAt = lines.length;
+    for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/^(?:P\s+)?(\d{4}\/\d{2}\/\d{2})(?:\s|$)/);
+        if (m && m[1] > targetDate) {
+            insertAt = i;
+            break;
+        }
+    }
+
+    const before = lines.slice(0, insertAt);
+    const after = lines.slice(insertAt);
+
+    const result = [...before];
+    // Blank line before the block unless we're already at a blank boundary / start.
+    if (result.length > 0 && result[result.length - 1].trim() !== '') {
+        result.push('');
+    }
+    result.push(...block);
+    // Blank line after the block when more content follows.
+    if (after.length > 0 && after[0].trim() !== '') {
+        result.push('');
+    }
+    result.push(...after);
+
+    let out = result.join('\n').replace(/\n{3,}/g, '\n\n');
+    if (!out.endsWith('\n')) out += '\n';
+    return out;
+}
+
 // Parse all price directives from raw content, newest first (then by commodity).
 export function getPricesForEditing(content: string): EditablePrice[] {
     const lines = content.split('\n');
