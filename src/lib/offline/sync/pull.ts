@@ -192,8 +192,10 @@ function prepareRecordForLocal(
     const prepared: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(record)) {
-        // Convert JSONB fields to string
-        if (key === 'schedule_config' || key === 'value') {
+        // Convert JSONB fields to string. These columns are jsonb on Supabase but TEXT
+        // locally, and every local reader JSON.parse()s them — pass an array through
+        // unstringified and the exception list is silently lost on the next pull.
+        if (key === 'schedule_config' || key === 'value' || key === 'exception_dates') {
             prepared[key] = typeof value === 'object' ? JSON.stringify(value) : value;
         }
         // Keep everything else as-is
