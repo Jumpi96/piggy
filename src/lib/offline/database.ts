@@ -117,6 +117,22 @@ async function runMigrations(database: PGlite): Promise<void> {
                 console.log('[Offline DB] Applying version 4 migration (Credit Card Enabled Status & Fix)');
                 await database.exec(`ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT true;`);
             }
+
+            if (currentVersion < 5) {
+                console.log('[Offline DB] Applying version 5 migration (Credit Card Sort Order)');
+                await database.exec(`ALTER TABLE credit_cards ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;`);
+                await database.exec(`
+                    WITH ordered AS (
+                        SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY name, created_at, id) - 1 AS rn
+                        FROM credit_cards
+                        WHERE deleted_at IS NULL
+                    )
+                    UPDATE credit_cards
+                    SET sort_order = ordered.rn
+                    FROM ordered
+                    WHERE credit_cards.id = ordered.id;
+                `);
+            }
         }
 
         // Update schema version

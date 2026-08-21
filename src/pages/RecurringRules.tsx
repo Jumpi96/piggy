@@ -3,6 +3,7 @@ import { fetchRecurringRules, insertRecurringRule, updateRecurringRule, deleteRe
 import { calculateEndDate } from '../lib/recurrence';
 import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import { cn, normalizeForComparison } from '../lib/utils';
+import { sortCreditCards } from '../lib/creditCards';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
 import { Plus, Trash2, Edit2, Copy, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
@@ -60,7 +61,7 @@ export function RecurringRulesPage() {
             setRules(r);
             const sortedCurrencies = c.sort((a, b) => a.code.localeCompare(b.code));
             setCurrencies(sortedCurrencies);
-            setCreditCards(cards);
+            setCreditCards(sortCreditCards(cards));
             if (sortedCurrencies.length > 0 && !formData.id) {
                 setFormData(prev => ({ ...prev, currency_code: sortedCurrencies[0].code }));
             }

@@ -5,6 +5,7 @@ import { getTodayLocalDate, getPeriodRange, getPeriodForDate, cacheMonthStartDay
 import { generateOccurrences, mergeTransactions } from './recurringUtils';
 import { normalizeForComparison } from './utils';
 import { pickRateForDate } from './currency';
+import { sortCreditCards } from './creditCards';
 
 // Transaction Input without system fields
 export type TransactionInput = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'deleted_at'>;
@@ -142,10 +143,10 @@ export async function fetchCreditCards(includeDisabled: boolean = false): Promis
     const result = await db.query<CreditCard>(`
         SELECT * FROM credit_cards
         WHERE user_id = $1 AND deleted_at IS NULL ${enabledClause}
-        ORDER BY name
+        ORDER BY sort_order, created_at, name
     `, [userId]);
 
-    return result.rows;
+    return sortCreditCards(result.rows);
 }
 
 export async function insertCreditCard(name: string, closingDay: number, paymentDay: number): Promise<CreditCard> {
@@ -160,20 +161,27 @@ export async function insertCreditCard(name: string, closingDay: number, payment
         name,
         closing_day: closingDay,
         payment_day: paymentDay,
+        sort_order: 0,
         enabled: true,
         created_at: timestamp,
         deleted_at: null
     };
 
     await db.query(`
-        INSERT INTO credit_cards (id, user_id, name, closing_day, payment_day, enabled, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO credit_cards (id, user_id, name, closing_day, payment_day, sort_order, enabled, created_at)
+        VALUES ($1, $2, $3, $4, $5, COALESCE((SELECT MAX(sort_order) + 1 FROM credit_cards WHERE user_id = $2 AND deleted_at IS NULL), 0), $6, $7)
     `, [id, userId, name, closingDay, paymentDay, true, timestamp]);
 
-    await trackChange('credit_cards', id, 'INSERT', card);
+    const inserted = await db.query<CreditCard>(`
+        SELECT * FROM credit_cards WHERE id = $1
+    `, [id]);
+
+    const insertedCard = inserted.rows[0] || card;
+
+    await trackChange('credit_cards', id, 'INSERT', insertedCard);
     triggerBackgroundSync();
 
-    return card;
+    return insertedCard;
 }
 
 export async function deleteCreditCard(id: string): Promise<void> {
@@ -206,6 +214,10 @@ export async function updateCreditCard(id: string, updates: Partial<CreditCard>)
 
     await trackChange('credit_cards', id, 'UPDATE', { ...updates, updated_at: timestamp });
     triggerBackgroundSync();
+}
+
+export async function updateCreditCardOrder(cards: CreditCard[]): Promise<void> {
+    await Promise.all(cards.map(card => updateCreditCard(card.id, { sort_order: card.sort_order })));
 }
 
 // ============================================================================

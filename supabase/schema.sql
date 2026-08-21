@@ -41,6 +41,8 @@ create table if not exists credit_cards (
   name text not null,
   closing_day integer not null check (closing_day between 1 and 31),
   payment_day integer not null check (payment_day between 1 and 31),
+  sort_order integer not null default 0,
+  enabled boolean not null default true,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   deleted_at timestamptz
