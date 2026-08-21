@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { formatLocalDate, getPersistentMonth, setPersistentMonth, parseLocalDate, getCurrentPeriodAnchor, getMonthStartDay, formatLocalMonth, getPeriodRange, getPeriodLabel, formatPeriodRangeLabel } from '../lib/dates';
 import { useSyncData } from '../hooks/useSyncData';
+import { sortCreditCards } from '../lib/creditCards';
 
 export function CreditReport() {
     // Default to the current financial period (card transactions land here via
@@ -46,10 +47,7 @@ export function CreditReport() {
         async function loadCards() {
             try {
                 const cards = await fetchCreditCards(true);
-                const sorted = cards.sort((a, b) => {
-                    if (a.enabled === b.enabled) return a.name.localeCompare(b.name);
-                    return a.enabled ? -1 : 1;
-                });
+                const sorted = sortCreditCards(cards);
                 setCreditCards(sorted);
                 if (sorted.length > 0 && !selectedCardId) {
                     setSelectedCardId(sorted[0].id);

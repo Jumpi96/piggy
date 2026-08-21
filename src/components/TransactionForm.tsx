@@ -14,6 +14,7 @@ import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, fo
 import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
+import { sortCreditCards } from '../lib/creditCards';
 import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
 export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void, mode?: 'edit' | 'clone', defaultCardId?: string }) {
@@ -63,7 +64,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 if (!initialData && sortedCurrencies.length > 0) {
                     setCurrencyCode(sortedCurrencies[0].code);
                 }
-                setCreditCards(cardData);
+                setCreditCards(sortCreditCards(cardData));
                 setAllTags(tagData);
             } catch (err) {
                 console.error("Failed to load reference data", err);

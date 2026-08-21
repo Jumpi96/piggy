@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { fetchCreditCards, insertCreditCard, deleteCreditCard, updateCreditCard, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
+import { fetchCreditCards, insertCreditCard, deleteCreditCard, updateCreditCard, updateCreditCardOrder, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
 import { cacheMonthStartDay } from '../lib/dates';
 import type { CreditCard, Currency, Parameter } from '../types';
-import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, Loader2, Check, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, Loader2, Check, AlertCircle, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { resequenceCreditCards, sortCreditCards } from '../lib/creditCards';
 import { DEBUG_FLAG_KEY } from '../lib/debug';
 import {
     getAllocationConfig,
@@ -234,7 +235,7 @@ function CardsSettings() {
         setIsLoading(true);
         try {
             const data = await fetchCreditCards(true);
-            setCards(data);
+            setCards(resequenceCreditCards(sortCreditCards(data)));
         } catch (err) {
             console.error(err);
         } finally {
@@ -286,6 +287,28 @@ function CardsSettings() {
         }
     };
 
+    const handleMoveCard = async (index: number, direction: -1 | 1) => {
+        const targetIndex = index + direction;
+        if (targetIndex < 0 || targetIndex >= cards.length) return;
+
+        const previousCards = cards;
+        const reordered = [...cards];
+        const [card] = reordered.splice(index, 1);
+        reordered.splice(targetIndex, 0, card);
+        const nextCards = resequenceCreditCards(reordered);
+
+        setCards(nextCards);
+
+        try {
+            await updateCreditCardOrder(nextCards);
+        } catch (err: unknown) {
+            console.error(err);
+            const message = err instanceof Error ? err.message : String(err);
+            alert("Failed to update card order: " + message);
+            setCards(previousCards);
+        }
+    };
+
     return (
         <div className="space-y-8">
             {/* List */}
@@ -293,6 +316,7 @@ function CardsSettings() {
                 <table className="w-full text-left text-sm">
                     <thead className="bg-gray-50 dark:bg-zinc-800 border-b border-gray-100 dark:border-zinc-700">
                         <tr>
+                            <th className="px-6 py-3 font-medium text-gray-500 w-28">Order</th>
                             <th className="px-6 py-3 font-medium text-gray-500">Name</th>
                             <th className="px-6 py-3 font-medium text-gray-500">Status</th>
                             <th className="px-6 py-3 font-medium text-gray-500">Closing Day</th>
@@ -301,8 +325,31 @@ function CardsSettings() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 dark:divide-zinc-800">
-                        {cards.map(c => (
+                        {cards.map((c, index) => (
                             <tr key={c.id} className="hover:bg-gray-50 dark:hover:bg-zinc-800/50">
+                                <td className="px-6 py-3">
+                                    <div className="flex items-center gap-1 text-gray-400">
+                                        <GripVertical className="w-4 h-4" />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleMoveCard(index, -1)}
+                                            disabled={index === 0}
+                                            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title="Move card up"
+                                        >
+                                            <ArrowUp className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleMoveCard(index, 1)}
+                                            disabled={index === cards.length - 1}
+                                            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-transparent"
+                                            title="Move card down"
+                                        >
+                                            <ArrowDown className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </td>
                                 <td className="px-6 py-3 font-medium text-gray-900 dark:text-gray-100">{c.name}</td>
                                 <td className="px-6 py-3">
                                     <button
@@ -335,7 +382,7 @@ function CardsSettings() {
                         ))}
                         {cards.length === 0 && !isLoading && (
                             <tr>
-                                <td colSpan={5} className="px-6 py-8 text-center text-gray-400">
+                                <td colSpan={6} className="px-6 py-8 text-center text-gray-400">
                                     No credit cards added.
                                 </td>
                             </tr>
