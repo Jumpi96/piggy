@@ -105,6 +105,15 @@ export function generateOccurrences(
 }
 
 /**
+ * Exception (skipped) dates on or after `fromDate`. When "edit future ones" splits a rule,
+ * the new rule must inherit these, or every occurrence skipped after the split date
+ * reappears on it.
+ */
+export function exceptionDatesFrom(exceptionDates: string[] | null | undefined, fromDate: string): string[] {
+    return (exceptionDates ?? []).filter(d => d >= fromDate);
+}
+
+/**
  * Merges virtual occurrences with physical overrides.
  * Virtual occurrences that have a physical counterpart (matched by recurring_rule_id and original_date) are hidden.
  *

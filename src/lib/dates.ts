@@ -208,6 +208,13 @@ export function formatPeriodRangeLabel(anchor: string): string {
     return `${fmt.format(startDate)} – ${fmt.format(endInclusive)}`;
 }
 
+// `day` in the given month, clamped to the month's last day. new Date(y, m, 31) in a
+// 30-day month rolls over to the 1st of the next month, pushing a card payment a month late.
+function dateInMonthClamped(year: number, month: number, day: number): Date {
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    return new Date(year, month, Math.min(day, lastDay));
+}
+
 export function calculateCreditCardEffectiveDate(
     transactionDate: Date,
     closingDay: number,
@@ -219,8 +226,11 @@ export function calculateCreditCardEffectiveDate(
     const tDate = new Date(transactionDate);
     tDate.setHours(0, 0, 0, 0);
 
+    const isPaymentDay = (d: Date) =>
+        d.getTime() === dateInMonthClamped(d.getFullYear(), d.getMonth(), paymentDay).getTime();
+
     // If transaction date is in the future and is already a payment day, keep it
-    if (tDate > today && tDate.getDate() === paymentDay) {
+    if (tDate > today && isPaymentDay(tDate)) {
         return tDate;
     }
 
@@ -235,12 +245,12 @@ export function calculateCreditCardEffectiveDate(
         targetMonth.setMonth(targetMonth.getMonth() + 1);
     }
 
-    const nextPaymentDate = new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
+    const nextPaymentDate = dateInMonthClamped(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
 
     // If today is a payment day, move to the next payment day
-    if (today.getDate() === paymentDay && nextPaymentDate.getTime() === today.getTime()) {
+    if (isPaymentDay(today) && nextPaymentDate.getTime() === today.getTime()) {
         targetMonth.setMonth(targetMonth.getMonth() + 1);
-        return new Date(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
+        return dateInMonthClamped(targetMonth.getFullYear(), targetMonth.getMonth(), paymentDay);
     }
 
     return nextPaymentDate;

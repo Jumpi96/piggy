@@ -286,6 +286,9 @@ export function Layout() {
     const location = useLocation();
     const debugFromQuery = new URLSearchParams(location.search).get('debug') === '1';
     const [debugEnabled, setDebugEnabled] = useState(() => debugFromQuery || readDebugFlag());
+    // The DB is initialized before Layout mounts (RequireAuth waits for it). false means
+    // IndexedDB failed and the app fell back to an in-memory database.
+    const [persistent] = useState(() => isUsingPersistence());
     // const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
@@ -363,6 +366,15 @@ export function Layout() {
                             setDebugEnabled(false);
                         }}
                     />
+                )}
+                {!persistent && (
+                    <div className="m-4 mb-0 md:mt-4 mt-12 p-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/20 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                            Offline storage is unavailable on this device, so data is only kept until the app closes.
+                            Stay online so your changes sync before you leave.
+                        </span>
+                    </div>
                 )}
                 <Outlet />
             </main>
