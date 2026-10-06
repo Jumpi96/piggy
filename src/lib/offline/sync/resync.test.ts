@@ -11,7 +11,16 @@ let failNextQuery = false;
 function makeBuilder(table: string) {
     let from = 0;
     let to = Infinity;
+    let eqFilter: [string, unknown] | null = null;
     const builder = {
+        eq: (col: string, val: unknown) => {
+            eqFilter = [col, val];
+            return builder;
+        },
+        maybeSingle: () => Promise.resolve({
+            data: (serverRows[table] ?? []).find(r => eqFilter && r[eqFilter[0]] === eqFilter[1]) ?? null,
+            error: null,
+        }),
         gte: () => builder,
         order: () => builder,
         range: (f: number, t: number) => {
@@ -45,7 +54,7 @@ vi.mock('./queue', () => ({
     notifyPendingChanges: vi.fn(),
 }));
 
-import { fullTableResync, pullChanges } from './pull';
+import { fullTableResync, pullChanges, discardLocalChanges } from './pull';
 
 const TS = '2026-10-01T00:00:00.000Z';
 const card = (id: string) => ({
@@ -156,5 +165,53 @@ describe('pull natural-key repair', () => {
         await pullChanges();
 
         expect(await ids('parameters')).toEqual(['local-id']);
+    });
+});
+
+describe('discardLocalChanges', () => {
+    beforeEach(async () => {
+        db = new PGlite();
+        await db.exec(SCHEMA_SQL);
+        await db.query(`INSERT INTO currencies (code, name) VALUES ('USD', 'Dollar')`);
+        serverRows = {};
+    });
+
+    const queue = (table: string, id: string) => db.query(
+        `INSERT INTO _pending_changes (table_name, record_id, operation, payload, retry_count) VALUES ($1, $2, 'INSERT', '{}', 5)`,
+        [table, id]
+    );
+    const pendingCount = async () =>
+        (await db.query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM _pending_changes`)).rows[0].n;
+
+    it('refuses to discard a never-synced parent that local rows still use, changing nothing', async () => {
+        await insert('credit_cards', card('c-new'));
+        await insert('transactions', tx('t1', 'c-new'));
+        await queue('credit_cards', 'c-new');
+
+        await expect(discardLocalChanges('credit_cards', 'c-new')).rejects.toThrow(/still use it/);
+        expect(await ids('credit_cards')).toEqual(['c-new']);
+        expect(await pendingCount()).toBe(1);
+    });
+
+    it('removes a never-synced row nothing references, along with its queued changes', async () => {
+        await insert('credit_cards', card('c-new'));
+        await queue('credit_cards', 'c-new');
+
+        await discardLocalChanges('credit_cards', 'c-new');
+
+        expect(await ids('credit_cards')).toEqual([]);
+        expect(await pendingCount()).toBe(0);
+    });
+
+    it('restores the server copy when the record exists there', async () => {
+        await insert('credit_cards', { ...card('c1'), name: 'local edit' });
+        await queue('credit_cards', 'c1');
+        serverRows.credit_cards = [card('c1')];
+
+        await discardLocalChanges('credit_cards', 'c1');
+
+        const row = await db.query<{ name: string }>(`SELECT name FROM credit_cards WHERE id = 'c1'`);
+        expect(row.rows[0].name).toBe('c1');
+        expect(await pendingCount()).toBe(0);
     });
 });

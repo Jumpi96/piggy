@@ -67,9 +67,10 @@ Deno.serve(async (req: Request) => {
             const fileData: GitHubFileResponse = await getResponse.json();
             sha = fileData.sha;
 
-            // GitHub inlines content for files up to 1 MB; beyond that it's empty and the
-            // check is skipped (the sha below still guards the GET→PUT window).
-            if (baseHash && fileData.encoding === 'base64' && fileData.content) {
+            // GitHub inlines content (base64) for files up to 1 MB; beyond that encoding is
+            // "none" and the check is skipped (the sha below still guards the GET→PUT
+            // window). An empty file is base64 with content "" and must still be checked.
+            if (baseHash && fileData.encoding === 'base64' && typeof fileData.content === 'string') {
                 const currentHash = await sha256Hex(decodeBase64Utf8(fileData.content));
                 if (currentHash !== baseHash) {
                     return errorResponse('The ledger changed since it was loaded. Reload the Savings page and redo your edit.', 409);

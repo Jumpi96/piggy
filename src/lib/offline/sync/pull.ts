@@ -1,7 +1,7 @@
 import type { Transaction } from '@electric-sql/pglite';
 import { supabase } from '../../supabase';
 import { getDatabaseAsync, getLastSyncTimestamp, setLastSyncTimestamp } from '../database';
-import { SYNC_TABLES, tableHasSoftDelete, tableHasUpdatedAt, type SyncTableName } from '../schema';
+import { SYNC_TABLES, tableHasUpdatedAt, type SyncTableName } from '../schema';
 import { resolveConflict, type SyncRecord } from './conflict';
 import { getPendingChanges, notifyPendingChanges } from './queue';
 
@@ -139,7 +139,9 @@ async function fetchAllRows(
     const pkColumn = getPrimaryKeyColumn(table);
     const rows: Record<string, unknown>[] = [];
 
-    for (let offset = 0; ; offset += PAGE_SIZE) {
+    // Advance by rows actually returned: a server max_rows below PAGE_SIZE returns short
+    // pages, and stepping by PAGE_SIZE would skip the rows in between.
+    for (let offset = 0; ; offset = rows.length) {
         let query = supabase.from(table).select('*', { count: 'exact' });
         if (since) {
             query = query.gte('updated_at', since);
@@ -155,8 +157,7 @@ async function fetchAllRows(
         if (!data || data.length === 0) break;
 
         rows.push(...data);
-        // Stop on the server's total rather than on a short page, so a max_rows setting
-        // below PAGE_SIZE can't end the loop early.
+        // Stop on the server's total rather than on a short page, for the same reason.
         if (count !== null && rows.length >= count) break;
     }
 
@@ -412,19 +413,18 @@ export async function discardLocalChanges(table: SyncTableName, recordId: string
             return;
         }
 
-        // Never reached the server. A parent row other rows still point at can't be
-        // deleted (local FK), so hide it with a soft delete instead.
-        const references = REFERENCED_BY[table] ?? [];
-        let referenced = false;
-        for (const [refTable, refColumn] of references) {
+        // Never reached the server. If local rows still point at it, dropping it would
+        // strand them: their own pushes need this parent on the server. Refuse (throwing
+        // rolls back the queue delete above) and let the user discard those first.
+        for (const [refTable, refColumn] of REFERENCED_BY[table] ?? []) {
             const ref = await tx.query(`SELECT 1 FROM ${refTable} WHERE ${refColumn} = $1 LIMIT 1`, [recordId]);
-            referenced ||= ref.rows.length > 0;
+            if (ref.rows.length > 0) {
+                throw new Error(
+                    `Can't discard: this ${table.replace(/_/g, ' ').replace(/s$/, '')} never reached the server and local ${refTable.replace(/_/g, ' ')} still use it. Discard or fix those changes first.`
+                );
+            }
         }
-        if (referenced && tableHasSoftDelete(table)) {
-            await tx.query(`UPDATE ${table} SET deleted_at = $1 WHERE ${pkColumn} = $2`, [new Date().toISOString(), recordId]);
-        } else if (!referenced) {
-            await tx.query(`DELETE FROM ${table} WHERE ${pkColumn} = $1`, [recordId]);
-        }
+        await tx.query(`DELETE FROM ${table} WHERE ${pkColumn} = $1`, [recordId]);
     });
 
     await notifyPendingChanges();

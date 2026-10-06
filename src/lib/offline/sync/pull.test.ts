@@ -5,6 +5,8 @@ const selectTimes: number[] = [];
 // Rows served per table; each query returns the requested range slice.
 let serverRows: Record<string, Array<Record<string, unknown>>> = {};
 let lastSync: string | null = null;
+// Simulates PostgREST's max_rows: no response holds more rows than this.
+let serverMaxRows = Infinity;
 
 function makeBuilder(table: string) {
     let from = 0;
@@ -19,7 +21,8 @@ function makeBuilder(table: string) {
         }),
         then: (resolve: (v: unknown) => void) => {
             const all = serverRows[table] ?? [];
-            resolve({ data: all.slice(from, to + 1), error: null, count: all.length });
+            const page = all.slice(from, to + 1).slice(0, serverMaxRows);
+            resolve({ data: page, error: null, count: all.length });
         },
     };
     return builder;
@@ -52,6 +55,7 @@ describe('pullChanges', () => {
         selectTimes.length = 0;
         serverRows = {};
         lastSync = null;
+        serverMaxRows = Infinity;
         dbQueryMock.mockImplementation(() => Promise.resolve({ rows: [] }));
     });
 
@@ -85,6 +89,19 @@ describe('pullChanges', () => {
         // Every row reached the local upsert.
         const inserts = dbQueryMock.mock.calls.filter(([sql]) => sql.includes('INSERT INTO transactions'));
         expect(inserts).toHaveLength(2500);
+    });
+
+    it('does not skip rows when the server caps pages below PAGE_SIZE', async () => {
+        serverMaxRows = 500;
+        serverRows.transactions = Array.from({ length: 1200 }, (_, i) => ({
+            id: `tx-${String(i).padStart(4, '0')}`,
+            updated_at: '2026-10-06T12:00:00.000Z',
+        }));
+        await pullChanges();
+        const inserted = dbQueryMock.mock.calls
+            .filter(([sql]) => sql.includes('INSERT INTO transactions'))
+            .map(([, params]) => (params as unknown[])[0]);
+        expect(new Set(inserted).size).toBe(1200);
     });
 
     it('does not advance the watermark when a row fails to apply', async () => {
