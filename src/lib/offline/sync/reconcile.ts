@@ -6,6 +6,8 @@ import { getPendingChanges } from './queue';
 export interface ReconcileResult {
     checked: boolean;
     mismatches: SyncTableName[];
+    // Tables not compared this run because they had unsynced local changes.
+    skipped: SyncTableName[];
     error?: string;
 }
 
@@ -19,7 +21,7 @@ interface SyncCountRow {
  * Returns list of tables with mismatches that need full resync.
  */
 export async function checkReconciliation(): Promise<ReconcileResult> {
-    const result: ReconcileResult = { checked: false, mismatches: [] };
+    const result: ReconcileResult = { checked: false, mismatches: [], skipped: [] };
 
     try {
         // Get server counts via RPC
@@ -48,6 +50,7 @@ export async function checkReconciliation(): Promise<ReconcileResult> {
 
             if (tablesWithPending.has(table)) {
                 console.log(`[Reconcile] ${table} skipped: has pending local changes`);
+                result.skipped.push(table);
                 continue;
             }
 
