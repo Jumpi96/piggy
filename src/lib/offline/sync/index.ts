@@ -275,7 +275,9 @@ let syncCleanup: (() => void) | null = null;
 
 function handleVisibilityChange(): void {
     if (document.visibilityState === 'visible' && navigator.onLine) {
-        if (Date.now() - lastSuccessfulSyncAt < RESUME_SYNC_COOLDOWN_MS) {
+        const sinceLastSync = Date.now() - lastSuccessfulSyncAt;
+        // Negative means the clock moved back: treat as expired, or pulls stop until it recovers.
+        if (sinceLastSync >= 0 && sinceLastSync < RESUME_SYNC_COOLDOWN_MS) {
             // Pulled moments ago; still push anything queued since.
             console.log('[Sync] App became visible, synced recently - push only');
             triggerBackgroundSync();

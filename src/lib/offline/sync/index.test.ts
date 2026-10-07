@@ -142,6 +142,16 @@ describe('resume (visibilitychange) cooldown', () => {
         expect(pullMock).toHaveBeenCalledTimes(2);
     });
 
+    it('runs a full sync if the clock moved back since the last one', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        await mod.runSync();
+
+        vi.setSystemTime(Date.now() - 60 * 60 * 1000);
+        becomeVisible();
+        await settle();
+        expect(pullMock).toHaveBeenCalledTimes(2);
+    });
+
     it('runs a full sync if the previous one failed', async () => {
         pullMock.mockResolvedValueOnce({ ...okPull, success: false, errors: ['x'] });
         await mod.runSync();
