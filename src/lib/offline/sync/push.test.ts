@@ -48,7 +48,8 @@ vi.mock('./queue', () => ({
     clearSyncedChanges: vi.fn(() => Promise.resolve()),
 }));
 
-import { pushChangeImmediately } from './push';
+import { pushChangeImmediately, pushChanges } from './push';
+import * as queue from './queue';
 
 function change(op: PendingChange['operation'], payload: Record<string, unknown>): PendingChange {
     return {
@@ -151,5 +152,80 @@ describe('pushUpdate / pushDelete zero-row handling', () => {
         terminalResult = { data: [], error: null };
         const ok = await pushChangeImmediately(change('DELETE', { id: 't1', deleted_at: 'x' }));
         expect(ok).toBe(false);
+    });
+});
+
+describe('pushChanges retry policy', () => {
+    const queued = (id: number, table: PendingChange['table_name'], op: PendingChange['operation'], payload: Record<string, unknown>, retry_count = 0): PendingChange => ({
+        ...change(op, payload), id, table_name: table, retry_count,
+    });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        terminalResult = { data: [{ id: 'srv-id' }], error: null };
+        serverSelectResult = { data: { id: 'srv-id' }, error: null };
+    });
+
+    it('does not count a network error toward the retry cap, and stops the run', async () => {
+        vi.mocked(queue.getPendingChanges).mockResolvedValueOnce([
+            queued(1, 'credit_cards', 'INSERT', { id: 'c1' }),
+            queued(2, 'credit_cards', 'INSERT', { id: 'c2' }),
+        ]);
+        insertMock.mockResolvedValueOnce({ error: { code: '', message: 'TypeError: Failed to fetch' } });
+
+        const result = await pushChanges();
+
+        expect(result.success).toBe(false);
+        expect(insertMock).toHaveBeenCalledTimes(1);
+        expect(queue.recordSyncError).toHaveBeenCalledWith(1, 'TypeError: Failed to fetch', { countAttempt: false });
+    });
+
+    it('holds back later changes to a record whose earlier change failed, but pushes other records', async () => {
+        vi.mocked(queue.getPendingChanges).mockResolvedValueOnce([
+            queued(1, 'credit_cards', 'INSERT', { id: 'c1' }),
+            queued(2, 'credit_cards', 'UPDATE', { id: 'c1', name: 'x' }),
+            queued(3, 'credit_cards', 'INSERT', { id: 'c2' }),
+        ]);
+        insertMock
+            .mockResolvedValueOnce({ error: { code: '23514', message: 'check constraint' } })
+            .mockResolvedValueOnce({ error: null });
+
+        const result = await pushChanges();
+
+        expect(updateMock).not.toHaveBeenCalled();
+        expect(insertMock).toHaveBeenCalledTimes(2);
+        expect(queue.recordSyncError).toHaveBeenCalledTimes(1);
+        expect(queue.recordSyncError).toHaveBeenCalledWith(1, 'check constraint', { countAttempt: true });
+        expect(queue.markChangeAsSynced).toHaveBeenCalledWith(3);
+        expect(result.changesPushed).toBe(1);
+    });
+
+    it('sends later changes to the server id adopted earlier in the same run', async () => {
+        vi.mocked(queue.getPendingChanges).mockResolvedValueOnce([
+            queued(1, 'transactions', 'INSERT', overridePayload),
+            queued(2, 'transactions', 'UPDATE', { id: 'local-uuid', amount_cents: 5 }),
+        ]);
+        insertMock.mockResolvedValueOnce({ error: { code: '23505', message: 'duplicate key' } });
+
+        const result = await pushChanges();
+
+        expect(result.success).toBe(true);
+        expect(eqMock).toHaveBeenLastCalledWith('id', 'srv-id');
+    });
+
+    it('on a duplicate parameter key, writes by key and adopts the server id', async () => {
+        insertMock.mockResolvedValueOnce({ error: { code: '23505', message: 'duplicate key' } });
+        const ok = await pushChangeImmediately({
+            ...change('INSERT', { id: 'local-param', user_id: 'u1', key: 'month_start_day', value: '15', updated_at: 'x' }),
+            table_name: 'parameters',
+        });
+
+        expect(ok).toBe(true);
+        const updatePayload = updateMock.mock.calls[0][0];
+        expect(updatePayload).not.toHaveProperty('id');
+        expect(updatePayload).toMatchObject({ key: 'month_start_day', value: 15 });
+        expect(eqMock).toHaveBeenCalledWith('key', 'month_start_day');
+        const idUpdate = dbQueryMock.mock.calls.find(c => /UPDATE parameters SET id/.test(c[0]));
+        expect(idUpdate![1]).toEqual(['srv-id', 'local-param']);
     });
 });

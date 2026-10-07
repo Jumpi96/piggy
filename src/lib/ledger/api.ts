@@ -40,15 +40,27 @@ export async function readLedger(): Promise<string> {
     return data.content;
 }
 
-export async function commitLedger(content: string, message: string): Promise<void> {
+async function sha256Hex(text: string): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// `baseContent` is the ledger text the edit was made on. The commit replaces the whole
+// file, so the edge function refuses it (409) if GitHub no longer holds exactly that text.
+export async function commitLedger(content: string, message: string, baseContent: string): Promise<void> {
     const { data, error } = await supabase.functions.invoke('commit-ledger', {
         body: {
             content,
             message,
+            baseHash: await sha256Hex(baseContent),
         },
     });
 
     if (error) {
+        const status = (error as { context?: Response }).context?.status;
+        if (status === 409) {
+            throw new Error('The ledger changed since this page loaded it. Reload the Savings page and redo your edit.');
+        }
         throw new Error(`Failed to commit ledger: ${error.message}`);
     }
 
@@ -71,7 +83,7 @@ export async function appendTransaction(
     const updatedContent = normalizedContent + '\n' + newTransaction;
 
     const commitMessage = `Add transaction: ${description}`;
-    await commitLedger(updatedContent, commitMessage);
+    await commitLedger(updatedContent, commitMessage, currentContent);
 
     return updatedContent;
 }
@@ -176,7 +188,7 @@ export async function editTransaction(
     // Ensure proper spacing
     const updatedContent = before + newTxStr + (newTxStr.endsWith('\n') ? '' : '\n') + after;
 
-    await commitLedger(updatedContent, commitMessage);
+    await commitLedger(updatedContent, commitMessage, currentContent);
     return updatedContent;
 }
 
@@ -200,7 +212,7 @@ export async function deleteTransaction(
     // Clean up extra blank lines
     const updatedContent = (before + after).replace(/\n{3,}/g, '\n\n');
 
-    await commitLedger(updatedContent, commitMessage);
+    await commitLedger(updatedContent, commitMessage, currentContent);
     return updatedContent;
 }
 
@@ -379,7 +391,7 @@ export async function editPrice(
     lines[i] = newLine;
     const updatedContent = lines.join('\n');
 
-    await commitLedger(updatedContent, commitMessage);
+    await commitLedger(updatedContent, commitMessage, currentContent);
     return updatedContent;
 }
 
@@ -398,7 +410,7 @@ export async function deletePrice(
     lines.splice(i, 1);
     const updatedContent = lines.join('\n').replace(/\n{3,}/g, '\n\n');
 
-    await commitLedger(updatedContent, commitMessage);
+    await commitLedger(updatedContent, commitMessage, currentContent);
     return updatedContent;
 }
 

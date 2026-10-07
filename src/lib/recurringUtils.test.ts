@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateOccurrences, mergeTransactions } from './recurringUtils';
+import { generateOccurrences, mergeTransactions, exceptionDatesFrom } from './recurringUtils';
 import type { RecurringRule, Transaction } from '../types';
 
 describe('recurringUtils', () => {
@@ -146,6 +146,17 @@ describe('recurringUtils', () => {
             const merged = mergeTransactions(virtual, regularPhysical);
             expect(merged).toHaveLength(3); // 2 virtual + 1 physical
             expect(merged.map(m => m.id)).toContain('phys-2');
+        });
+    });
+
+    describe('exceptionDatesFrom', () => {
+        it('keeps skipped dates on or after the split date (they must not reappear on the new rule)', () => {
+            expect(exceptionDatesFrom(['2026-09-05', '2026-10-05', '2026-12-05'], '2026-10-05'))
+                .toEqual(['2026-10-05', '2026-12-05']);
+        });
+
+        it('handles a rule without exceptions', () => {
+            expect(exceptionDatesFrom(null, '2026-10-05')).toEqual([]);
         });
     });
 });

@@ -147,6 +147,29 @@ describe('Date Utilities', () => {
             expect(effective.getDate()).toBe(5);
             vi.useRealTimers();
         });
+
+        it('clamps a payment day of 31 to the end of a 30-day month instead of rolling over', () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date(2024, 9, 1)); // Oct 1
+
+            // Oct 3 is before the Oct 10 closing -> paid in November, which has 30 days
+            const effective = calculateCreditCardEffectiveDate(new Date(2024, 9, 3), 10, 31);
+
+            expect(effective.getMonth()).toBe(10); // Nov, not Dec 1
+            expect(effective.getDate()).toBe(30);
+            vi.useRealTimers();
+        });
+
+        it('clamps a payment day of 30 to Feb 29 in a leap year', () => {
+            vi.useFakeTimers();
+            vi.setSystemTime(new Date(2024, 0, 1));
+
+            const effective = calculateCreditCardEffectiveDate(new Date(2024, 0, 3), 10, 30);
+
+            expect(effective.getMonth()).toBe(1);
+            expect(effective.getDate()).toBe(29);
+            vi.useRealTimers();
+        });
     });
 });
 

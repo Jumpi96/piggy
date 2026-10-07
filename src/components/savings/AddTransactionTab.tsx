@@ -373,7 +373,7 @@ export function AddTransactionTab({ accounts, currentContent, parsed, onTransact
             // that relies on date ordering stays correct for back-dated prices.
             const updatedContent = insertPricesInOrder(currentContent, priceDate, priceLines);
 
-            await commitLedger(updatedContent, `Add prices for ${priceDate}`);
+            await commitLedger(updatedContent, `Add prices for ${priceDate}`, currentContent);
 
             // Reset form
             setPriceInputs([{ id: crypto.randomUUID(), commodity: '', price: '' }]);

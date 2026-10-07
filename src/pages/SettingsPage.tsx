@@ -6,6 +6,7 @@ import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, 
 import { cn } from '../lib/utils';
 import { resequenceCreditCards, sortCreditCards } from '../lib/creditCards';
 import { DEBUG_FLAG_KEY } from '../lib/debug';
+import { listFailedChanges, retryFailedChange, discardFailedChange, useSyncState, type PendingChange } from '../lib/offline';
 import {
     getAllocationConfig,
     saveAllocationConfig,
@@ -199,6 +200,7 @@ function GeneralSettings() {
                     </button>
                 </form>
             </div>
+            <FailedChangesSettings />
             <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800">
                 <h3 className="text-lg font-bold mb-2">Debug</h3>
                 <p className="text-xs text-gray-500 mb-3">
@@ -220,6 +222,84 @@ function GeneralSettings() {
                     <p className="text-xs text-red-600 dark:text-red-400 mt-2">{debugError}</p>
                 )}
             </div>
+        </div>
+    );
+}
+
+// Changes that failed MAX_RETRIES times are no longer pushed automatically. Without this
+// list they sat in the queue forever, invisible, and never reached the server.
+function FailedChangesSettings() {
+    const { lastSyncAt, pendingChanges, status } = useSyncState();
+    const [failed, setFailed] = useState<PendingChange[]>([]);
+    const [busyId, setBusyId] = useState<number | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    const load = async () => {
+        try {
+            setFailed(await listFailedChanges());
+        } catch (err) {
+            console.error('[Settings] Failed to load failed changes:', err);
+        }
+    };
+
+    useEffect(() => { load(); }, [lastSyncAt, pendingChanges, status]);
+
+    const run = async (change: PendingChange, action: (c: PendingChange) => Promise<void>) => {
+        setBusyId(change.id);
+        setError(null);
+        try {
+            await action(change);
+            await load();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setBusyId(null);
+        }
+    };
+
+    if (failed.length === 0) return null;
+
+    return (
+        <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl shadow-sm border border-red-200 dark:border-red-900/40">
+            <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                Failed changes
+            </h3>
+            <p className="text-xs text-gray-500 mb-3">
+                These changes failed to sync several times and won't be retried automatically.
+                Retry sends them again; Discard drops your local edit and restores the server's version.
+            </p>
+            <ul className="space-y-2">
+                {failed.map(change => (
+                    <li key={change.id} className="p-3 rounded-lg bg-gray-50 dark:bg-zinc-800 text-sm">
+                        <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium">
+                                {change.operation} {change.table_name.replace('_', ' ')}
+                            </span>
+                            <div className="flex gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    disabled={busyId !== null}
+                                    onClick={() => run(change, c => retryFailedChange(c.id))}
+                                    className="px-3 py-1 rounded-md bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 disabled:opacity-50"
+                                >
+                                    Retry
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={busyId !== null}
+                                    onClick={() => run(change, discardFailedChange)}
+                                    className="px-3 py-1 rounded-md bg-gray-200 dark:bg-zinc-700 text-xs font-medium hover:bg-gray-300 dark:hover:bg-zinc-600 disabled:opacity-50"
+                                >
+                                    {busyId === change.id ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Discard'}
+                                </button>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1 break-all">{change.error}</p>
+                    </li>
+                ))}
+            </ul>
+            {error && <p className="text-xs text-red-600 dark:text-red-400 mt-2">{error}</p>}
         </div>
     );
 }

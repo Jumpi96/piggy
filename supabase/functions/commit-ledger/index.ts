@@ -3,6 +3,20 @@ import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 interface CommitLedgerRequest {
     content: string;
     message: string;
+    // SHA-256 (hex) of the ledger text the client edited. When present, the commit is
+    // refused if the file changed since: the client sends the whole file, so committing
+    // on top of a newer version silently erased whatever was added in between.
+    baseHash?: string;
+}
+
+async function sha256Hex(text: string): Promise<string> {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function decodeBase64Utf8(b64: string): string {
+    const binary = atob(b64.replace(/\n/g, ''));
+    return new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
 }
 
 interface GitHubFileResponse {
@@ -29,7 +43,7 @@ Deno.serve(async (req: Request) => {
         }
 
         const body: CommitLedgerRequest = await req.json();
-        const { content, message } = body;
+        const { content, message, baseHash } = body;
 
         // Validate required fields
         if (content === undefined || !message) {
@@ -52,6 +66,16 @@ Deno.serve(async (req: Request) => {
         if (getResponse.ok) {
             const fileData: GitHubFileResponse = await getResponse.json();
             sha = fileData.sha;
+
+            // GitHub inlines content (base64) for files up to 1 MB; beyond that encoding is
+            // "none" and the check is skipped (the sha below still guards the GET→PUT
+            // window). An empty file is base64 with content "" and must still be checked.
+            if (baseHash && fileData.encoding === 'base64' && typeof fileData.content === 'string') {
+                const currentHash = await sha256Hex(decodeBase64Utf8(fileData.content));
+                if (currentHash !== baseHash) {
+                    return errorResponse('The ledger changed since it was loaded. Reload the Savings page and redo your edit.', 409);
+                }
+            }
         } else if (getResponse.status !== 404) {
             // If not 404, it's an actual error
             const errorText = await getResponse.text();

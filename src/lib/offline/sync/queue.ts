@@ -14,7 +14,7 @@ export function subscribePendingChanges(listener: PendingChangesListener): () =>
     };
 }
 
-async function notifyPendingChanges(): Promise<void> {
+export async function notifyPendingChanges(): Promise<void> {
     const count = await getPendingChangesCount();
     pendingChangesListeners.forEach(l => l(count));
 }
@@ -51,14 +51,13 @@ export async function trackChange(
 
 export async function getPendingChanges(): Promise<PendingChange[]> {
     const db = await getDatabaseAsync();
-    // Order by the monotonic SERIAL id as a tiebreaker: created_at has only
-    // millisecond precision, so two changes to the same record in the same ms would
-    // otherwise be returned in an arbitrary order and an UPDATE could be pushed before
-    // its INSERT.
+    // Order by the monotonic SERIAL id only. created_at comes from the device clock
+    // (ms precision, and it can jump backwards on a clock correction), so ordering by it
+    // could push an UPDATE before its INSERT.
     const result = await db.query<PendingChange>(`
         SELECT * FROM _pending_changes
         WHERE synced_at IS NULL
-        ORDER BY created_at ASC, id ASC
+        ORDER BY id ASC
     `);
     return result.rows;
 }
@@ -86,14 +85,18 @@ export async function markChangeAsSynced(changeId: number): Promise<void> {
     await notifyPendingChanges();
 }
 
-export async function recordSyncError(changeId: number, error: string): Promise<void> {
+export async function recordSyncError(
+    changeId: number,
+    error: string,
+    { countAttempt = true }: { countAttempt?: boolean } = {}
+): Promise<void> {
     const db = await getDatabaseAsync();
 
     await db.query(`
         UPDATE _pending_changes
-        SET error = $1, retry_count = retry_count + 1
+        SET error = $1, retry_count = retry_count + $3
         WHERE id = $2
-    `, [error, changeId]);
+    `, [error, changeId, countAttempt ? 1 : 0]);
 }
 
 export async function clearSyncedChanges(): Promise<void> {
@@ -118,7 +121,7 @@ export async function getFailedChanges(maxRetries: number = 5): Promise<PendingC
         SELECT * FROM _pending_changes
         WHERE synced_at IS NULL
         AND retry_count >= $1
-        ORDER BY created_at ASC
+        ORDER BY id ASC
     `, [maxRetries]);
     return result.rows;
 }
@@ -131,4 +134,6 @@ export async function resetFailedChange(changeId: number): Promise<void> {
         SET retry_count = 0, error = NULL
         WHERE id = $1
     `, [changeId]);
+
+    await notifyPendingChanges();
 }

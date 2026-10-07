@@ -8,9 +8,10 @@ import { getPendingChanges } from './queue';
 describe('getPendingChanges ordering', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('orders by created_at then the monotonic id (FIFO tiebreaker)', async () => {
+    it('orders by the monotonic id only (device-clock created_at can go backwards)', async () => {
         await getPendingChanges();
         const sql = queryMock.mock.calls[0][0].replace(/\s+/g, ' ');
-        expect(sql).toContain('ORDER BY created_at ASC, id ASC');
+        expect(sql).toContain('ORDER BY id ASC');
+        expect(sql).not.toContain('created_at');
     });
 });

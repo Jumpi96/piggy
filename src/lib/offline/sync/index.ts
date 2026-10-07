@@ -1,6 +1,6 @@
-import { pullChanges, initialHydration, fullTableResync, type PullResult } from './pull';
+import { pullChanges, initialHydration, fullTableResync, discardLocalChanges, type PullResult } from './pull';
 import { pushChanges, type PushResult } from './push';
-import { getPendingChangesCount } from './queue';
+import { getPendingChangesCount, getFailedChanges, resetFailedChange, type PendingChange } from './queue';
 import { getLastSyncTimestamp } from '../database';
 import { checkReconciliation } from './reconcile';
 
@@ -25,6 +25,9 @@ export interface SyncState {
 // Sync lock to prevent concurrent syncs
 let isSyncing = false;
 let syncRequestedWhileBusy = false;
+// A full sync (push + pull) asked for while busy — e.g. the app resumed while a push from
+// a save was running. Without this it degraded to push-only and the resume pull was lost.
+let fullSyncRequestedWhileBusy = false;
 let syncListeners: Array<(state: SyncState) => void> = [];
 // Store last data update in memory (persists for session)
 let lastDataUpdate = Date.now();
@@ -35,8 +38,8 @@ let lastDataUpdate = Date.now();
  */
 export async function runSync(): Promise<SyncResult> {
     if (isSyncing) {
-        syncRequestedWhileBusy = true;
-        console.log('[Sync] Already syncing, skipping');
+        fullSyncRequestedWhileBusy = true;
+        console.log('[Sync] Already syncing, will run a full sync after');
         return {
             success: false,
             pull: { success: false, tablesUpdated: 0, recordsProcessed: 0, errors: ['Sync already in progress'] },
@@ -169,7 +172,19 @@ export function triggerBackgroundSync(): void {
 }
 
 function flushDeferredQuickSync(): void {
-    if (!syncRequestedWhileBusy || isSyncing || !navigator.onLine) return;
+    if (isSyncing || !navigator.onLine) return;
+
+    if (fullSyncRequestedWhileBusy) {
+        // A full sync pushes too, so it covers any pending quick sync.
+        fullSyncRequestedWhileBusy = false;
+        syncRequestedWhileBusy = false;
+        runSync().catch(err => {
+            console.error('[Sync] Deferred full sync failed:', err);
+        });
+        return;
+    }
+
+    if (!syncRequestedWhileBusy) return;
 
     syncRequestedWhileBusy = false;
     quickSync().catch(err => {
@@ -217,7 +232,7 @@ export function subscribeSyncState(listener: (state: SyncState) => void): () => 
 let syncCleanup: (() => void) | null = null;
 
 function handleVisibilityChange(): void {
-    if (document.visibilityState === 'visible' && navigator.onLine && !isSyncing) {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
         console.log('[Sync] App became visible, syncing...');
         runSync().catch(err => {
             console.error('[Sync] Visibility sync failed:', err);
@@ -226,12 +241,10 @@ function handleVisibilityChange(): void {
 }
 
 function handleOnline(): void {
-    if (!isSyncing) {
-        console.log('[Sync] Network restored, syncing...');
-        runSync().catch(err => {
-            console.error('[Sync] Online sync failed:', err);
-        });
-    }
+    console.log('[Sync] Network restored, syncing...');
+    runSync().catch(err => {
+        console.error('[Sync] Online sync failed:', err);
+    });
 }
 
 export function startPeriodicSync(): void {
@@ -261,6 +274,28 @@ export function stopPeriodicSync(): void {
 
 export function isPeriodicSyncActive(): boolean {
     return syncCleanup !== null;
+}
+
+/** Changes that hit MAX_RETRIES and are no longer pushed automatically. */
+export async function listFailedChanges(): Promise<PendingChange[]> {
+    return getFailedChanges();
+}
+
+/** Puts a failed change back in the queue with a fresh retry budget and pushes it. */
+export async function retryFailedChange(changeId: number): Promise<void> {
+    await resetFailedChange(changeId);
+    triggerBackgroundSync();
+}
+
+/**
+ * Gives up on a failed change: drops every unsynced change for that record and restores
+ * the server's copy locally. Needs to be online.
+ */
+export async function discardFailedChange(change: PendingChange): Promise<void> {
+    await discardLocalChanges(change.table_name, change.record_id);
+    // The local row changed: let pages reload.
+    lastDataUpdate = Date.now();
+    await updateSyncState(null);
 }
 
 // Export types and utilities from sub-modules

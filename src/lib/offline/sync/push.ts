@@ -39,26 +39,59 @@ export async function pushChanges(): Promise<PushResult> {
 
     console.log(`[Sync Push] Processing ${pending.length} pending changes`);
 
-    // Group changes by table for better batching in future
-    for (const change of pending) {
-        // Skip changes that have failed too many times
+    // Records whose earlier change didn't go through this run. Their later changes are
+    // held back (not attempted, not counted as a failure) so an UPDATE is never sent
+    // before its INSERT, and one stuck change doesn't burn retries for the ones behind it.
+    const blockedRecords = new Set<string>();
+    // Local id -> server id adopted mid-run (override natural-key merge). The queue rows
+    // are already rewritten, but `pending` was read before that.
+    const adoptedIds = new Map<string, string>();
+
+    for (const queued of pending) {
+        const localKey = `${queued.table_name}:${queued.record_id}`;
+        const adoptedId = adoptedIds.get(localKey);
+        const change = adoptedId ? { ...queued, record_id: adoptedId } : queued;
+        const recordKey = `${change.table_name}:${change.record_id}`;
+
+        if (blockedRecords.has(recordKey)) {
+            continue;
+        }
+
+        // Skip changes that have failed too many times (Settings → Failed changes lets
+        // the user retry or discard them)
         if (change.retry_count >= MAX_RETRIES) {
             console.warn(`[Sync Push] Skipping change ${change.id} - max retries exceeded`);
+            blockedRecords.add(recordKey);
+            result.changesFailed++;
+            result.success = false;
             continue;
         }
 
         try {
-            await pushSingleChange(change);
+            const serverId = await pushSingleChange(change);
+            if (serverId) {
+                adoptedIds.set(recordKey, serverId);
+            }
             await markChangeAsSynced(change.id);
             result.changesPushed++;
         } catch (error) {
             const errorMsg = error instanceof Error ? error.message : String(error);
-            console.error(`[Sync Push] Failed to push change ${change.id}:`, errorMsg);
+            const transient = isTransientError(errorMsg);
+            console.error(`[Sync Push] Failed to push change ${change.id}${transient ? ' (transient)' : ''}:`, errorMsg);
 
-            await recordSyncError(change.id, errorMsg);
+            // Connectivity/auth hiccups say nothing about the change itself, so they must
+            // not count toward MAX_RETRIES — on a flaky connection that permanently
+            // abandoned perfectly valid changes.
+            await recordSyncError(change.id, errorMsg, { countAttempt: !transient });
             result.changesFailed++;
             result.errors.push(`${change.table_name}/${change.record_id}: ${errorMsg}`);
             result.success = false;
+
+            if (transient) {
+                // The network is the problem; the rest of the queue would fail the same way.
+                break;
+            }
+            blockedRecords.add(recordKey);
         }
     }
 
@@ -69,7 +102,18 @@ export async function pushChanges(): Promise<PushResult> {
     return result;
 }
 
-async function pushSingleChange(change: PendingChange): Promise<void> {
+const TRANSIENT_ERROR_PATTERN = /failed to fetch|load failed|networkerror|network error|network request failed|aborterror|timed? ?out|jwt expired|pgrst301|fetcherror/i;
+
+/** Errors caused by connectivity or an expiring session rather than by the change. */
+export function isTransientError(message: string): boolean {
+    return TRANSIENT_ERROR_PATTERN.test(message);
+}
+
+/**
+ * Pushes one queued change. Returns the server's id when the server already held this
+ * record's natural key under a different id and the local row was moved onto it.
+ */
+async function pushSingleChange(change: PendingChange): Promise<string | null> {
     const payload = JSON.parse(change.payload);
     const table = change.table_name;
 
@@ -83,8 +127,7 @@ async function pushSingleChange(change: PendingChange): Promise<void> {
 
     switch (change.operation) {
         case 'INSERT':
-            await pushInsert(table, preparedPayload);
-            break;
+            return pushInsert(table, preparedPayload);
         case 'UPDATE':
             await pushUpdate(table, change.record_id, preparedPayload);
             break;
@@ -94,12 +137,13 @@ async function pushSingleChange(change: PendingChange): Promise<void> {
         default:
             throw new Error(`Unknown operation: ${change.operation}`);
     }
+    return null;
 }
 
 async function pushInsert(
     table: SyncTableName,
     payload: Record<string, unknown>
-): Promise<void> {
+): Promise<string | null> {
     // Remove user_id - Supabase will set it via RLS default
     const { user_id, ...insertPayload } = payload;
 
@@ -116,7 +160,7 @@ async function pushInsert(
             .from(table)
             .insert(insertPayload);
 
-        if (!error) return;
+        if (!error) return null;
         if (error.code !== '23505') throw new Error(error.message);
 
         // An override for this occurrence already exists on the server (same id
@@ -136,13 +180,35 @@ async function pushInsert(
         // otherwise our later edits/deletes would be keyed by our stale local id, match
         // zero server rows, and retry forever — and pull can't repair it because the
         // local table already holds this natural key under a different id.
-        await adoptServerOverrideId(
-            table,
-            String(payload.id),
-            String(payload.recurring_rule_id),
-            String(payload.original_date)
-        );
-        return;
+        return adoptServerId(table, String(payload.id), {
+            recurring_rule_id: payload.recurring_rule_id,
+            original_date: payload.original_date,
+        });
+    }
+
+    // Parameters are unique per (user_id, key). Two devices that each created the same
+    // key offline hold different ids; the second insert hits 23505, and treating that as
+    // success left this device on an id the server doesn't know — every later update
+    // matched zero rows and retried until abandoned. Same treatment as overrides: write
+    // by natural key, then move the local row onto the server's id.
+    if (table === 'parameters') {
+        const { error } = await supabase
+            .from(table)
+            .insert(insertPayload);
+
+        if (!error) return null;
+        if (error.code !== '23505') throw new Error(error.message);
+
+        const updateFields = { ...insertPayload };
+        delete updateFields.id;
+        const { error: updateError } = await supabase
+            .from(table)
+            .update(updateFields)
+            .eq('key', payload.key);
+
+        if (updateError) throw new Error(updateError.message);
+
+        return adoptServerId(table, String(payload.id), { key: payload.key });
     }
 
     const { error } = await supabase
@@ -153,35 +219,34 @@ async function pushInsert(
         // Handle duplicate key errors gracefully (record may have been synced via pull)
         if (error.code === '23505') {
             console.log(`[Sync Push] Record already exists, treating as success: ${table}/${payload.id}`);
-            return;
+            return null;
         }
         throw new Error(error.message);
     }
+    return null;
 }
 
 /**
- * After a natural-key override conflict, point the local row and any still-pending
- * changes at the id the server actually holds, so later local edits/deletes (matched by
- * id) target the right row. Best-effort: the server content is already correct, so a
- * failure here must not fail the push (it would just leave the id divergence for a
- * future pull/push to resolve).
+ * After a natural-key conflict, point the local row and any still-pending changes at the
+ * id the server actually holds, so later local edits/deletes (matched by id) target the
+ * right row. Returns the adopted server id, or null if nothing changed. Best-effort: the
+ * server content is already correct, so a failure here must not fail the push (pull
+ * repairs the local copy later; see findNaturalKeyConflict in pull.ts).
  */
-async function adoptServerOverrideId(
+async function adoptServerId(
     table: SyncTableName,
     localId: string,
-    recurringRuleId: string,
-    originalDate: string
-): Promise<void> {
+    naturalKey: Record<string, unknown>
+): Promise<string | null> {
     try {
-        const { data, error } = await supabase
-            .from(table)
-            .select('id')
-            .eq('recurring_rule_id', recurringRuleId)
-            .eq('original_date', originalDate)
-            .maybeSingle();
+        let query = supabase.from(table).select('id');
+        for (const [column, value] of Object.entries(naturalKey)) {
+            query = query.eq(column, value);
+        }
+        const { data, error } = await query.maybeSingle();
 
         const serverId = data?.id as string | undefined;
-        if (error || !serverId || serverId === localId) return;
+        if (error || !serverId || serverId === localId) return null;
 
         const db = await getDatabaseAsync();
         await db.query(`UPDATE ${table} SET id = $1 WHERE id = $2`, [serverId, localId]);
@@ -190,9 +255,11 @@ async function adoptServerOverrideId(
              WHERE table_name = $2 AND record_id = $3 AND synced_at IS NULL`,
             [serverId, table, localId]
         );
-        console.log(`[Sync Push] Adopted server id for ${table} override: ${localId} -> ${serverId}`);
+        console.log(`[Sync Push] Adopted server id for ${table}: ${localId} -> ${serverId}`);
+        return serverId;
     } catch (err) {
-        console.warn('[Sync Push] Failed to adopt server override id (will retry later):', err);
+        console.warn('[Sync Push] Failed to adopt server id (will retry later):', err);
+        return null;
     }
 }
 

@@ -164,26 +164,26 @@ end $$;
 do $$
 begin
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_currencies') then
-        create trigger set_updated_at_currencies before update on currencies for each row execute procedure update_updated_at_column();
+        create trigger set_updated_at_currencies before insert or update on currencies for each row execute procedure update_updated_at_column();
     end if;
 
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_exchange_rates') then
-        create trigger set_updated_at_exchange_rates before update on exchange_rates for each row execute procedure update_updated_at_column();
+        create trigger set_updated_at_exchange_rates before insert or update on exchange_rates for each row execute procedure update_updated_at_column();
     end if;
 
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_credit_cards') then
-        create trigger set_updated_at_credit_cards before update on credit_cards for each row execute procedure update_updated_at_column();
+        create trigger set_updated_at_credit_cards before insert or update on credit_cards for each row execute procedure update_updated_at_column();
     end if;
 
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_recurring_rules') then
-        create trigger set_updated_at_recurring_rules before update on recurring_rules for each row execute procedure update_updated_at_column();
+        create trigger set_updated_at_recurring_rules before insert or update on recurring_rules for each row execute procedure update_updated_at_column();
     end if;
 
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_transactions') then
-        create trigger set_updated_at_transactions before update on transactions for each row execute procedure update_updated_at_column();
+        create trigger set_updated_at_transactions before insert or update on transactions for each row execute procedure update_updated_at_column();
     end if;
 
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_parameters') then
-        create trigger set_updated_at_parameters before update on parameters for each row execute procedure update_updated_at_column();
+        create trigger set_updated_at_parameters before insert or update on parameters for each row execute procedure update_updated_at_column();
     end if;
 end $$;

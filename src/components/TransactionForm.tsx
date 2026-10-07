@@ -15,6 +15,7 @@ import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { sortCreditCards } from '../lib/creditCards';
+import { exceptionDatesFrom } from '../lib/recurringUtils';
 import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
 export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void, mode?: 'edit' | 'clone', defaultCardId?: string }) {
@@ -223,7 +224,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                         credit_card_id: transactionMeta.credit_card_id || undefined,
                         note: transactionMeta.note,
                         created_at: undefined, // Exclude created_at from the new rule
-                        exception_dates: [] // Start with no exceptions for the new rule
+                        // Carry over the occurrences already skipped from the split onwards
+                        exception_dates: exceptionDatesFrom(rule.exception_dates, formatLocalDate(occurrenceDate))
                     } as any); // Cast to any to allow partial type match
 
                     // Migrate future physical transactions to the new rule
