@@ -105,7 +105,8 @@ export function useOfflineStatus() {
             console.log('[Offline] Cannot sync while offline');
             return;
         }
-        await runSync();
+        // User-initiated: always run the full safety check too.
+        await runSync({ forceReconcile: true });
     }, [network.isOnline]);
 
     return {

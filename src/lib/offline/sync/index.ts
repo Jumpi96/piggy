@@ -1,7 +1,7 @@
 import { pullChanges, initialHydration, fullTableResync, discardLocalChanges, type PullResult } from './pull';
 import { pushChanges, type PushResult } from './push';
 import { getPendingChangesCount, getFailedChanges, resetFailedChange, type PendingChange } from './queue';
-import { getLastSyncTimestamp } from '../database';
+import { getLastSyncTimestamp, getSyncMeta, setSyncMeta } from '../database';
 import { checkReconciliation } from './reconcile';
 
 export interface SyncResult {
@@ -29,16 +29,43 @@ let syncRequestedWhileBusy = false;
 // a save was running. Without this it degraded to push-only and the resume pull was lost.
 let fullSyncRequestedWhileBusy = false;
 let syncListeners: Array<(state: SyncState) => void> = [];
+// Asked for while busy alongside the deferred full sync (e.g. "Sync now" during a push).
+let forceReconcileRequestedWhileBusy = false;
 // Store last data update in memory (persists for session)
 let lastDataUpdate = Date.now();
+
+// On phones visibilitychange fires on every app switch. A pull that ran this recently has
+// nothing new to bring, so a resume inside this window only pushes pending changes.
+export const RESUME_SYNC_COOLDOWN_MS = 60 * 1000;
+// Completion time (ms) of the last fully successful runSync, for the resume cooldown.
+let lastSuccessfulSyncAt = 0;
+
+// Reconciliation compares whole-table counts and resyncs any table that differs. It is a
+// safety net for silent divergence, not part of the normal flow, so it runs at most this
+// often. Persisted, so cold launches of the PWA don't each count as "due".
+export const RECONCILE_INTERVAL_MS = 60 * 60 * 1000;
+const LAST_RECONCILE_KEY = 'last_reconcile_at';
+
+export interface RunSyncOptions {
+    // Reconcile even if the interval hasn't elapsed (user-initiated "Sync now").
+    forceReconcile?: boolean;
+}
+
+async function isReconcileDue(): Promise<boolean> {
+    const last = await getSyncMeta(LAST_RECONCILE_KEY);
+    const lastMs = last ? new Date(last).getTime() : NaN;
+    // A stamp in the future (device clock moved back) must not suppress reconciliation.
+    return !Number.isFinite(lastMs) || lastMs > Date.now() || Date.now() - lastMs >= RECONCILE_INTERVAL_MS;
+}
 
 /**
  * Performs a full sync: push local changes, then pull server changes.
  * Push-first ensures local edits aren't overwritten.
  */
-export async function runSync(): Promise<SyncResult> {
+export async function runSync({ forceReconcile = false }: RunSyncOptions = {}): Promise<SyncResult> {
     if (isSyncing) {
         fullSyncRequestedWhileBusy = true;
+        forceReconcileRequestedWhileBusy ||= forceReconcile;
         console.log('[Sync] Already syncing, will run a full sync after');
         return {
             success: false,
@@ -87,18 +114,31 @@ export async function runSync(): Promise<SyncResult> {
         }
 
         // Reconciliation - check counts match between local and server
-        const reconcileResult = await checkReconciliation();
-        if (reconcileResult.mismatches.length > 0) {
-            console.log('[Sync] Reconciliation found mismatches, triggering full re-pull');
-            for (const table of reconcileResult.mismatches) {
-                await fullTableResync(table);
+        if (forceReconcile || await isReconcileDue()) {
+            const reconcileResult = await checkReconciliation();
+            if (reconcileResult.mismatches.length > 0) {
+                console.log('[Sync] Reconciliation found mismatches, triggering full re-pull');
+                for (const table of reconcileResult.mismatches) {
+                    await fullTableResync(table);
+                }
+                // Mismatches mean we fixed/downloaded data
+                lastDataUpdate = Date.now();
             }
-            // Mismatches mean we fixed/downloaded data
-            lastDataUpdate = Date.now();
+            // Only a complete check starts the next interval. A failed RPC, or tables
+            // skipped for pending changes, leave it due so the next sync checks again.
+            // (A throwing resync never reaches this line, for the same reason.)
+            if (reconcileResult.checked && reconcileResult.skipped.length === 0) {
+                await setSyncMeta(LAST_RECONCILE_KEY, new Date().toISOString());
+            }
+        } else {
+            console.log('[Sync] Reconciliation not due, skipping');
         }
 
         const duration = Date.now() - startTime;
         const success = pushResult.success && pullResult.success;
+        if (success) {
+            lastSuccessfulSyncAt = Date.now();
+        }
 
         console.log(`[Sync] Complete in ${duration}ms. Success: ${success}`);
 
@@ -176,9 +216,11 @@ function flushDeferredQuickSync(): void {
 
     if (fullSyncRequestedWhileBusy) {
         // A full sync pushes too, so it covers any pending quick sync.
+        const forceReconcile = forceReconcileRequestedWhileBusy;
         fullSyncRequestedWhileBusy = false;
         syncRequestedWhileBusy = false;
-        runSync().catch(err => {
+        forceReconcileRequestedWhileBusy = false;
+        runSync({ forceReconcile }).catch(err => {
             console.error('[Sync] Deferred full sync failed:', err);
         });
         return;
@@ -233,6 +275,14 @@ let syncCleanup: (() => void) | null = null;
 
 function handleVisibilityChange(): void {
     if (document.visibilityState === 'visible' && navigator.onLine) {
+        const sinceLastSync = Date.now() - lastSuccessfulSyncAt;
+        // Negative means the clock moved back: treat as expired, or pulls stop until it recovers.
+        if (sinceLastSync >= 0 && sinceLastSync < RESUME_SYNC_COOLDOWN_MS) {
+            // Pulled moments ago; still push anything queued since.
+            console.log('[Sync] App became visible, synced recently - push only');
+            triggerBackgroundSync();
+            return;
+        }
         console.log('[Sync] App became visible, syncing...');
         runSync().catch(err => {
             console.error('[Sync] Visibility sync failed:', err);
