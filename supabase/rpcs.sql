@@ -90,6 +90,9 @@ begin
     from exchange_rates where user_id = auth.uid()
   union all
   select 'parameters'::text, count(*)::bigint
-    from parameters where user_id = auth.uid();
+    from parameters where user_id = auth.uid()
+  union all
+  select 'import_entries'::text, count(*)::bigint
+    from import_entries where user_id = auth.uid() and deleted_at is null;
 end;
 $$;

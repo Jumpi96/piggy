@@ -99,6 +99,9 @@ export async function myNewFunction() {
 ### Virtual Transactions
 Recurring rules generate "virtual" transactions with composite IDs (`rule_id:date`). These are NOT persisted until edited. When editing a virtual transaction, create a physical "override" record with a new UUID.
 
+### Imported Entries (Inbox)
+`import_entries` holds movements pulled automatically (Mercado Pago release report, Santander alert emails). Rows are inserted **only server-side** by the importer Lambdas (`terraform/lambdas/importer/`) with `on conflict (user_id, source, external_id) do nothing`; the client never inserts them and only changes `status` (`pending → confirmed | dismissed`), `transaction_id` and `resolved_at` via `confirmImportEntry` / `dismissImportEntry` / `reopenImportEntry` in `api.ts`. Category and tag are always chosen by the user — never inferred. Card prefill comes from the `import_settings` parameter's `card_rules` (`src/lib/imports.ts`).
+
 ### Date Handling
 - Use `formatLocalDate()` and `getTodayLocalDate()` from `src/lib/dates.ts`
 - Credit cards have `closing_day` and `payment_day` for effective date calculation

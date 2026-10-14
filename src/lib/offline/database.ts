@@ -133,6 +133,39 @@ async function runMigrations(database: PGlite): Promise<void> {
                     WHERE credit_cards.id = ordered.id;
                 `);
             }
+
+            if (currentVersion < 6) {
+                console.log('[Offline DB] Applying version 6 migration (Import Entries)');
+                await database.exec(`
+                    CREATE TABLE IF NOT EXISTS import_entries (
+                        id TEXT PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        external_id TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        date TEXT,
+                        direction TEXT,
+                        amount_cents BIGINT,
+                        currency_code TEXT,
+                        description TEXT,
+                        account_ref TEXT,
+                        installments INTEGER,
+                        raw TEXT,
+                        parse_error TEXT,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        transaction_id TEXT,
+                        resolved_at TEXT,
+                        created_at TEXT,
+                        updated_at TEXT,
+                        deleted_at TEXT
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_import_entries_status ON import_entries(status, deleted_at);
+                `);
+                // Entries imported before this device upgraded sit below the pull watermark.
+                // Clearing the reconcile stamp makes the next sync compare counts and resync
+                // the new table right away instead of within the hour.
+                await database.query(`DELETE FROM _sync_meta WHERE key = 'last_reconcile_at'`);
+            }
         }
 
         // Update schema version
@@ -151,6 +184,7 @@ export async function clearDatabase(): Promise<void> {
 
     // Clear all user data tables (preserve schema)
     const tables = [
+        'import_entries',
         'transactions',
         'recurring_rules',
         'credit_cards',

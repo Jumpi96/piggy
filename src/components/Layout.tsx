@@ -1,10 +1,11 @@
 import { Link, useLocation, Outlet } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle, Check, PiggyBank } from 'lucide-react';
+import { LayoutDashboard, List, PlusCircle, Settings, Repeat, BarChart3, CreditCard, FileText, Wallet, Cloud, CloudOff, RefreshCw, AlertCircle, Check, PiggyBank, Inbox } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useOfflineStatus, formatLastSync } from '../lib/offline/network';
 import { getCurrentUserId, getLastSyncTimestamp, getDatabaseAsync, isUsingPersistence } from '../lib/offline';
 import { DEBUG_FLAG_KEY } from '../lib/debug';
+import { usePendingImportCount } from '../hooks/usePendingImportCount';
 
 function readDebugFlag(): boolean {
     try {
@@ -309,9 +310,12 @@ export function Layout() {
         return () => window.removeEventListener('piggy-debug-change', handleDebugChange);
     }, [debugFromQuery]);
 
-    const navItems = [
+    const pendingImports = usePendingImportCount();
+
+    const navItems: Array<{ href: string; icon: typeof LayoutDashboard; label: string; special?: boolean; badge?: number }> = [
         { href: '/', icon: LayoutDashboard, label: 'Overview' },
         { href: '/add', icon: PlusCircle, label: 'Add', special: true },
+        { href: '/inbox', icon: Inbox, label: 'Inbox', badge: pendingImports },
         { href: '/transactions', icon: List, label: 'Transactions' },
         { href: '/recurring', icon: Repeat, label: 'Recurring' },
         { href: '/money-checker', icon: Wallet, label: 'Money Checker' },
@@ -341,6 +345,11 @@ export function Layout() {
                         >
                             <item.icon className="w-5 h-5" />
                             {item.label}
+                            {!!item.badge && (
+                                <span className="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-emerald-600 text-white text-xs font-bold flex items-center justify-center">
+                                    {item.badge}
+                                </span>
+                            )}
                         </Link>
                     ))}
                 </nav>
@@ -401,7 +410,14 @@ export function Layout() {
                                     </div>
                                 ) : (
                                     <>
-                                        <item.icon className="w-6 h-6" />
+                                        <span className="relative">
+                                            <item.icon className="w-6 h-6" />
+                                            {!!item.badge && (
+                                                <span className="absolute -top-1.5 -right-2.5 min-w-4 h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                                    {item.badge}
+                                                </span>
+                                            )}
+                                        </span>
                                         <span className="text-[10px] mt-1 font-medium">{item.label}</span>
                                     </>
                                 )}

@@ -326,6 +326,12 @@ function preparePayloadForServer(
         }
     }
 
+    // The importer owns import_entries.raw; the client only changes status, so never send
+    // the local (stringified) copy back.
+    if (table === 'import_entries') {
+        delete prepared.raw;
+    }
+
     if (table === 'parameters' && typeof prepared.value === 'string') {
         try {
             prepared.value = JSON.parse(prepared.value as string);
