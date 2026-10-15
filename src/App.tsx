@@ -11,6 +11,7 @@ import { CreditReport } from './pages/CreditReport';
 import { AnnualReport } from './pages/AnnualReport';
 import { MoneyChecker } from './pages/MoneyChecker';
 import { Savings } from './pages/Savings';
+import { Inbox } from './pages/Inbox';
 import { Login } from './pages/Login';
 import { supabase } from './lib/supabase';
 import { fetchParameters } from './lib/api';
@@ -199,6 +200,7 @@ export default function App() {
           <Route path="annual" element={<AnnualReport />} />
           <Route path="money-checker" element={<MoneyChecker />} />
           <Route path="savings" element={<Savings />} />
+          <Route path="inbox" element={<Inbox />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

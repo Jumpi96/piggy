@@ -1,6 +1,6 @@
 import { getDatabaseAsync, getCurrentUserId } from './offline/database';
 import { trackChange, triggerBackgroundSync } from './offline/sync';
-import type { Currency, CreditCard, Transaction, RecurringRule, Parameter } from '../types';
+import type { Currency, CreditCard, Transaction, RecurringRule, Parameter, ImportEntry, ImportStatus } from '../types';
 import { getTodayLocalDate, getPeriodRange, getPeriodForDate, cacheMonthStartDay } from './dates';
 import { generateOccurrences, mergeTransactions } from './recurringUtils';
 import { normalizeForComparison } from './utils';
@@ -930,4 +930,127 @@ export async function upsertParameter(key: string, value: unknown): Promise<Para
 
     triggerBackgroundSync();
     return param;
+}
+
+// ============================================================================
+// Import Entries (the Inbox)
+// ============================================================================
+// Rows are inserted server-side by the importer Lambdas and arrive via pull. The client
+// only changes their status, and pushes just those fields (never `raw`).
+
+type ImportEntryRow = Omit<ImportEntry, 'raw'> & { raw: string | Record<string, unknown> | null };
+
+function parseImportEntry(row: ImportEntryRow): ImportEntry {
+    let raw: Record<string, unknown> | null = null;
+    if (typeof row.raw === 'string') {
+        try {
+            raw = JSON.parse(row.raw);
+        } catch {
+            raw = { body: row.raw };
+        }
+    } else {
+        raw = row.raw;
+    }
+    return {
+        ...row,
+        amount_cents: row.amount_cents != null ? Number(row.amount_cents) : null,
+        raw,
+    };
+}
+
+/**
+ * Pending entries (oldest movement first), or resolved ones from the last `sinceDays` days
+ * (most recently resolved first).
+ */
+export async function fetchImportEntries(status: 'pending' | 'resolved', sinceDays: number = 60): Promise<ImportEntry[]> {
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+
+    const result = status === 'pending'
+        ? await db.query<ImportEntryRow>(`
+            SELECT * FROM import_entries
+            WHERE user_id = $1 AND deleted_at IS NULL AND status = 'pending'
+            ORDER BY date ASC NULLS LAST, created_at ASC
+        `, [userId])
+        : await db.query<ImportEntryRow>(`
+            SELECT * FROM import_entries
+            WHERE user_id = $1 AND deleted_at IS NULL AND status <> 'pending'
+              AND resolved_at >= $2
+            ORDER BY resolved_at DESC
+        `, [userId, new Date(Date.now() - sinceDays * 24 * 60 * 60 * 1000).toISOString()]);
+
+    return result.rows.map(parseImportEntry);
+}
+
+/** Every non-deleted entry, for Settings (unmapped card references). */
+export async function fetchAllImportEntries(): Promise<ImportEntry[]> {
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+    const result = await db.query<ImportEntryRow>(`
+        SELECT * FROM import_entries WHERE user_id = $1 AND deleted_at IS NULL
+    `, [userId]);
+    return result.rows.map(parseImportEntry);
+}
+
+export async function countPendingImportEntries(): Promise<number> {
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+    const result = await db.query<{ count: number }>(`
+        SELECT COUNT(*)::int AS count FROM import_entries
+        WHERE user_id = $1 AND deleted_at IS NULL AND status = 'pending'
+    `, [userId]);
+    return result.rows[0]?.count ?? 0;
+}
+
+async function setImportEntryStatus(
+    id: string,
+    status: ImportStatus,
+    transactionId: string | null
+): Promise<void> {
+    const db = await getDatabaseAsync();
+    const timestamp = now();
+    const resolvedAt = status === 'pending' ? null : timestamp;
+
+    const result = await db.query<{ id: string }>(`
+        UPDATE import_entries
+        SET status = $1, transaction_id = $2, resolved_at = $3, updated_at = $4
+        WHERE id = $5
+        RETURNING id
+    `, [status, transactionId, resolvedAt, timestamp, id]);
+    if (result.rows.length === 0) {
+        throw new Error('Import entry not found');
+    }
+
+    await trackChange('import_entries', id, 'UPDATE', {
+        id,
+        status,
+        transaction_id: transactionId,
+        resolved_at: resolvedAt,
+        updated_at: timestamp,
+    });
+}
+
+/**
+ * Turns an entry into a real transaction. The transaction INSERT is queued before the
+ * entry UPDATE, so the server's FK on transaction_id holds when they're pushed in order.
+ */
+export async function confirmImportEntry(entryId: string, transaction: TransactionInput): Promise<Transaction> {
+    const tx = await insertTransaction(transaction);
+    await setImportEntryStatus(entryId, 'confirmed', tx.id);
+    triggerBackgroundSync();
+    return tx;
+}
+
+export async function dismissImportEntry(entryId: string): Promise<void> {
+    await setImportEntryStatus(entryId, 'dismissed', null);
+    triggerBackgroundSync();
+}
+
+/**
+ * Puts a resolved entry back in the Inbox. A transaction created from it is left alone
+ * (delete it from the Transactions list if it shouldn't exist).
+ */
+export async function reopenImportEntry(entryId: string): Promise<void> {
+    await setImportEntryStatus(entryId, 'pending', null);
+    triggerBackgroundSync();
 }

@@ -104,6 +104,22 @@ describe('pullChanges', () => {
         expect(new Set(inserted).size).toBe(1200);
     });
 
+    it('stores import_entries.raw (jsonb) as JSON text and keeps a null raw null', async () => {
+        serverRows.import_entries = [
+            { id: 'e1', raw: { subject: 'Compra', body: 'x' }, updated_at: '2026-10-06T12:00:00.000Z' },
+            { id: 'e2', raw: null, updated_at: '2026-10-06T12:00:00.000Z' },
+        ];
+        await pullChanges();
+        const inserts = dbQueryMock.mock.calls.filter(([sql]) => sql.includes('INSERT INTO import_entries'));
+        expect(inserts).toHaveLength(2);
+        const rawOf = (call: (typeof inserts)[number]) => {
+            const columns = call[0].match(/\(([^)]*)\)/)![1].split(',').map(c => c.trim());
+            return (call[1] as unknown[])[columns.indexOf('raw')];
+        };
+        expect(rawOf(inserts[0])).toBe(JSON.stringify({ subject: 'Compra', body: 'x' }));
+        expect(rawOf(inserts[1])).toBeNull();
+    });
+
     it('does not advance the watermark when a row fails to apply', async () => {
         serverRows.credit_cards = [{ id: 'c1', updated_at: '2026-10-06T12:00:00.000Z' }];
         dbQueryMock.mockImplementation((sql: string) =>

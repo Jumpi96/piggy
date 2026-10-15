@@ -558,3 +558,71 @@ describe('api', () => {
         });
     });
 });
+
+describe('import entries', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockQuery.mockReset();
+        mockQuery.mockResolvedValue({ rows: [{ id: 'entry-1' }] });
+    });
+
+    it('confirm queues the transaction INSERT before the entry UPDATE that references it', async () => {
+        const tx = await api.confirmImportEntry('entry-1', {
+            date: '2026-11-05',
+            direction: 'expense',
+            amount_cents: 1234567,
+            currency_code: 'ARS',
+            exchange_rate_id: null,
+            category: 'Living',
+            tag: 'Super',
+            payment_method: 'card',
+            credit_card_id: 'card-visa',
+            recurring_rule_id: null,
+            to_be_balanced: false,
+            note: 'SUPERMERCADO DIA',
+        });
+
+        const calls = vi.mocked(trackChange).mock.calls;
+        expect(calls.map(c => [c[0], c[2]])).toEqual([
+            ['transactions', 'INSERT'],
+            ['import_entries', 'UPDATE'],
+        ]);
+        // Only status fields are pushed for the entry, pointing at the new transaction.
+        expect(calls[1][1]).toBe('entry-1');
+        expect(calls[1][3]).toEqual({
+            id: 'entry-1',
+            status: 'confirmed',
+            transaction_id: tx.id,
+            resolved_at: expect.any(String),
+            updated_at: expect.any(String),
+        });
+    });
+
+    it('dismiss and reopen only change status fields', async () => {
+        await api.dismissImportEntry('entry-1');
+        await api.reopenImportEntry('entry-1');
+
+        const payloads = vi.mocked(trackChange).mock.calls.map(c => c[3] as Record<string, unknown>);
+        expect(payloads[0]).toMatchObject({ status: 'dismissed', transaction_id: null });
+        expect(payloads[0].resolved_at).toEqual(expect.any(String));
+        expect(payloads[1]).toMatchObject({ status: 'pending', transaction_id: null, resolved_at: null });
+        for (const p of payloads) {
+            expect(Object.keys(p).sort()).toEqual(['id', 'resolved_at', 'status', 'transaction_id', 'updated_at']);
+        }
+    });
+
+    it('refuses to change an entry that does not exist locally', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        await expect(api.dismissImportEntry('missing')).rejects.toThrow('Import entry not found');
+        expect(trackChange).not.toHaveBeenCalled();
+    });
+
+    it('parses raw JSON text from the local table', async () => {
+        mockQuery.mockResolvedValueOnce({
+            rows: [{ id: 'e1', raw: '{"subject":"Compra"}', amount_cents: '1500', status: 'pending' }],
+        });
+        const [entry] = await api.fetchImportEntries('pending');
+        expect(entry.raw).toEqual({ subject: 'Compra' });
+        expect(entry.amount_cents).toBe(1500);
+    });
+});

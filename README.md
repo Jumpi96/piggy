@@ -31,6 +31,7 @@ A modern, mobile-first Progressive Web App (PWA) for personal finance management
 - **Secure Authentication**: Email/password and magic link authentication via Supabase
 - **Automated Backups**: Weekly database backups to AWS S3 with 30-day retention
 - **Background Sync**: Automatic data synchronization when online with conflict resolution
+- **Automatic Imports (Inbox)**: Mercado Pago movements (daily) and Santander alert emails (within seconds) arrive as unconfirmed entries you add or dismiss — see `terraform/README.md`
 - **Savings & Investment Tracking**: Ledger-based savings tracking with GitHub integration, allocation metrics, and asset evolution charts
 
 ## Architecture

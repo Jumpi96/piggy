@@ -155,6 +155,25 @@ describe('pushUpdate / pushDelete zero-row handling', () => {
     });
 });
 
+describe('import_entries status updates', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        terminalResult = { data: [{ id: 'e1' }], error: null };
+    });
+
+    it('never sends raw back to the server (the importer owns it)', async () => {
+        const ok = await pushChangeImmediately({
+            ...change('UPDATE', { id: 'e1', status: 'dismissed', raw: '{"body":"x"}', updated_at: 'x' }),
+            table_name: 'import_entries',
+        });
+        expect(ok).toBe(true);
+        expect(fromMock).toHaveBeenCalledWith('import_entries');
+        const sent = updateMock.mock.calls[0][0];
+        expect(sent).not.toHaveProperty('raw');
+        expect(sent).toMatchObject({ status: 'dismissed' });
+    });
+});
+
 describe('pushChanges retry policy', () => {
     const queued = (id: number, table: PendingChange['table_name'], op: PendingChange['operation'], payload: Record<string, unknown>, retry_count = 0): PendingChange => ({
         ...change(op, payload), id, table_name: table, retry_count,

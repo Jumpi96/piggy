@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchCreditCards, insertCreditCard, deleteCreditCard, updateCreditCard, updateCreditCardOrder, fetchCurrencies, fetchLatestRates, insertExchangeRate, fetchParameters, upsertParameter } from '../lib/api';
 import { cacheMonthStartDay } from '../lib/dates';
 import type { CreditCard, Currency, Parameter } from '../types';
-import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, Loader2, Check, AlertCircle, ArrowUp, ArrowDown, GripVertical } from 'lucide-react';
+import { Plus, Trash2, CreditCard as CardIcon, RefreshCw, Settings2, PiggyBank, Loader2, Check, AlertCircle, ArrowUp, ArrowDown, GripVertical, Inbox } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { resequenceCreditCards, sortCreditCards } from '../lib/creditCards';
 import { DEBUG_FLAG_KEY } from '../lib/debug';
@@ -14,16 +14,17 @@ import {
     type AllocationConfig,
     DEFAULT_ALLOCATION_CONFIG,
 } from '../lib/ledger';
+import { ImportsSettings } from '../components/ImportsSettings';
 
 export function SettingsPage() {
-    const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general' | 'ledger'>('cards');
+    const [activeTab, setActiveTab] = useState<'cards' | 'rates' | 'general' | 'ledger' | 'imports'>('cards');
 
     return (
         <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
             <h1 className="text-2xl font-bold">Settings</h1>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 dark:border-zinc-700">
+            <div className="flex border-b border-gray-200 dark:border-zinc-700 overflow-x-auto">
                 <button
                     onClick={() => setActiveTab('cards')}
                     className={cn(
@@ -72,12 +73,25 @@ export function SettingsPage() {
                     <PiggyBank className="w-4 h-4" />
                     Ledger
                 </button>
+                <button
+                    onClick={() => setActiveTab('imports')}
+                    className={cn(
+                        "px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2",
+                        activeTab === 'imports'
+                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                            : "border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    )}
+                >
+                    <Inbox className="w-4 h-4" />
+                    Imports
+                </button>
             </div>
 
             {activeTab === 'cards' && <CardsSettings />}
             {activeTab === 'rates' && <RatesSettings />}
             {activeTab === 'general' && <GeneralSettings />}
             {activeTab === 'ledger' && <LedgerSettings />}
+            {activeTab === 'imports' && <ImportsSettings />}
         </div>
     );
 }

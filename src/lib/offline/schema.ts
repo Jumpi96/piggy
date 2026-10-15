@@ -1,5 +1,5 @@
 // Schema version - increment when schema changes
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 // Tables that need to be synced with Supabase (in FK dependency order)
 export const SYNC_TABLES = [
@@ -8,7 +8,8 @@ export const SYNC_TABLES = [
     'credit_cards',
     'recurring_rules',
     'transactions',
-    'parameters'
+    'parameters',
+    'import_entries'
 ] as const;
 
 export type SyncTableName = typeof SYNC_TABLES[number];
@@ -125,6 +126,32 @@ CREATE TABLE IF NOT EXISTS parameters (
     UNIQUE (user_id, key)
 );
 
+-- Import Entries Table (the Inbox). Rows are inserted server-side by the importer
+-- Lambdas and arrive via pull; the client only updates status/transaction_id.
+CREATE TABLE IF NOT EXISTS import_entries (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    date TEXT,
+    direction TEXT,
+    amount_cents BIGINT,
+    currency_code TEXT,
+    description TEXT,
+    account_ref TEXT,
+    installments INTEGER,
+    raw TEXT, -- JSON
+    parse_error TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    transaction_id TEXT,
+    resolved_at TEXT,
+    created_at TEXT,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_import_entries_status ON import_entries(status, deleted_at);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_deleted ON transactions(user_id, deleted_at);
@@ -142,5 +169,5 @@ export function tableHasUpdatedAt(_table: SyncTableName): boolean {
 
 // Helper to check if a table supports soft delete
 export function tableHasSoftDelete(table: SyncTableName): boolean {
-    return ['transactions', 'recurring_rules', 'credit_cards'].includes(table);
+    return ['transactions', 'recurring_rules', 'credit_cards', 'import_entries'].includes(table);
 }

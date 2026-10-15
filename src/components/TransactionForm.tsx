@@ -8,18 +8,33 @@ import {
     fetchExchangeRate,
     fetchDistinctTags,
     insertRecurringRule, updateRecurringRule, fetchRecurringRule, migrateFutureTransactions,
+    confirmImportEntry, upsertParameter,
     type TransactionInput
 } from '../lib/api';
+import { DEFAULT_IMPORT_SETTINGS, IMPORT_SETTINGS_KEY, entryToDraft, matchCardRule } from '../lib/imports';
 import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
-import type { Currency, CreditCard, Direction, PaymentMethod, Transaction } from '../types';
+import type { Currency, CreditCard, Direction, ImportEntry, ImportSettings, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { sortCreditCards } from '../lib/creditCards';
 import { exceptionDatesFrom } from '../lib/recurringUtils';
 import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
 
-export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId }: { initialData?: Transaction, onSuccess?: () => void, onCancel?: () => void, mode?: 'edit' | 'clone', defaultCardId?: string }) {
+export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId, importEntry, importSettings }: {
+    initialData?: Transaction,
+    onSuccess?: () => void,
+    onCancel?: () => void,
+    mode?: 'edit' | 'clone',
+    defaultCardId?: string,
+    // Confirming an Inbox entry: prefill from it, save as a new transaction and mark it confirmed.
+    importEntry?: ImportEntry,
+    importSettings?: ImportSettings,
+}) {
     const navigate = useNavigate();
+    const [importDraft] = useState(() =>
+        importEntry ? entryToDraft(importEntry, importSettings ?? DEFAULT_IMPORT_SETTINGS) : null
+    );
+    const [rememberCard, setRememberCard] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -29,18 +44,18 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [allTags, setAllTags] = useState<string[]>([]);
 
     // Form State
-    const [direction, setDirection] = useState<Direction>(initialData?.direction || 'expense');
-    const [amount, setAmount] = useState(initialData ? (initialData.amount_cents / 100).toString() : '');
-    const [currencyCode, setCurrencyCode] = useState(initialData?.currency_code || 'USD');
-    const [date, setDate] = useState(initialData?.date || getTodayLocalDate());
+    const [direction, setDirection] = useState<Direction>(initialData?.direction || importDraft?.direction || 'expense');
+    const [amount, setAmount] = useState(initialData ? (initialData.amount_cents / 100).toString() : importDraft?.amount ?? '');
+    const [currencyCode, setCurrencyCode] = useState(initialData?.currency_code || importDraft?.currency_code || 'USD');
+    const [date, setDate] = useState(initialData?.date || importDraft?.date || getTodayLocalDate());
     const [category, setCategory] = useState(initialData?.category || '');
     const [tag, setTag] = useState(initialData?.tag || '');
     // When opening a fresh form from the Credit Report (no initialData), preselect
     // the card the user is currently reviewing so a new item lands on that card.
-    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || (!initialData && defaultCardId ? 'card' : 'cash'));
-    const [cardId, setCardId] = useState(initialData?.credit_card_id || (!initialData ? defaultCardId ?? '' : ''));
+    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || importDraft?.payment_method || (!initialData && defaultCardId ? 'card' : 'cash'));
+    const [cardId, setCardId] = useState(initialData?.credit_card_id || importDraft?.credit_card_id || (!initialData ? defaultCardId ?? '' : ''));
     const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
-    const [note, setNote] = useState(initialData?.note || '');
+    const [note, setNote] = useState(initialData?.note || importDraft?.note || '');
     const [editType, setEditType] = useState<'this' | 'future' | null>(null);
 
     // Tag Autocomplete State
@@ -62,7 +77,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 const sortedCurrencies = curData.sort((a, b) => a.code.localeCompare(b.code));
                 setCurrencies(sortedCurrencies);
 
-                if (!initialData && sortedCurrencies.length > 0) {
+                if (!initialData && !importDraft?.currency_code && sortedCurrencies.length > 0) {
                     setCurrencyCode(sortedCurrencies[0].code);
                 }
                 setCreditCards(sortCreditCards(cardData));
@@ -73,7 +88,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             }
         }
         loadData();
-    }, [initialData]);
+    }, [initialData, importDraft]);
 
     // Close suggestions on click outside
     useEffect(() => {
@@ -184,7 +199,19 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 note: note || null
             };
 
-            if (mode === 'clone') {
+            if (importEntry) {
+                await confirmImportEntry(importEntry.id, { ...transactionMeta, recurring_rule_id: null });
+                if (canRememberCard && rememberCard) {
+                    const settings = importSettings ?? DEFAULT_IMPORT_SETTINGS;
+                    await upsertParameter(IMPORT_SETTINGS_KEY, {
+                        ...settings,
+                        card_rules: [
+                            ...settings.card_rules,
+                            { text: importEntry.account_ref ?? '', field: 'account_ref', credit_card_id: cardId },
+                        ],
+                    });
+                }
+            } else if (mode === 'clone') {
                 await insertTransaction({ ...transactionMeta, recurring_rule_id: null });
             } else if (initialData?.recurring_rule_id) {
                 if (editType === 'this' || !editType) {
@@ -251,6 +278,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
 
     const filteredCategories = CATEGORIES.filter(c => c.direction === direction);
 
+    // Offer to remember a hand-picked card for this entry's card reference, unless a rule
+    // already maps it to the chosen card.
+    const canRememberCard = !!importEntry?.account_ref && method === 'card' && !!cardId &&
+        matchCardRule(importEntry, (importSettings ?? DEFAULT_IMPORT_SETTINGS).card_rules)?.credit_card_id !== cardId;
+
     // Filter tags: match text case-and-accent-insensitively
     const filteredTags = allTags.filter(t => normalizeForComparison(t).includes(normalizeForComparison(tag)));
 
@@ -288,6 +320,13 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                     Income
                 </button>
             </div>
+
+            {/* Imported entry context */}
+            {importEntry && importEntry.installments != null && importEntry.installments > 1 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-3 rounded-xl text-sm text-amber-800 dark:text-amber-200">
+                    Bought in {importEntry.installments} cuotas. You may prefer an installment recurring rule and dismiss this entry instead.
+                </div>
+            )}
 
             {/* Recurring Edit Choice */}
             {mode !== 'clone' && initialData?.recurring_rule_id && (
@@ -509,6 +548,21 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                     </div>
                 )}
             </div>
+
+            {canRememberCard && (
+                <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
+                    <input
+                        type="checkbox"
+                        id="rememberCard"
+                        checked={rememberCard}
+                        onChange={(e) => setRememberCard(e.target.checked)}
+                        className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <label htmlFor="rememberCard" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                        Always use this card for <span className="font-mono text-xs">{importEntry?.account_ref}</span>
+                    </label>
+                </div>
+            )}
 
             {/* To Be Balanced */}
             <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">

@@ -23,3 +23,20 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  importer:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run importer tests
+        run: python -m pytest terraform/lambdas/importer/tests

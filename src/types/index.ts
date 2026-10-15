@@ -78,3 +78,72 @@ export interface Parameter {
     value: any;
     updated_at: string;
 }
+
+// ============================================================================
+// Imports (the Inbox)
+// ============================================================================
+
+export type ImportSource = 'mercadopago' | 'santander';
+export type ImportKind =
+    | 'card_purchase'
+    | 'debit_purchase'
+    | 'transfer_out'
+    | 'transfer_in'
+    | 'mp_outflow'
+    | 'mp_interest'
+    | 'unknown';
+export type ImportStatus = 'pending' | 'confirmed' | 'dismissed';
+
+/**
+ * A movement pulled automatically from a source (inserted server-side by the importer
+ * Lambdas). Not a transaction until confirmed in the Inbox. Fields other than the status
+ * ones are null when the source couldn't be parsed (parse_error is set then).
+ */
+export interface ImportEntry {
+    id: string;
+    user_id: string;
+    source: ImportSource;
+    external_id: string;
+    kind: ImportKind;
+    date: string | null; // YYYY-MM-DD, Argentina local
+    direction: Direction | null;
+    amount_cents: number | null;
+    currency_code: string | null;
+    description: string | null;
+    account_ref: string | null;
+    installments: number | null;
+    raw: Record<string, unknown> | null;
+    parse_error: string | null;
+    status: ImportStatus;
+    transaction_id: string | null;
+    resolved_at: string | null;
+    created_at: string | null;
+    updated_at: string | null;
+    deleted_at?: string | null;
+}
+
+/** Maps text found in an entry to a Piggy credit card. Checked in order; first match wins. */
+export interface CardRule {
+    text: string;
+    field: 'account_ref' | 'body';
+    credit_card_id: string;
+}
+
+/** Stored in parameters under key `import_settings`. Read by the importer Lambdas too. */
+export interface ImportSettings {
+    kinds: Partial<Record<ImportKind, boolean>>;
+    since: string | null; // YYYY-MM-DD; movements before it are not imported
+    card_rules: CardRule[];
+}
+
+export interface ImportSourceStatus {
+    last_run_at?: string;
+    last_ok_at?: string;
+    last_error?: string | null;
+    imported?: number;
+    forwarding_code?: string | null;
+    [key: string]: unknown;
+}
+
+/** Stored in parameters under key `import_status`; written only by the importer Lambdas. */
+export type ImportStatusParam = Partial<Record<ImportSource, ImportSourceStatus>>;

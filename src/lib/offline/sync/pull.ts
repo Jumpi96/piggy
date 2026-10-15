@@ -28,6 +28,9 @@ const PULL_OVERLAP_MS = 2 * 60 * 1000;
 // Local tables whose rows reference each parent table (local FKs have no ON DELETE
 // action). Used so a full resync never deletes a parent row something still points at.
 const REFERENCED_BY: Partial<Record<SyncTableName, Array<[SyncTableName, string]>>> = {
+    // import_entries has no local FK, but a confirmed entry whose transaction never reached
+    // the server would fail its own push forever (the server FK), so it counts as a reference.
+    transactions: [['import_entries', 'transaction_id']],
     exchange_rates: [['transactions', 'exchange_rate_id']],
     credit_cards: [['transactions', 'credit_card_id'], ['recurring_rules', 'credit_card_id']],
     recurring_rules: [['transactions', 'recurring_rule_id']],
@@ -299,6 +302,10 @@ function prepareRecordForLocal(
         // unstringified and the exception list is silently lost on the next pull.
         if (key === 'schedule_config' || key === 'value' || key === 'exception_dates') {
             prepared[key] = typeof value === 'object' ? JSON.stringify(value) : value;
+        }
+        // import_entries.raw: jsonb on Supabase, TEXT locally. Null stays null.
+        else if (key === 'raw') {
+            prepared[key] = value !== null && typeof value === 'object' ? JSON.stringify(value) : value;
         }
         // Keep everything else as-is
         else {
