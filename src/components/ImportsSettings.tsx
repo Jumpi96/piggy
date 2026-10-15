@@ -28,10 +28,11 @@ export function ImportsSettings() {
                     fetchCreditCards(),
                     fetchAllImportEntries(),
                 ]);
-                const stored = parseImportSettings(params.find(p => p.key === IMPORT_SETTINGS_KEY)?.value);
-                // Not saved yet: start importing from today, so movements already logged by
-                // hand don't flood the Inbox.
-                setSettings({ ...stored, since: stored.since ?? getTodayLocalDate() });
+                const saved = params.find(p => p.key === IMPORT_SETTINGS_KEY);
+                const stored = parseImportSettings(saved?.value);
+                // Never saved: start importing from today, so movements already logged by hand
+                // don't flood the Inbox. A saved null `since` means "no cutoff" and is kept.
+                setSettings(saved ? stored : { ...stored, since: getTodayLocalDate() });
                 setCards(sortCreditCards(cardData));
                 setEntries(entryData);
             } catch (err) {
