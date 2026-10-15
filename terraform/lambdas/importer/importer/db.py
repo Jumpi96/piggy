@@ -20,7 +20,8 @@ DEFAULT_KINDS = {
     "transfer_out": True,
     "transfer_in": False,
     "mp_outflow": True,
-    "mp_interest": True,
+    # Interest arrives daily in small amounts; most users reconcile it instead of logging it.
+    "mp_interest": False,
 }
 
 

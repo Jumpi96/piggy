@@ -1,12 +1,17 @@
 """
 Mercado Pago importer, based on the Releases report ("Dinero liberado") API.
 
-Flow: the report is generated daily by Mercado Pago (06:00 GMT-3, set up once with
-`mp_setup`); the daily run lists recent reports, downloads them and keeps the outflows and the
-interest ("rendimientos") rows. Re-processing a report is harmless: rows dedupe on SOURCE_ID.
+Flow: Mercado Pago generates the report daily at 00:00 (a daily frequency ignores the hour),
+once `mp_setup` has configured it. The daily run lists recent reports, downloads them and keeps
+the outflows and the interest ("rendimientos") rows. Re-processing a report is harmless: rows dedupe on SOURCE_ID.
 
-Endpoints and some column values still have to be confirmed against a real account (see the
-README's Phase 0 checklist); everything uncertain is isolated in constants below.
+Checked against a real account's report (tests/fixtures/mp_release_1.csv). Every movement comes
+as three rows sharing a SOURCE_ID: `reserve_for_<x>` debit, `reserve_for_<x>` credit (the hold
+and its release), then the movement itself (`payment`, `payout`, `tip`...). Only that last row
+is imported. A hold with no movement after it (cancelled or still pending) imports nothing.
+
+The report has no counterparty column, so `payment`/`tip` rows are described from the payments
+API (merchant name or payment description). Transfers out (`payout`) aren't in that API.
 """
 from __future__ import annotations
 
@@ -26,7 +31,8 @@ from .common import Entry, collapse_ws, normalize, parse_amount_cents, row_hash,
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api.mercadopago.com/v1/account/release_report"
+API_ROOT = "https://api.mercadopago.com"
+BASE_URL = API_ROOT + "/v1/account/release_report"
 
 REPORT_COLUMNS = [
     "DATE",
@@ -48,17 +54,32 @@ REPORT_CONFIG = {
     # The API default is GMT-04, which misdates movements made between 23:00 and midnight.
     "display_timezone": "GMT-03",
     "notification_email_list": [],
-    "frequency": {"type": "daily", "value": 1, "hour": 6},
+    # Daily takes no "value" (that is the weekday/month day for weekly/monthly); sending one is
+    # rejected as "Invalid frequency". Mercado Pago also stores the hour as 0 for daily reports.
+    "frequency": {"type": "daily", "hour": 0},
     "columns": [{"key": c} for c in REPORT_COLUMNS],
 }
 
 # Rows that are balances or totals, not movements.
 SKIPPED_RECORD_TYPES = {"initial_available_balance", "total", "subtotal"}
 
+# A hold and its release (see the module docstring): never a movement on their own.
+SKIPPED_DESCRIPTION_PREFIXES = ("reserve_for_",)
+
 # DESCRIPTION values (normalized, substring match) that mark an inflow as interest earned.
-# To be confirmed with a real report: the daily run records every inflow description it
-# sees in import_status.mercadopago.inflow_descriptions so the right value can be pinned.
-DEFAULT_INTEREST_MARKERS = ("asset_management", "rendimiento", "interest", "yield")
+# The real report labels the daily "rendimientos" credit `asset_management`.
+DEFAULT_INTEREST_MARKERS = ("asset_management",)
+
+# Fallback descriptions by DESCRIPTION, used when the payments API has nothing better.
+DESCRIPTION_LABELS = {
+    "payment": "Pago", "payout": "Transferencia enviada", "tip": "Propina", "asset_management": "Rendimientos",
+}
+
+# Report rows whose SOURCE_ID is a payment id that GET /v1/payments/{id} can describe.
+PAYMENT_DESCRIPTIONS = {"payment", "tip"}
+
+# Payment descriptions that say nothing (transfers between Mercado Pago users use "Varios").
+UNINFORMATIVE_PAYMENT_DESCRIPTIONS = {"", "varios"}
 
 # How far back the daily run looks for generated reports (overlap is free thanks to dedupe).
 REPORT_LOOKBACK_DAYS = 3
@@ -91,8 +112,9 @@ class Client:
         self._http = http or _http(token)
         self._sleep = sleep
 
-    def _call(self, method: str, path: str, body: Optional[dict[str, Any]] = None, retries: int = 3) -> tuple[int, bytes]:
-        url = BASE_URL + path
+    def _call(self, method: str, path: str, body: Optional[dict[str, Any]] = None, retries: int = 3,
+              base: str = BASE_URL) -> tuple[int, bytes]:
+        url = base + path
         for attempt in range(retries + 1):
             status, payload = self._http(method, url, body)
             if status == 401 or status == 403:
@@ -133,6 +155,32 @@ class Client:
     def download(self, file_name: str) -> str:
         _, payload = self._call("GET", "/" + urllib.parse.quote(file_name))
         return payload.decode("utf-8-sig")
+
+    def payment(self, payment_id: str) -> Optional[dict[str, Any]]:
+        """The payment behind a report row, or None if the API doesn't know it."""
+        try:
+            _, payload = self._call("GET", "/v1/payments/" + urllib.parse.quote(payment_id), base=API_ROOT)
+        except MercadoPagoError as exc:
+            if "rejected the access token" in str(exc):
+                raise
+            logger.warning("Mercado Pago payment %s not described: %s", payment_id, exc)
+            return None
+        return json.loads(payload or b"{}")
+
+
+def describe_payment(payment: dict[str, Any]) -> Optional[str]:
+    """A human description of a payment: the card merchant, else its description; transfers
+    between Mercado Pago users only say "Varios", so they read as a sent transfer."""
+    interaction = payment.get("point_of_interaction") or {}
+    commerce = ((interaction.get("transaction_data") or {}).get("commerce") or {}).get("name")
+    description = collapse_ws(str(payment.get("description") or ""))
+    if payment.get("operation_type") == "money_transfer":
+        if normalize(description) in UNINFORMATIVE_PAYMENT_DESCRIPTIONS:
+            return "Transferencia enviada"
+        return f"Transferencia enviada · {description}"
+    if commerce:
+        return collapse_ws(commerce)
+    return description or None
 
 
 def recent_report_files(reports: list[dict[str, Any]], now: datetime, lookback_days: int = REPORT_LOOKBACK_DAYS) -> list[str]:
@@ -201,6 +249,8 @@ def parse_release_csv(
         description = row.get("DESCRIPTION", "")
         if record_type in SKIPPED_RECORD_TYPES or normalize(description) in SKIPPED_RECORD_TYPES:
             continue
+        if normalize(description).startswith(SKIPPED_DESCRIPTION_PREFIXES):
+            continue
 
         credit = parse_amount_cents(row.get("NET_CREDIT_AMOUNT", "")) or 0
         debit = parse_amount_cents(row.get("NET_DEBIT_AMOUNT", "")) or 0
@@ -223,17 +273,15 @@ def parse_release_csv(
         source_id = row.get("SOURCE_ID", "")
         entries.append(Entry(
             source="mercadopago",
-            # One SOURCE_ID can carry several rows (e.g. a payment and its refund), so the
-            # kind is part of the key; rows without an id dedupe on their content.
+            # One SOURCE_ID can carry several movements (a payment and its refund), so the kind
+            # is part of the key; rows without an id dedupe on their content.
             external_id=f"{source_id}:{kind}" if source_id else row_hash(row),
             kind=kind,
             date=_row_date(row.get("DATE", "")),
             direction=direction,
             amount_cents=abs(net),
             currency_code="ARS",
-            description=collapse_ws(" · ".join(
-                v for v in (description, row.get("PAYMENT_METHOD", ""), row.get("EXTERNAL_REFERENCE", "")) if v
-            )) or None,
+            description=DESCRIPTION_LABELS.get(normalize(description), description) or None,
             account_ref="mp",
             raw=row,
         ))
@@ -249,6 +297,13 @@ def run_daily(client: Client, now: Optional[datetime] = None) -> tuple[list[Entr
     for file_name in files:
         for entry in parse_release_csv(client.download(file_name), stats=stats):
             entries[entry.external_id] = entry
+    for entry in entries.values():
+        source_id = entry.raw.get("SOURCE_ID", "")
+        if source_id and normalize(entry.raw.get("DESCRIPTION", "")) in PAYMENT_DESCRIPTIONS:
+            payment = client.payment(source_id)
+            described = describe_payment(payment) if payment else None
+            if described:
+                entry.description = described
     info = {
         "reports": files,
         "payment_methods_seen": dict(stats.get("payment_methods", {})),

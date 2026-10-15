@@ -21,13 +21,25 @@ through SES, add its S3 copy as `santander_<kind>_<n>_forwarded.eml`.
 There is no real "transfer received" sample yet; that kind is covered only by the synthetic
 emails in `tests/emails.py`.
 
+## Mercado Pago: real report, anonymized
+
+`mp_release_1.csv` is rows from a real release report (one month, `,` separator), keeping one
+example of every pattern seen: a card purchase abroad (net debit ≠ gross), a transfer to another
+Mercado Pago user, a transfer out (`payout`), interest (`asset_management`), an incoming payment,
+a cancelled hold, a purchase with a partial refund, a hold still open, and a tip. SOURCE_IDs,
+external references and the balance/total rows were replaced.
+
+Each movement is three rows sharing a SOURCE_ID: `reserve_for_*` debit, `reserve_for_*` credit,
+then the movement. The payments API responses used in the tests (`test_mercadopago.py`) are real
+shapes trimmed to the fields the importer reads.
+
 ## Synthetic
 
 Files prefixed `synthetic_`, and the emails in `tests/emails.py`, are hand-written stand-ins.
 They follow the documented format and plausible wording, but they are **not** real output.
 
-- `synthetic_mp_release.csv`: replace or complement it with `mp_release_<n>.csv`, a real
-  release report (amounts and ids may be changed; keep the layout).
+- `synthetic_mp_release.csv`: kept for what the real report lacks (a `;` separator and a
+  movement without SOURCE_ID).
 
 Each real sample gets a test asserting the parsed kind, amount, currency, date, description and
 `account_ref` (the text that maps to a Piggy credit card).

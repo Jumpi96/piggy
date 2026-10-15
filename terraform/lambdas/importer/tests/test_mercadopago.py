@@ -5,64 +5,90 @@ from datetime import datetime, timezone
 import pytest
 
 from conftest import FIXTURES
-from importer.mercadopago import Client, MercadoPagoError, parse_release_csv, recent_report_files, run_daily
+from importer.mercadopago import (
+    Client, MercadoPagoError, describe_payment, parse_release_csv, recent_report_files, run_daily,
+)
 
 
-def report_text():
+def real_report():
+    """A real release report, anonymized: one example of every row pattern seen in a month."""
+    return (FIXTURES / "mp_release_1.csv").read_text()
+
+
+def synthetic_report():
+    """Hand-written: `;` separator and a movement without SOURCE_ID, which the real one lacks."""
     return (FIXTURES / "synthetic_mp_release.csv").read_text()
 
 
-def test_keeps_outflows_and_interest_only():
-    entries = parse_release_csv(report_text())
-    assert [(e.kind, e.direction, e.amount_cents) for e in entries] == [
-        ("mp_outflow", "expense", 1234567),
-        ("mp_outflow", "expense", 250000),
-        ("mp_interest", "income", 8812),
-        ("mp_outflow", "expense", 2000000),  # withdrawal: imported, the user dismisses it
+def summary(entries):
+    return [(e.external_id, e.kind, e.date, e.amount_cents, e.description) for e in entries]
+
+
+def test_real_report_keeps_one_entry_per_movement():
+    assert summary(parse_release_csv(real_report())) == [
+        # Card purchase abroad: the net debit (with taxes) left the account, not the gross.
+        ("91000000001:mp_outflow", "mp_outflow", "2026-09-13", 3215745, "Pago"),
+        # Interest ("rendimientos"); imported only if that kind is switched on in Settings.
+        ("91000000004:mp_interest", "mp_interest", "2026-09-14", 16440, "Rendimientos"),
+        # Purchase later partly refunded: the purchase stays, the refund is not imported.
+        ("91000000007:mp_outflow", "mp_outflow", "2026-09-25", 2330900, "Pago"),
+        ("91000000009:mp_outflow", "mp_outflow", "2026-10-13", 633000, "Propina"),
+        ("91000000002:mp_outflow", "mp_outflow", "2026-10-14", 3300000, "Pago"),
+        ("91000000003:mp_outflow", "mp_outflow", "2026-10-14", 480000, "Transferencia enviada"),
     ]
-    # Balance/total rows, the incoming transfer and the zero row are gone.
+
+
+def test_holds_alone_are_not_movements():
+    ids = {e.external_id.split(":")[0] for e in parse_release_csv(real_report())}
+    assert "91000000006" not in ids  # hold released: the payment was cancelled
+    assert "91000000008" not in ids  # hold still open: the payment shows up in a later report
+
+
+def test_all_entries_are_ars_from_the_mp_account():
+    entries = parse_release_csv(real_report())
     assert all(e.source == "mercadopago" and e.currency_code == "ARS" and e.account_ref == "mp" for e in entries)
-
-
-def test_dates_are_argentina_local():
-    entries = parse_release_csv(report_text())
-    # 23:40 GMT-3 on the 12th stays on the 12th.
-    assert entries[1].date == "2026-10-12"
-    assert entries[2].date == "2026-10-13"
-
-
-def test_external_ids_use_source_id_or_a_row_hash():
-    entries = parse_release_csv(report_text())
-    assert entries[0].external_id == "90000000001:mp_outflow"
-    assert entries[2].external_id == "90000000003:mp_interest"
-    withdrawal = entries[3]
-    assert withdrawal.external_id.startswith("sha256:")
-    # Same row parsed again -> same id (idempotent re-runs).
-    assert parse_release_csv(report_text())[3].external_id == withdrawal.external_id
-
-
-def test_description_and_raw_row():
-    entry = parse_release_csv(report_text())[1]
-    assert entry.description == "payment · account_money · ORDER-77"
-    assert entry.raw["SOURCE_ID"] == "90000000002"
+    assert {(e.kind, e.direction) for e in entries} == {("mp_outflow", "expense"), ("mp_interest", "income")}
+    assert entries[0].raw["EXTERNAL_REFERENCE"] == "REF-1"
 
 
 def test_collects_stats_for_verification():
     stats: dict[str, Counter] = {}
-    parse_release_csv(report_text(), stats=stats)
-    assert stats["payment_methods"]["account_money"] == 3
-    assert stats["inflow_descriptions"] == Counter({"asset_management": 1, "money_transfer": 1})
+    parse_release_csv(real_report(), stats=stats)
+    assert stats["payment_methods"] == Counter({"available_money": 7, "debin_transfer": 1})
+    assert stats["inflow_descriptions"] == Counter({"asset_management": 1, "payment": 1, "refund": 1})
 
 
-def test_comma_separated_reports_parse_too():
-    text = report_text().replace(";", ",")
-    assert len(parse_release_csv(text)) == 4
+def test_semicolon_reports_and_rows_without_source_id():
+    entries = parse_release_csv(synthetic_report())
+    assert [(e.kind, e.amount_cents) for e in entries] == [
+        ("mp_outflow", 1234567), ("mp_outflow", 250000), ("mp_interest", 8812), ("mp_outflow", 2000000),
+    ]
+    withdrawal = entries[3]
+    assert withdrawal.external_id.startswith("sha256:")
+    assert parse_release_csv(synthetic_report())[3].external_id == withdrawal.external_id
+    # 23:40 GMT-3 on the 12th stays on the 12th.
+    assert entries[1].date == "2026-10-12"
 
 
-def test_interest_markers_are_configurable():
-    entries = parse_release_csv(report_text(), interest_markers=("money_transfer",))
-    assert [e.kind for e in entries].count("mp_interest") == 1
-    assert any(e.amount_cents == 5000000 and e.kind == "mp_interest" for e in entries)
+# Shapes of real GET /v1/payments/{id} responses, trimmed to the fields that matter.
+CARD_PAYMENT = {
+    "operation_type": "regular_payment", "description": "Uber * pending",
+    "point_of_interaction": {"type": "MP_DEBIT_CARD", "transaction_data": {"commerce": {"name": "UBER * PENDING"}}},
+}
+QR_PAYMENT = {"operation_type": "regular_payment", "description": "Producto de Kiosco Ejemplo",
+              "point_of_interaction": {"type": "INSTORE", "transaction_data": {}}}
+TRANSFER = {"operation_type": "money_transfer", "description": "Varios",
+            "point_of_interaction": {"type": "PSP_TRANSFER", "transaction_data": {"bank_info": {}}}}
+TIP = {"operation_type": "regular_payment", "description": "Dlo*pedidosya propina",
+       "point_of_interaction": {"transaction_data": {"commerce": {"name": "DLO*PedidosYa Propina"}}}}
+
+
+def test_describe_payment():
+    assert describe_payment(CARD_PAYMENT) == "UBER * PENDING"
+    assert describe_payment(QR_PAYMENT) == "Producto de Kiosco Ejemplo"
+    assert describe_payment(TRANSFER) == "Transferencia enviada"
+    assert describe_payment({**TRANSFER, "description": "Alquiler"}) == "Transferencia enviada · Alquiler"
+    assert describe_payment({"operation_type": "regular_payment"}) is None
 
 
 def test_recent_report_files_filters_by_age_and_status():
@@ -87,16 +113,52 @@ class FakeHttp:
         return self.responses.pop(0)
 
 
-def test_run_daily_downloads_and_dedupes_across_reports():
+class RoutedHttp:
+    """Answers by URL suffix; unknown URLs are 404."""
+
+    def __init__(self, routes):
+        self.routes = routes
+        self.calls = []
+
+    def __call__(self, method, url, body=None):
+        self.calls.append(url)
+        for suffix, response in self.routes.items():
+            if url.endswith(suffix):
+                return response
+        return 404, b'{"message":"Payment not found"}'
+
+
+def test_run_daily_dedupes_across_reports_and_describes_payments():
     listing = json.dumps([
-        {"file_name": "r1.csv", "date_created": "2026-10-13T09:00:00Z", "status": "processed"},
-        {"file_name": "r2.csv", "date_created": "2026-10-14T09:00:00Z", "status": "processed"},
+        {"file_name": "r1.csv", "date_created": "2026-10-14T02:07:14.000-04:00", "status": "enabled"},
+        {"file_name": "r2.csv", "date_created": "2026-10-14T09:00:00Z", "status": "enabled"},
     ]).encode()
-    http = FakeHttp([(200, listing), (200, report_text().encode()), (200, report_text().encode())])
+    report = real_report().encode()
+    http = RoutedHttp({
+        "/list": (200, listing), "/r1.csv": (200, report), "/r2.csv": (200, report),
+        "/v1/payments/91000000001": (200, json.dumps(CARD_PAYMENT).encode()),
+        "/v1/payments/91000000002": (200, json.dumps(TRANSFER).encode()),
+        "/v1/payments/91000000009": (200, json.dumps(TIP).encode()),
+        # 91000000007 is unknown to the payments API: it keeps the report's label.
+    })
     entries, info = run_daily(Client("t", http=http), now=datetime(2026, 10, 14, 12, tzinfo=timezone.utc))
-    assert len(entries) == 4  # the overlapping second report adds nothing new
+    assert [(e.external_id.split(":")[0], e.description) for e in entries] == [
+        ("91000000001", "UBER * PENDING"),
+        ("91000000004", "Rendimientos"),
+        ("91000000007", "Pago"),
+        ("91000000009", "DLO*PedidosYa Propina"),
+        ("91000000002", "Transferencia enviada"),
+        ("91000000003", "Transferencia enviada"),  # payout: never looked up
+    ]
     assert info["reports"] == ["r1.csv", "r2.csv"]
-    assert [c[1].rsplit("/", 1)[1] for c in http.calls] == ["list", "r1.csv", "r2.csv"]
+    payment_calls = [u for u in http.calls if "/v1/payments/" in u]
+    assert len(payment_calls) == 4  # once per payment, not per report
+
+
+def test_payment_lookup_still_fails_loudly_on_a_bad_token():
+    client = Client("t", http=FakeHttp([(401, b"")]))
+    with pytest.raises(MercadoPagoError, match="access token"):
+        client.payment("1")
 
 
 def test_bad_token_raises_a_clear_error():
@@ -124,7 +186,7 @@ def test_ensure_config_creates_and_schedules():
     ]
     sent = http.calls[1][2]
     assert sent["display_timezone"] == "GMT-03"
-    assert sent["frequency"] == {"type": "daily", "value": 1, "hour": 6}
+    assert sent["frequency"] == {"type": "daily", "hour": 0}
     assert {"key": "SOURCE_ID"} in sent["columns"]
 
 

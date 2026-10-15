@@ -96,5 +96,7 @@ def test_settings_skip_disabled_kinds_and_old_dates():
     assert not settings.wants(Entry("santander", "b", "card_purchase", date="2026-10-09"))
     assert settings.wants(Entry("santander", "c", "card_purchase", date="2026-10-10"))
     assert not settings.wants(Entry("santander", "d", "transfer_in", date="2026-10-12"))  # off by default
+    assert not settings.wants(Entry("mercadopago", "f", "mp_interest", date="2026-10-12"))  # off by default
+    assert db.Settings({"kinds": {"mp_interest": True}}).wants(Entry("mercadopago", "g", "mp_interest"))
     # Unparsed emails always reach the Inbox.
     assert settings.wants(Entry("santander", "e", "unknown"))

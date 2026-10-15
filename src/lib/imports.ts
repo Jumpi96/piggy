@@ -37,7 +37,8 @@ export const DEFAULT_IMPORT_SETTINGS: ImportSettings = {
         // Most incoming transfers already exist as recurring items.
         transfer_in: false,
         mp_outflow: true,
-        mp_interest: true,
+        // Arrives daily in small amounts; usually reconciled rather than logged.
+        mp_interest: false,
     },
     since: null,
     card_rules: [],

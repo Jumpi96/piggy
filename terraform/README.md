@@ -88,10 +88,12 @@ public, and variables are printed in them, which would expose the address.
      --cli-binary-format raw-in-base64-out \
      --payload '{"action":"mp_backfill","begin_date":"2026-10-01","end_date":"2026-10-14"}' out.json
    ```
-4. **Verify against real data** (first run): `import_status.mercadopago` records the
-   `payment_methods_seen` and `inflow_descriptions` of each run. Check that purchases appear, which
-   `DESCRIPTION` marks interest ("rendimientos"; `DEFAULT_INTEREST_MARKERS` in
-   `lambdas/importer/importer/mercadopago.py`), and whether Mercado Pago credit-card purchases show up.
+4. What gets imported (checked against a real account): every payment, tip and transfer out of
+   the Mercado Pago balance, including purchases with Mercado Pago's own debit card. Purchases
+   are described from the payments API (merchant name). Transfers read "Transferencia enviada",
+   because the API doesn't expose the recipient. Interest (`asset_management`) is parsed but off
+   by default (Settings → Imports). Incoming money and refunds are never imported. Each run's
+   `payment_methods_seen` and `inflow_descriptions` are kept in `import_status.mercadopago`.
 
 ### Santander via Gmail forwarding (one time)
 
