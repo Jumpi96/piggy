@@ -8,10 +8,13 @@ import {
     fetchExchangeRate,
     fetchDistinctTags,
     insertRecurringRule, updateRecurringRule, fetchRecurringRule, migrateFutureTransactions,
-    confirmImportEntry, upsertParameter,
+    confirmImportEntry, confirmImportEntryAsInstallments, upsertParameter,
     type TransactionInput
 } from '../lib/api';
-import { DEFAULT_IMPORT_SETTINGS, IMPORT_SETTINGS_KEY, entryToDraft, matchCardRule } from '../lib/imports';
+import {
+    DEFAULT_IMPORT_SETTINGS, IMPORT_SETTINGS_KEY, entryInstallments, entryToDraft, installmentAmountCents,
+    installmentEndDate, installmentNote, matchCardRule,
+} from '../lib/imports';
 import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
 import type { Currency, CreditCard, Direction, ImportEntry, ImportSettings, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +24,13 @@ import { exceptionDatesFrom } from '../lib/recurringUtils';
 import { Loader2 } from 'lucide-react';
 import { AmountInput } from './AmountInput';
 import { evaluateAmountExpression } from '../lib/amountExpression';
+
+const shortDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+/** "Nov 3, 2026" for a YYYY-MM-DD date. */
+function formatShortDate(dateStr: string): string {
+    return shortDateFormat.format(parseLocalDate(dateStr));
+}
 
 export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId, importEntry, importSettings }: {
     initialData?: Transaction,
@@ -37,6 +47,18 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
         importEntry ? entryToDraft(importEntry, importSettings ?? DEFAULT_IMPORT_SETTINGS) : null
     );
     const [rememberCard, setRememberCard] = useState(false);
+    // Bought in cuotas: saved as a monthly recurring rule, one occurrence per cuota, unless
+    // the user switches it off to book the whole amount at once.
+    const cuotas = entryInstallments(importEntry);
+    const [asInstallments, setAsInstallments] = useState(cuotas != null);
+    const [installmentDraft] = useState(() =>
+        cuotas != null && importEntry?.amount_cents != null
+            ? {
+                amount: (installmentAmountCents(importEntry.amount_cents, cuotas) / 100).toString(),
+                note: installmentNote(importEntry.description, importEntry.amount_cents, cuotas),
+            }
+            : null
+    );
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +69,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
 
     // Form State
     const [direction, setDirection] = useState<Direction>(initialData?.direction || importDraft?.direction || 'expense');
-    const [amount, setAmount] = useState(initialData ? (initialData.amount_cents / 100).toString() : importDraft?.amount ?? '');
+    const [amount, setAmount] = useState(initialData ? (initialData.amount_cents / 100).toString() : installmentDraft?.amount ?? importDraft?.amount ?? '');
     const [currencyCode, setCurrencyCode] = useState(initialData?.currency_code || importDraft?.currency_code || 'USD');
     const [date, setDate] = useState(initialData?.date || importDraft?.date || getTodayLocalDate());
     const [category, setCategory] = useState(initialData?.category || '');
@@ -57,7 +79,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || importDraft?.payment_method || (!initialData && defaultCardId ? 'card' : 'cash'));
     const [cardId, setCardId] = useState(initialData?.credit_card_id || importDraft?.credit_card_id || (!initialData ? defaultCardId ?? '' : ''));
     const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
-    const [note, setNote] = useState(initialData?.note || importDraft?.note || '');
+    const [note, setNote] = useState(initialData?.note || installmentDraft?.note || importDraft?.note || '');
     const [editType, setEditType] = useState<'this' | 'future' | null>(null);
 
     // Tag Autocomplete State
@@ -164,7 +186,25 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             };
 
             if (importEntry) {
-                await confirmImportEntry(importEntry.id, { ...transactionMeta, recurring_rule_id: null });
+                if (asInstallments && cuotas != null) {
+                    // dateStr is the first cuota: the card's payment date for the purchase.
+                    await confirmImportEntryAsInstallments(importEntry.id, {
+                        direction,
+                        amount_cents: amountCents,
+                        currency_code: currencyCode,
+                        category,
+                        tag: finalTag,
+                        payment_method: method,
+                        credit_card_id: method === 'card' ? cardId : null,
+                        schedule_type: 'monthly_day',
+                        schedule_config: { n: 1 },
+                        start_date: dateStr,
+                        end_date: installmentEndDate(dateStr, cuotas),
+                        note: note || null,
+                    });
+                } else {
+                    await confirmImportEntry(importEntry.id, { ...transactionMeta, recurring_rule_id: null });
+                }
                 if (canRememberCard && rememberCard) {
                     const settings = importSettings ?? DEFAULT_IMPORT_SETTINGS;
                     await upsertParameter(IMPORT_SETTINGS_KEY, {
@@ -242,6 +282,32 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
 
     const filteredCategories = CATEGORIES.filter(c => c.direction === direction);
 
+    // Switching cuotas on/off swaps the amount (per cuota vs total) and the default note, but
+    // keeps a note the user already edited.
+    const toggleInstallments = (on: boolean) => {
+        setAsInstallments(on);
+        if (!installmentDraft || !importDraft) return;
+        setAmount(on ? installmentDraft.amount : importDraft.amount);
+        setNote(current => {
+            if (on && current === importDraft.note) return installmentDraft.note;
+            if (!on && current === installmentDraft.note) return importDraft.note;
+            return current;
+        });
+    };
+
+    // First and last cuota, as they will be saved: the first one on the card's payment date.
+    const installmentPreview = (() => {
+        if (!asInstallments || cuotas == null || !date) return null;
+        let first = parseLocalDate(date);
+        if (method === 'card') {
+            const card = creditCards.find(c => c.id === cardId);
+            if (!card) return null;
+            first = calculateCreditCardEffectiveDate(first, card.closing_day, card.payment_day);
+        }
+        const start = formatLocalDate(first);
+        return { start, end: installmentEndDate(start, cuotas) };
+    })();
+
     // Offer to remember a hand-picked card for this entry's card reference, unless a rule
     // already maps it to the chosen card.
     const canRememberCard = !!importEntry?.account_ref && method === 'card' && !!cardId &&
@@ -281,10 +347,23 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 </button>
             </div>
 
-            {/* Imported entry context */}
-            {importEntry && importEntry.installments != null && importEntry.installments > 1 && (
-                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-3 rounded-xl text-sm text-amber-800 dark:text-amber-200">
-                    Bought in {importEntry.installments} cuotas. You may prefer an installment recurring rule and dismiss this entry instead.
+            {/* Imported entry bought in cuotas */}
+            {cuotas != null && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/30 p-3 rounded-xl text-sm text-amber-800 dark:text-amber-200 space-y-1">
+                    <label className="flex items-center gap-2 font-medium cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={asInstallments}
+                            onChange={(e) => toggleInstallments(e.target.checked)}
+                            className="w-4 h-4 accent-amber-600"
+                        />
+                        Pay in {cuotas} cuotas
+                    </label>
+                    <p className="text-xs">
+                        {installmentPreview
+                            ? <>Saved as a monthly recurring item: {cuotas} cuotas from {formatShortDate(installmentPreview.start)} to {formatShortDate(installmentPreview.end)}.</>
+                            : <>Bought in {cuotas} cuotas. Switch this on to save one monthly recurring item per cuota.</>}
+                    </p>
                 </div>
             )}
 
@@ -324,7 +403,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             {/* Amount & Currency */}
             <div className="grid grid-cols-3 gap-4">
                 <div className="col-span-2 space-y-2 relative">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{asInstallments && cuotas != null ? 'Amount per cuota' : 'Amount'}</label>
 
                     <AmountInput
                         value={amount}
