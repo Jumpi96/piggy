@@ -1,4 +1,8 @@
-"""Builders for synthetic test emails (stand-ins until real Santander samples are added)."""
+"""Builders for synthetic test emails.
+
+They cover what the real fixtures don't (labels with a colon, transfers received,
+unrecognized mail) and drive the gate checks.
+"""
 from email.message import EmailMessage
 
 SANTANDER = "Santander <mensajesyavisos@mails.santander.com.ar>"

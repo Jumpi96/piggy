@@ -1,0 +1,738 @@
+Date: Fri, 02 Oct 2026 12:41:35 -0300
+From: Aviso Santander <mensajesyavisos@mails.santander.com.ar>
+To: me@gmail.com
+Message-ID: <transfer-1@sar-mya-processorapi.example>
+Subject: Aviso de transferencia
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============8581958474874286917=="
+
+--===============8581958474874286917==
+MIME-Version: 1.0
+Content-Type: multipart/related;
+ boundary="===============7497539463168640505=="
+
+--===============7497539463168640505==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<?xml version=3D"1.0" encoding=3D"UTF-8"?>
+<html xmlns:fo=3D"http://www.w3.org/1999/XSL/Format">
+          <body>
+       =20
+               =20
+                       =20
+                               =20
+<html>
+
+<head>
+    <meta content=3D"text/html; charset=3Dutf-8" http-equiv=3D"Content-Type"/>
+    <meta content=3D"width=3Ddevice-width, initial-scale=3D1.0" name=3D"viewp=
+ort"/>
+    <title>Aviso de transferencia confirmada</title>
+    <style>
+        body,
+        table,
+        thead,
+        tbody,
+        tr,
+        td,
+        img,
+        a,
+        p {
+            padding: 0;
+            margin: 0;
+            border: none;
+            border-spacing: 0px;
+            border-collapse: collapse;
+            vertical-align: middle;
+            color: #767676;
+            font-family: 'Helvetica', 'Arial', sans-serif;
+        }
+
+        .wrapper {
+            padding-left: 10px;
+            padding-right: 10px;
+        }
+
+        .border {
+            margin-top: 24px;
+            border: 1px solid #cccccc;
+        }
+
+        p {
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: normal;
+            color: #EC0000;
+            margin: 24px 0 0 24px;
+        }
+
+        .item-title,
+        .item-data {
+            width: 252px;
+            border-bottom: 1px solid #767676;
+            font-size: 16px;
+        }
+
+        .last {
+            border: none;
+        }
+
+        .item-title {
+            text-align: left;
+        }
+
+        .item-data {
+            font-weight: bold;
+            text-align: right;
+        }
+
+        .legal-text {
+            font-size: 14px;
+            line-height: 1.4;
+            color: #818181;
+        }
+
+        .legal-text b {
+            color: #444444
+        }
+
+        .legal-text .red {
+            color: #EC0000;
+        }
+
+        .header-img {
+            background: url('https://wap.santander.com.ar/mensaje/header_step=
+_celeste.png') no-repeat;
+            background-size: cover;
+            background-position: center;
+            height: 208px;
+            width: 100%;
+            display: block;
+            padding-top: 1px;
+        }
+
+        @media only screen and (max-width: 600px) {
+            .wrapper .section {
+                width: 100%;
+            }
+
+            p,
+            a,
+            .legal-text,
+            .text-box {
+                font-size: 20px;
+            }
+        }
+
+    </style>
+</head>
+
+<body style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-c=
+ollapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helveti=
+ca', 'Arial', sans-serif;">
+    <table style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;bor=
+der-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'He=
+lvetica', 'Arial', sans-serif;" width=3D"100%">
+        <tbody style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px=
+;border-collapse: collapse;vertical-align: middle;color: #767676;font-family:=
+ 'Helvetica', 'Arial', sans-serif;">
+            <tr style=3D"padding: 0;margin: 0;border: none;border-spacing: 0p=
+x;border-collapse: collapse;vertical-align: middle;color: #767676;font-family=
+: 'Helvetica', 'Arial', sans-serif;">
+                <td style=3D"padding: 0;margin: 0;border: none;border-spacing=
+: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-fa=
+mily: 'Helvetica', 'Arial', sans-serif;padding-left: 10px;padding-right: 10px=
+;" align=3D"center" width=3D"600" class=3D"wrapper">
+                    <table style=3D"padding: 0;margin: 0;border: none;border-=
+spacing: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;=
+font-family: 'Helvetica', 'Arial', sans-serif;" width=3D"600" cellspacing=3D"=
+0" cellpadding=3D"0" class=3D"section header">
+                        <tbody style=3D"padding: 0;margin: 0;border: none;bor=
+der-spacing: 0px;border-collapse: collapse;vertical-align: middle;color: #767=
+676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                            <tr style=3D"padding: 0;margin: 0;border: none;bo=
+rder-spacing: 0px;border-collapse: collapse;vertical-align: middle;color: #76=
+7676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                <td style=3D"padding: 0;margin: 0;border: non=
+e;border-spacing: 0px;border-collapse: collapse;vertical-align: middle;color:=
+ #767676;font-family: 'Helvetica', 'Arial', sans-serif;"><img style=3D"paddin=
+g: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;ver=
+tical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-se=
+rif;" height=3D"20px" width=3D"20px" src=3D"https://wap.santander.com.ar/mens=
+aje/expander.gif"/></td>
+                                <td style=3D"padding: 0;margin: 0;border: non=
+e;border-spacing: 0px;border-collapse: collapse;vertical-align: middle;color:=
+ #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                    <table style=3D"padding: 0;margin: 0;bord=
+er: 1px solid #cccccc;border-spacing: 0px;border-collapse: collapse;vertical-=
+align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;ma=
+rgin-top: 24px;" class=3D"border">
+                                        <tr style=3D"padding: 0;margin: 0;bor=
+der: none;border-spacing: 0px;border-collapse: collapse;vertical-align: middl=
+e;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                            <td style=3D"padding: 0;margin: 0=
+;border: none;border-spacing: 0px;border-collapse: collapse;vertical-align: m=
+iddle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                <table style=3D"padding: 0;ma=
+rgin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertical-a=
+lign: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                    <tr style=3D"padding: 0;m=
+argin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertical-=
+align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" height=3D"24" width=3D"140" alt=3D"" src=3D"htt=
+ps://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" height=3D"24" width=3D"280" alt=3D"" src=3D"htt=
+ps://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" height=3D"24" width=3D"140" alt=3D"" src=3D"htt=
+ps://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                    </tr>
+                                                    <tr style=3D"padding: 0;m=
+argin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertical-=
+align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" width=3D"164" alt=3D"Santander" src=3D"https://=
+wap.santander.com.ar/mensaje/santander.png"/></td>
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" height=3D"48" width=3D"280" alt=3D"picsum" src=
+=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"/>
+                                                    </tr>
+                                                </table>
+                                            </td>
+                                        </tr>
+                                        <tr style=3D"padding: 0;margin: 0;bor=
+der: none;border-spacing: 0px;border-collapse: collapse;vertical-align: middl=
+e;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                            <td style=3D"padding: 0;margin: 0=
+;border: none;border-spacing: 0px;border-collapse: collapse;vertical-align: m=
+iddle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;background=
+: url(https://wap.santander.com.ar/mensaje/header_step_celeste.png) no-repeat=
+;background-size: cover;background-position: center;height: 208px;width: 100%=
+;display: block;padding-top: 1px;" class=3D"header-img">
+                                               =20
+                                                        <h1 style=3D"font-siz=
+e: 32px;font-weight: normal;color: #9E3667;margin: 24px 0 0 24px;">Informaci=
+=C3=B3n sobre tu transferencia</h1>
+                                                   =20
+                                            </td>
+                                        </tr>
+                                        <tr style=3D"padding: 0;margin: 0;bor=
+der: none;border-spacing: 0px;border-collapse: collapse;vertical-align: middl=
+e;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                            <td style=3D"padding: 0;margin: 0=
+;border: none;border-spacing: 0px;border-collapse: collapse;vertical-align: m=
+iddle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                <p style=3D"padding: 25px; fo=
+nt-size:21px; line-height:28px; font-weight:300; color:#7b8486; display:block=
+;" class=3D"legal-text">
+                                                    Se realiz=C3=B3 la siguie=
+nte transferencia a tu nombre:
+                                                </p>
+                                            </td>
+                                        </tr>
+                                        <tr style=3D"padding: 0;margin: 0;bor=
+der: none;border-spacing: 0px;border-collapse: collapse;vertical-align: middl=
+e;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                            <td style=3D"padding: 0;margin: 0=
+;border: none;border-spacing: 0px;border-collapse: collapse;vertical-align: m=
+iddle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                <table style=3D"padding: 0;ma=
+rgin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertical-a=
+lign: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                    <tr style=3D"padding: 0;m=
+argin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertical-=
+align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D"" src=3D"http=
+s://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;">
+                                                            <table style=3D"p=
+adding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collaps=
+e;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sa=
+ns-serif;">
+                                                                <tr style=3D"=
+padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collap=
+se;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', s=
+ans-serif;">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/top-left.png"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', =
+sans-serif;background-color: #f5f5f5;" class=3D"gris"><img style=3D"padding: =
+0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertic=
+al-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif=
+;" height=3D"24" width=3D"120" alt=3D"" src=3D"https://wap.santander.com.ar/m=
+ensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', =
+sans-serif;background-color: #f5f5f5;" class=3D"gris"><img style=3D"padding: =
+0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertic=
+al-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif=
+;" height=3D"24" width=3D"304" alt=3D"" src=3D"https://wap.santander.com.ar/m=
+ensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/top-right.png"/></td>
+                                                                </tr>
+                                                               =20
+                                                                       =20
+                                                               <tr style=3D"p=
+adding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collaps=
+e;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', sans-=
+serif;background-color: #f5f5f5;" class=3D"gris">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"56" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;t=
+ext-align: left;" class=3D"item-title">Destinatario</td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;f=
+ont-weight: bold;text-align: right;" class=3D"item-data">
+                                                                        GOMEZ=
+ MARIA  LAURA
+                                                                    </td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                </tr>        =
+                  =20
+                                                               =20
+                                                               =20
+                                                                <tr style=3D"=
+padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collap=
+se;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', sans=
+-serif;background-color: #f5f5f5;" class=3D"gris">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"56" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;t=
+ext-align: left;" class=3D"item-title">Cuenta de origen</td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 270px;border-bottom: 1px solid #767676;font-size: 16px;f=
+ont-weight: bold;text-align: right;" class=3D"item-data">
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                            C=
+uenta en Pesos                                                               =
+                                                                             =
+            =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                        XXX-X=
+XX 1001
+                                                                    </td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                </tr>        =
+          =20
+                                                               =20
+                                                                <tr style=3D"=
+padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collap=
+se;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', sans=
+-serif;background-color: #f5f5f5;" class=3D"gris">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"56" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;t=
+ext-align: left;" class=3D"item-title">Cuenta de destino</td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 270px;border-bottom: 1px solid #767676;font-size: 16px;f=
+ont-weight: bold;text-align: right;" class=3D"item-data">
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                            C=
+uenta en Pesos                                                               =
+                                                                             =
+           =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                         XXX-=
+XXX 2002
+                                                                    </td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                </tr>
+                                                               =20
+                                                               =20
+                                                               =20
+                                                               =20
+                                                                <tr style=3D"=
+padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collap=
+se;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', sans=
+-serif;background-color: #f5f5f5;" class=3D"gris">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"56" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;t=
+ext-align: left;" class=3D"item-title">Importe</td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;f=
+ont-weight: bold;text-align: right;" class=3D"item-data">
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                            $
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                       =20
+                                                                        150.0=
+00,00
+                                                                    </td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                </tr>
+                                                                <tr style=3D"=
+padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collap=
+se;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', sans=
+-serif;background-color: #f5f5f5;" class=3D"gris">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"56" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;t=
+ext-align: left;" class=3D"item-title last">N=C3=BAmero de comprobante</td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;width: 252px;border-bottom: 1px solid #767676;font-size: 16px;f=
+ont-weight: bold;text-align: right;" class=3D"item-data last">
+                                                                        10000=
+001
+                                                                    </td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                </tr>
+                                                                <tr style=3D"=
+padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collap=
+se;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', s=
+ans-serif;">
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/bottom-left.png"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', =
+sans-serif;background-color: #f5f5f5;" class=3D"gris"><img style=3D"padding: =
+0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertic=
+al-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif=
+;" src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: top;color: #767676;font-family: 'Helvetica', 'Arial', =
+sans-serif;background-color: #f5f5f5;" class=3D"gris"><img style=3D"padding: =
+0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertic=
+al-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif=
+;" src=3D"https://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                                    <td style=
+=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: co=
+llapse;vertical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial=
+', sans-serif;"><img style=3D"padding: 0;margin: 0;border: none;border-spacin=
+g: 0px;border-collapse: collapse;vertical-align: middle;color: #767676;font-f=
+amily: 'Helvetica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D""=
+ src=3D"https://wap.santander.com.ar/mensaje/bottom-right.png"/></td>
+                                                                </tr>
+
+                                                            </table>
+
+                                                        </td>
+                                                        <td style=3D"padding:=
+ 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;verti=
+cal-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-seri=
+f;"><img style=3D"padding: 0;margin: 0;border: none;border-spacing: 0px;borde=
+r-collapse: collapse;vertical-align: middle;color: #767676;font-family: 'Helv=
+etica', 'Arial', sans-serif;" height=3D"24" width=3D"24" alt=3D"" src=3D"http=
+s://wap.santander.com.ar/mensaje/expander.gif"/></td>
+                                                    </tr>
+
+                                                </table>
+                                            </td>
+                                        </tr>
+                                       =20
+                                        <tr>
+                                            <td bgcolor=3D"#ffffff" height=3D=
+"32" width=3D"100%" valign=3D"top" align=3D"left"/>
+                                        </tr>
+                                       =20
+                                        <tr style=3D"padding: 0;margin: 0;bor=
+der: none;border-spacing: 0px;border-collapse: collapse;vertical-align: middl=
+e;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                            <td style=3D"padding: 0;margin: 0=
+;border: none;border-spacing: 0px;border-collapse: collapse;vertical-align: m=
+iddle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                                <p style=3D"padding: 25px; fo=
+nt-size:21px; line-height:28px; font-weight:300; color:#7b8486; display:block=
+;">
+                                                    Para m=C3=A1s informaci=
+=C3=B3n, ingres=C3=A1 en <a target=3D"_blank" href=3D"https://www.santander.c=
+om.ar" style=3D"color:#ec0000; text-decoration:underline; outline:none; font-=
+weight:600;">Online Banking</a> o la App Santander &gt; <strong>Transferencia=
+s</strong>.
+						                		</p>
+                                            </td>
+                                        </tr>
+                                       =20
+                                       =20
+                                        <tr>
+                                            <td bgcolor=3D"#ffffff" height=3D=
+"32" width=3D"100%" valign=3D"top" align=3D"left"/>
+                                        </tr>
+                                        <tr>
+                                            <td bgcolor=3D"#cfd5d5" height=3D=
+"1" width=3D"100%" valign=3D"top" align=3D"left"/>
+                                        </tr>
+                                        <tr>
+                                            <td bgcolor=3D"#ffffff" height=3D=
+"32" width=3D"100%" valign=3D"top" align=3D"left"/>
+                                        </tr>
+                                        <tr>
+                                            <td style=3D"border-collapse:coll=
+apse;line-height:0;" valign=3D"top" align=3D"center"><a title=3D"santander.co=
+m.ar" href=3D"https://www.santander.com.ar" target=3D"_blank"><img border=3D"=
+0" style=3D"display:block;" height=3D"41" width=3D"221" alt=3D"santander.com.=
+ar" src=3D"https://wap.santander.com.ar/mensaje/emkt_sr_40_v1.jpg"/></a></td>
+                                        </tr>
+                                        <tr>
+                                            <td bgcolor=3D"#ffffff" height=3D=
+"32" width=3D"100%" valign=3D"top" align=3D"left"/>
+                                        </tr>
+                                        <tr>
+                                            <td bgcolor=3D"#cfd5d5" height=3D=
+"1" width=3D"100%" valign=3D"top" align=3D"left"/>
+                                        </tr>
+                                        <tr style=3D"padding: 0;margin: 0;bor=
+der: none;border-spacing: 0px;border-collapse: collapse;vertical-align: middl=
+e;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                            <td style=3D"padding: 0;margin: 0=
+;border: none;border-spacing: 0px;border-collapse: collapse;vertical-align: m=
+iddle;color: #767676;font-family: 'Helvetica', 'Arial', sans-serif;">
+                                               =20
+                                                <p style=3D"padding: 24px;mar=
+gin: 0;border: none;border-spacing: 0px;border-collapse: collapse;vertical-al=
+ign: middle;color: #818181;font-family: 'Helvetica', 'Arial', sans-serif;line=
+-height: 1.4;font-size: 12px;" class=3D"legal-text">
+                                                    <b style=3D"color: #EC000=
+0;" class=3D"red">Oper=C3=A1 Seguro</b>
+                                                    <br/>
+                                                    <br/>
+                                                    <b style=3D"color: #44444=
+4;">=C2=A1Nunca te vamos a pedir que nos digas tus claves, tu token de seguri=
+dad, ni los datos de tu tarjeta de coordenadas por mail, tel=C3=B3fono o rede=
+s sociales!</b>
+                                                    <br/>
+                                                    <br/>
+													Tus claves, datos personales y n=C3=BAmeros de cuentas bancarias=
+ son privados. =C2=A1No los compartas!                                       =
+             <br/>
+                                                    <a target=3D"_blank" href=
+=3D"https://www.santander.com.ar/banco/online/personas/canales-de-atencion/op=
+era-seguro" style=3D"color:#ec0000; text-decoration:underline; outline:none; =
+font-weight:600;">
+                                                        Conoc=C3=A9 m=C3=A1s.
+                                                    </a>
+                                                    <br/>
+                                                    <br/>
+                                                    No respondas a este mensa=
+je. Si ten=C3=A9s consultas
+                                                    llamanos a Super L=C3=ADn=
+ea
+                                                    al 4345-2400 o desde el i=
+nterior del pa=C3=ADs,
+                                                    al 0810-333-2400; si pref=
+er=C3=ADs acercate a tu sucursal
+                                                    en d=C3=ADas y horarios d=
+isponibles.
+                                                    Para modificar tu
+                                                    suscripci=C3=B3n o datos =
+de
+                                                    contacto ingresa en
+                                                    <a target=3D"_blank" href=
+=3D"https://www.santander.com.ar" style=3D"color:#ec0000; text-decoration:und=
+erline; outline:none; font-weight:600;">Online Banking</a>
+                                                    desde tu perfil en Mensaj=
+es y avisos.
+
+                                                </p>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                </td>
+                                <td style=3D"padding: 0;margin: 0;border: non=
+e;border-spacing: 0px;border-collapse: collapse;vertical-align: middle;color:=
+ #767676;font-family: 'Helvetica', 'Arial', sans-serif;"><img style=3D"paddin=
+g: 0;margin: 0;border: none;border-spacing: 0px;border-collapse: collapse;ver=
+tical-align: middle;color: #767676;font-family: 'Helvetica', 'Arial', sans-se=
+rif;" height=3D"20px" width=3D"20px" src=3D"https://wap.santander.com.ar/mens=
+aje/expander.gif"/></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+   =20
+    <img width=3D"1" height=3D"1" border=3D"0" src=3D"https://www.mya.santand=
+errio.com.ar/fesuscripcion/ra.jsp?id=3DN/A&amp;entitlement=3DRio/Alta_sorpres=
+a&amp;destino=3D&amp;tipo=3DA&amp;msid=3D"/>
+
+</body>
+
+</html>
+
+   =20
+                           =20
+                   =20
+           =20
+              <img style=3D"&quot;border=3D&quot;0&quot; height=3D&quot;1&quo=
+t; width=3D&quot;1&quot;" alt=3D"" src=3D"https://notifications.santander.com=
+.ar/notifications/action-register/open/80-20261002-124135-90478293-32421710"/>
+        </body>
+      </html>
+
+--===============7497539463168640505==--
+
+--===============8581958474874286917==--

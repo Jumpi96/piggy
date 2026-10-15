@@ -5,8 +5,9 @@ Tolerant by design: it looks for labelled fields and amount/date patterns anywhe
 text instead of depending on one template's layout. Anything it can't make sense of still
 becomes an entry, with `parse_error` set, so it shows up in the Inbox as "needs review".
 
-NOTE: the keywords and labels below are a first pass. They get tuned against real alert
-emails (tests/fixtures/), including which text identifies each credit card (`account_ref`).
+The keywords and labels are tuned against real alerts (tests/fixtures/santander_*.eml). In
+those, every label stands on its own line with no colon ("Comercio" / "PEDIDOSYA*..."), and
+the card is named as "Tarjeta Santander Visa Crédito terminada en NNNN" (`account_ref`).
 """
 from __future__ import annotations
 
@@ -23,7 +24,7 @@ RAW_BODY_LIMIT = 8000
 # (kind, keyword groups): every group needs at least one keyword present. Checked in order.
 KIND_RULES: list[tuple[str, list[tuple[str, ...]]]] = [
     ("transfer_in", [("transferencia",), ("recibiste", "recibida", "te transfirieron", "te enviaron", "acreditamos")]),
-    ("transfer_out", [("transferencia",), ("realizaste", "enviaste", "enviada", "realizada", "debitamos")]),
+    ("transfer_out", [("transferencia",), ("realizaste", "se realizo", "enviaste", "enviada", "realizada", "debitamos")]),
     ("debit_purchase", [("compra", "consumo", "pago"), ("debito",)]),
     ("card_purchase", [("compra", "consumo"), ("credito", "visa", "american express", "amex", "mastercard", "tarjeta")]),
 ]
@@ -108,10 +109,14 @@ def classify(text: str) -> str:
 
 
 def _labelled_value(lines: list[str], labels: tuple[str, ...]) -> Optional[str]:
-    """Value after 'Label:' on the same line, or on the next line when the label stands alone."""
+    """Value after 'Label:' on the same line, or on the next line when the label stands alone
+    (with or without a colon)."""
     for i, line in enumerate(lines):
         norm = normalize(line)
         for label in labels:
+            if norm == label:
+                following = lines[i + 1].strip() if i + 1 < len(lines) else ""
+                return following or None
             m = re.match(rf"^{re.escape(label)}\s*:\s*(.*)$", norm)
             if not m:
                 continue
