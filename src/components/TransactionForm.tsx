@@ -76,7 +76,9 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [tag, setTag] = useState(initialData?.tag || '');
     // When opening a fresh form from the Credit Report (no initialData), preselect
     // the card the user is currently reviewing so a new item lands on that card.
-    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || importDraft?.payment_method || (!initialData && defaultCardId ? 'card' : 'cash'));
+    // Cuotas are always on a credit card: with no card rule for the entry, start on 'card'
+    // with no card picked, so it has to be chosen rather than silently saved as cash.
+    const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || (cuotas != null ? 'card' : importDraft?.payment_method) || (!initialData && defaultCardId ? 'card' : 'cash'));
     const [cardId, setCardId] = useState(initialData?.credit_card_id || importDraft?.credit_card_id || (!initialData ? defaultCardId ?? '' : ''));
     const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
     const [note, setNote] = useState(initialData?.note || installmentDraft?.note || importDraft?.note || '');
@@ -136,6 +138,9 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             if (!category) throw new Error("Category is required");
             if (!tag) throw new Error("Tag is required");
             if (method === 'card' && !cardId) throw new Error("Credit card is required");
+            if (asInstallments && cuotas != null && method !== 'card') {
+                throw new Error("Cuotas are paid with a credit card: pick the card, or switch cuotas off");
+            }
 
             // Normalize tag: if it matches an existing tag case-and-accent-insensitively, use that casing
             const normTag = normalizeForComparison(tag);
@@ -360,9 +365,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                         Pay in {cuotas} cuotas
                     </label>
                     <p className="text-xs">
-                        {installmentPreview
-                            ? <>Saved as a monthly recurring item: {cuotas} cuotas from {formatShortDate(installmentPreview.start)} to {formatShortDate(installmentPreview.end)}.</>
-                            : <>Bought in {cuotas} cuotas. Switch this on to save one monthly recurring item per cuota.</>}
+                        {!asInstallments
+                            ? <>Bought in {cuotas} cuotas. Switch this on to save one monthly recurring item per cuota.</>
+                            : installmentPreview
+                                ? <>Saved as a monthly recurring item: {cuotas} cuotas from {formatShortDate(installmentPreview.start)} to {formatShortDate(installmentPreview.end)}.</>
+                                : <>Saved as a monthly recurring item, one per cuota. Pick the credit card to see when they fall.</>}
                     </p>
                 </div>
             )}
