@@ -60,6 +60,8 @@ Movements from Mercado Pago and Santander land in the app's **Inbox** as unconfi
 add (choosing category and tag) or dismiss each one. Each importer is off until enabled through
 GitHub repository **variables** (Settings → Secrets and variables → Actions → Variables) and
 **secrets**, which `deploy.yml` passes to Terraform.
+`INBOUND_ADDRESS` and `FORWARDING_GMAIL` are secrets, not variables: this repo's Actions logs are
+public, and variables are printed in them, which would expose the address.
 
 | Name | Kind | Used by | Value |
 |---|---|---|---|
@@ -67,8 +69,8 @@ GitHub repository **variables** (Settings → Secrets and variables → Actions 
 | `ENABLE_MP_IMPORT` | variable | MP | `true` |
 | `MP_ACCESS_TOKEN` | secret | MP | Production access token of your Mercado Pago app |
 | `ENABLE_SANTANDER_IMPORT` | variable | Santander | `true` |
-| `INBOUND_ADDRESS` | variable | Santander | e.g. `santander-<random>@in.<yourdomain>` (pick a hard-to-guess local part) |
-| `FORWARDING_GMAIL` | variable | Santander | The Gmail address that receives the alerts |
+| `INBOUND_ADDRESS` | secret | Santander | e.g. `santander-<random>@in.<yourdomain>` (pick a hard-to-guess local part) |
+| `FORWARDING_GMAIL` | secret | Santander | The Gmail address that receives the alerts |
 | `SANTANDER_SENDER` | variable | Santander | Alert senders, comma-separated addresses or domains (default `santander.com.ar`) |
 | `EXISTING_SES_RULE_SET_NAME` | variable | Santander | Only if another SES receipt rule set is already active in us-east-1 |
 

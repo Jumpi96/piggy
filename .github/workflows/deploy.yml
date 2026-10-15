@@ -48,9 +48,9 @@ jobs:
           -var="enable_santander_import=${{ vars.ENABLE_SANTANDER_IMPORT || 'false' }}"
           -var="piggy_user_id=${{ vars.PIGGY_USER_ID }}"
           -var="mp_access_token=${{ secrets.MP_ACCESS_TOKEN }}"
-          -var="inbound_address=${{ vars.INBOUND_ADDRESS }}"
+          -var="inbound_address=${{ secrets.INBOUND_ADDRESS }}"
           -var="santander_sender=${{ vars.SANTANDER_SENDER || 'santander.com.ar' }}"
-          -var="forwarding_gmail=${{ vars.FORWARDING_GMAIL }}"
+          -var="forwarding_gmail=${{ secrets.FORWARDING_GMAIL }}"
           -var="existing_ses_rule_set_name=${{ vars.EXISTING_SES_RULE_SET_NAME }}"
           -out=tfplan
 

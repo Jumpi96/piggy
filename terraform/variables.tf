@@ -49,6 +49,7 @@ variable "inbound_address" {
   description = "Address SES receives Santander alerts on, e.g. santander-<random>@in.example.com"
   type        = string
   default     = ""
+  sensitive   = true
 }
 
 variable "santander_sender" {
@@ -61,6 +62,7 @@ variable "forwarding_gmail" {
   description = "Gmail address that forwards the alerts (only mail forwarded by it is accepted)"
   type        = string
   default     = ""
+  sensitive   = true
 }
 
 variable "existing_ses_rule_set_name" {
