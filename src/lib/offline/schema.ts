@@ -18,6 +18,10 @@ export type SyncTableName = typeof SYNC_TABLES[number];
 // Balance ledger: signed amounts (> 0 = unexpected expense to cover from savings,
 // < 0 = unexpected income) whose date puts them in a period. transaction_id only records
 // where an entry came from (no local FK, like import_entries). Shared with the v7 migration.
+// _sync_meta key: transactions flagged to_be_balanced that still had queued changes when
+// schema v7 dropped the flag, waiting for an online check (sync/legacyBalance.ts).
+export const LEGACY_BALANCE_FLAGS_KEY = 'legacy_balance_flags';
+
 export const BALANCE_ENTRIES_SQL = `
 CREATE TABLE IF NOT EXISTS balance_entries (
     id TEXT PRIMARY KEY,

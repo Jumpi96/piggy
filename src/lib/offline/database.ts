@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { IdbFs } from '@electric-sql/pglite';
-import { BALANCE_ENTRIES_SQL, SCHEMA_SQL, SCHEMA_VERSION } from './schema';
+import { BALANCE_ENTRIES_SQL, LEGACY_BALANCE_FLAGS_KEY, SCHEMA_SQL, SCHEMA_VERSION } from './schema';
 
 const DB_NAME = 'piggy-offline-db';
 
@@ -66,7 +66,8 @@ export async function getDatabaseAsync(): Promise<PGlite> {
     return initDatabase();
 }
 
-async function runMigrations(database: PGlite): Promise<void> {
+/** Exported for tests only; the app runs it from initDatabase(). */
+export async function runMigrations(database: PGlite): Promise<void> {
     // Check current schema version
     const versionResult = await database.query<{ value: string }>(`
         SELECT value FROM _sync_meta WHERE key = 'schema_version'
@@ -174,6 +175,33 @@ async function runMigrations(database: PGlite): Promise<void> {
                 // would duplicate them. If an older build already pulled past the migration,
                 // they sit below the watermark — clearing the reconcile stamp makes the next
                 // sync compare counts and resync the new table (same as v6).
+                //
+                // Except flags the server may never see: a flagged transaction with changes
+                // still queued here. Its push now strips the flag, so the server migration
+                // can't convert it. Remember those before the column goes; once online, sync
+                // creates an entry for each one the server doesn't already have
+                // (convertLegacyBalanceFlags).
+                const hasFlag = await database.query(`
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'transactions' AND column_name = 'to_be_balanced'
+                `);
+                if (hasFlag.rows.length > 0) {
+                    const unsynced = await database.query(`
+                        SELECT id, user_id, date, direction, amount_cents, currency_code, exchange_rate_id
+                        FROM transactions t
+                        WHERE t.to_be_balanced AND t.deleted_at IS NULL
+                          AND EXISTS (
+                              SELECT 1 FROM _pending_changes p
+                              WHERE p.table_name = 'transactions' AND p.record_id = t.id AND p.synced_at IS NULL
+                          )
+                    `);
+                    if (unsynced.rows.length > 0) {
+                        await database.query(`
+                            INSERT INTO _sync_meta (key, value) VALUES ($1, $2)
+                            ON CONFLICT (key) DO UPDATE SET value = $2
+                        `, [LEGACY_BALANCE_FLAGS_KEY, JSON.stringify(unsynced.rows)]);
+                    }
+                }
                 await database.exec(BALANCE_ENTRIES_SQL);
                 await database.exec(`ALTER TABLE transactions DROP COLUMN IF EXISTS to_be_balanced;`);
                 await database.query(`DELETE FROM _sync_meta WHERE key = 'last_reconcile_at'`);

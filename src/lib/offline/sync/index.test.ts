@@ -22,6 +22,8 @@ vi.mock('./pull', () => ({
     discardLocalChanges: vi.fn(),
 }));
 vi.mock('./reconcile', () => ({ checkReconciliation: () => reconcileMock() }));
+const legacyMock = vi.fn(() => Promise.resolve(0));
+vi.mock('./legacyBalance', () => ({ convertLegacyBalanceFlags: () => legacyMock() }));
 vi.mock('./queue', () => ({
     getPendingChangesCount: () => Promise.resolve(0),
     getFailedChanges: vi.fn(),
@@ -161,3 +163,37 @@ describe('resume (visibilitychange) cooldown', () => {
         expect(pullMock).toHaveBeenCalledTimes(2);
     });
 });
+
+describe('legacy balance flags', () => {
+    beforeEach(() => {
+        meta.clear();
+        pushMock.mockReset().mockResolvedValue(okPush);
+        pullMock.mockReset().mockResolvedValue(okPull);
+        reconcileMock.mockReset().mockResolvedValue(cleanReconcile);
+        legacyMock.mockReset();
+    });
+
+    it('pushes again when it created entries', async () => {
+        legacyMock.mockResolvedValue(2);
+        const { runSync } = await load();
+        await runSync();
+        expect(legacyMock).toHaveBeenCalledTimes(1);
+        expect(pushMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not push again when there was nothing to convert', async () => {
+        legacyMock.mockResolvedValue(0);
+        const { runSync } = await load();
+        await runSync();
+        expect(pushMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('never fails the sync', async () => {
+        legacyMock.mockRejectedValue(new Error('boom'));
+        const { runSync } = await load();
+        const result = await runSync();
+        expect(result.success).toBe(true);
+        expect(pullMock).toHaveBeenCalledTimes(1);
+    });
+});
+

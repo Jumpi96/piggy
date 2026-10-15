@@ -3,6 +3,7 @@ import { pushChanges, type PushResult } from './push';
 import { getPendingChangesCount, getFailedChanges, resetFailedChange, type PendingChange } from './queue';
 import { getLastSyncTimestamp, getSyncMeta, setSyncMeta } from '../database';
 import { checkReconciliation } from './reconcile';
+import { convertLegacyBalanceFlags } from './legacyBalance';
 
 export interface SyncResult {
     success: boolean;
@@ -104,6 +105,16 @@ export async function runSync({ forceReconcile = false }: RunSyncOptions = {}): 
 
         // Push first - ensure local changes get to server before pulling
         const pushResult = await pushChanges();
+
+        // Balance flags set offline before schema v7 dropped them: now that their
+        // transactions have been pushed, add the entries the server migration couldn't.
+        try {
+            if (await convertLegacyBalanceFlags() > 0) {
+                await pushChanges();
+            }
+        } catch (err) {
+            console.error('[Sync] Converting legacy balance flags failed, will retry', err);
+        }
 
         // Then pull - get latest server state
         const pullResult = await pullChanges();
