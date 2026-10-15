@@ -40,7 +40,19 @@ jobs:
         run: terraform init
 
       - name: Terraform Plan
-        run: terraform plan -var="supabase_db_url=${{ secrets.SUPABASE_DB_URL }}" -var="alert_email=${{ secrets.ALERT_EMAIL }}" -out=tfplan
+        run: >-
+          terraform plan
+          -var="supabase_db_url=${{ secrets.SUPABASE_DB_URL }}"
+          -var="alert_email=${{ secrets.ALERT_EMAIL }}"
+          -var="enable_mp_import=${{ vars.ENABLE_MP_IMPORT || 'false' }}"
+          -var="enable_santander_import=${{ vars.ENABLE_SANTANDER_IMPORT || 'false' }}"
+          -var="piggy_user_id=${{ vars.PIGGY_USER_ID }}"
+          -var="mp_access_token=${{ secrets.MP_ACCESS_TOKEN }}"
+          -var="inbound_address=${{ vars.INBOUND_ADDRESS }}"
+          -var="santander_sender=${{ vars.SANTANDER_SENDER || 'santander.com.ar' }}"
+          -var="forwarding_gmail=${{ vars.FORWARDING_GMAIL }}"
+          -var="existing_ses_rule_set_name=${{ vars.EXISTING_SES_RULE_SET_NAME }}"
+          -out=tfplan
 
       - name: Terraform Apply
         run: terraform apply -auto-approve tfplan

@@ -1,2 +1,12 @@
 supabase_db_url = ""
 alert_email     = ""
+
+# Importers (all optional; each stays off until enabled)
+enable_mp_import           = false
+enable_santander_import    = false
+piggy_user_id              = ""
+mp_access_token            = ""
+inbound_address            = ""   # e.g. santander-<random>@in.example.com
+santander_sender           = "santander.com.ar"
+forwarding_gmail           = ""
+existing_ses_rule_set_name = ""

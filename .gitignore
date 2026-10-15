@@ -31,3 +31,9 @@ coverage/
 
 # Supabase
 supabase/.temp
+
+# Python / Lambda build output
+__pycache__/
+.pytest_cache/
+terraform/lambdas/*/package/
+terraform/lambdas/*/package.zip
