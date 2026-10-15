@@ -142,6 +142,8 @@ export interface ImportSourceStatus {
     last_error?: string | null;
     imported?: number;
     forwarding_code?: string | null;
+    /** Gmail's "confirm forwarding" link, while the inbound address awaits confirmation. */
+    forwarding_url?: string | null;
     [key: string]: unknown;
 }
 

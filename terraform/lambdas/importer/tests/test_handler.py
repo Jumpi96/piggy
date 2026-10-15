@@ -5,6 +5,7 @@ import types
 import pytest
 
 import emails
+from conftest import FIXTURES
 import lambda_function
 from importer import db
 
@@ -65,7 +66,7 @@ def test_santander_event_imports_gated_alerts(env, monkeypatch):
     assert result == {"imported": 1}
     assert [e.kind for e in calls["inserted"]] == ["card_purchase"]
     # Forwarding works now, so a stale confirmation code is cleared; then the run is recorded.
-    assert calls["status"][0] == ("santander", {"forwarding_code": None})
+    assert calls["status"][0] == ("santander", {"forwarding_code": None, "forwarding_url": None})
     source, fields = calls["status"][-1]
     assert source == "santander" and fields["imported"] == 1 and fields["last_error"] is None
     assert conn.closed
@@ -75,7 +76,18 @@ def test_forwarding_confirmation_is_stored(env, monkeypatch):
     calls, _ = env
     install_s3(monkeypatch, {("mail", "k"): emails.FORWARDING_CONFIRMATION})
     lambda_function.handler(s3_event("k"), None)
-    assert ("santander", {"forwarding_code": "123456789"}) in calls["status"]
+    assert ("santander", {"forwarding_code": "123456789", "forwarding_url": None}) in calls["status"]
+
+
+def test_spanish_forwarding_confirmation_link_is_stored(env, monkeypatch):
+    calls, _ = env
+    raw = (FIXTURES / "gmail_forwarding_confirmation_es.eml").read_bytes()
+    install_s3(monkeypatch, {("mail", "k"): raw})
+    lambda_function.handler(s3_event("k"), None)
+    assert ("santander", {
+        "forwarding_code": None,
+        "forwarding_url": "https://mail.google.com/mail/vf-%5BCONFIRM-TOKEN%5D-abc123",
+    }) in calls["status"]
     assert calls["inserted"] == []
 
 

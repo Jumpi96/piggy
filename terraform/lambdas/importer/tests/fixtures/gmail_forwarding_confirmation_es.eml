@@ -1,0 +1,57 @@
+Return-Path: <forwarding-noreply@google.com>
+Authentication-Results: amazonses.com; spf=pass (spfCheck: domain of
+ google.com designates 209.85.210.171 as permitted sender)
+ client-ip=209.85.210.1; envelope-from=forwarding-noreply@google.com;
+ helo=mail-pf1-f171.google.com; dkim=pass header.i=@google.com; dmarc=pass
+ header.from=google.com;
+X-SES-Spam-Verdict: PASS
+X-SES-Virus-Verdict: PASS
+Date: Wed, 14 Oct 2026 23:32:42 -0300
+Subject: =?utf-8?q?Confirmaci=C3=B3n_de_reenv=C3=ADo?= de Gmail: recibir
+ correo de me@gmail.com
+From: Equipo de Gmail <forwarding-noreply@google.com>
+To: santander-abc123@in.example.com
+Message-ID: <confirm-es@google.com>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+me@gmail.com ha solicitado reenviar autom=C3=A1ticamente el
+correo a tu direcci=C3=B3n
+santander-abc123@in.example.com.
+
+Para permitir que me@gmail.com reenv=C3=ADe autom=C3=A1ticamente el
+correo a tu direcci=C3=B3n, haz clic en el enlace que aparece m=C3=A1s abajo
+para confirmar la solicitud:
+
+https://mail.google.com/mail/vf-%5BCONFIRM-TOKEN%5D-abc123
+
+Si el enlace no funciona, c=C3=B3pialo y p=C3=A9galo en una ventana nueva del=
+ navegador.
+
+Gracias por usar Gmail.
+
+Atentamente,
+
+El equipo de Gmail
+
+Si no apruebas esta solicitud, no tienes que hacer nada m=C3=A1s.
+me@gmail.com no puede reenviar mensajes autom=C3=A1ticamente a
+tu direcci=C3=B3n de correo, a menos que confirmes la solicitud haciendo
+clic en el enlace de arriba. Si has hecho clic en el enlace por error,
+pero no quieres permitir que me@gmail.com reenv=C3=ADe mensajes
+autom=C3=A1ticamente a tu direcci=C3=B3n, haz clic en este enlace para cancel=
+ar
+la verificaci=C3=B3n:
+https://mail.google.com/mail/uf-%5BCANCEL-TOKEN%5D-abc123.
+
+Para obtener m=C3=A1s informaci=C3=B3n sobre por qu=C3=A9 puedes haber recibi=
+do este
+mensaje, visita
+http://support.google.com/mail/bin/answer.py?answer=3D184973.
+
+No respondas a este correo. Si quieres ponerte en contacto con el
+equipo de Google.com, inicia sesi=C3=B3n en tu cuenta y haz clic en Ayuda,
+en la parte superior de cualquier p=C3=A1gina. A continuaci=C3=B3n, haz clic =
+en
+Contactar, en la parte inferior del Centro de Ayuda.

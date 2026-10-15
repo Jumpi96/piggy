@@ -5,7 +5,7 @@ import {
 } from '../lib/api';
 import {
     IMPORT_KIND_LABELS, IMPORT_SOURCE_LABELS, IMPORT_SETTINGS_KEY, IMPORT_STATUS_KEY,
-    DEFAULT_IMPORT_SETTINGS, entryBodyText, matchCardRule, parseImportSettings,
+    DEFAULT_IMPORT_SETTINGS, entryBodyText, isGmailConfirmUrl, matchCardRule, parseImportSettings,
 } from '../lib/imports';
 import type { CreditCard, ImportEntry, ImportSettings, ImportSource, ImportStatusParam } from '../types';
 import { TransactionForm } from '../components/TransactionForm';
@@ -115,6 +115,16 @@ export function Inbox() {
                                     <span className="block mt-0.5 text-gray-800 dark:text-gray-200">
                                         Gmail forwarding confirmation code: <span className="font-mono font-bold">{s.forwarding_code}</span>
                                     </span>
+                                )}
+                                {isGmailConfirmUrl(s.forwarding_url) && (
+                                    <a
+                                        href={s.forwarding_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-block mt-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+                                    >
+                                        Confirm Gmail forwarding
+                                    </a>
                                 )}
                             </div>
                         );

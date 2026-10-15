@@ -1,4 +1,5 @@
 import emails
+from conftest import FIXTURES
 from importer.inbound_email import GateConfig, handle_message, parse_message, s3_objects
 from importer.santander import classify, html_to_text, parse_email
 
@@ -96,15 +97,48 @@ def test_gate_rejects_spam():
 
 def test_gmail_forwarding_confirmation_code_is_extracted():
     result = handle_message(emails.FORWARDING_CONFIRMATION, "k", CONFIG)
-    assert result.forwarding_code == "123456789"
+    assert result.forwarding.code == "123456789"
+    assert result.forwarding.url is None
     assert result.entry is None
 
 
-def test_forwarding_confirmation_for_another_gmail_is_ignored():
-    config = GateConfig(santander_senders=["santander.com.ar"], forwarding_gmail="someone-else@gmail.com")
-    result = handle_message(emails.FORWARDING_CONFIRMATION, "k", config)
-    assert result.forwarding_code is None
-    assert result.ignored_reason
+def test_spanish_gmail_confirmation_has_only_a_link():
+    """Real (anonymized) email: no code, a confirm link and a cancel link; only confirm is kept."""
+    raw = (FIXTURES / "gmail_forwarding_confirmation_es.eml").read_bytes()
+    result = handle_message(raw, "k", CONFIG)
+    assert result.forwarding.code is None
+    assert result.forwarding.url == "https://mail.google.com/mail/vf-%5BCONFIRM-TOKEN%5D-abc123"
+
+
+def _confirmation_with(auth_results, body_url="https://mail.google.com/mail/vf-%5BTOKEN%5D-x"):
+    return emails.build(
+        "Confirmación de reenvío de Gmail: recibir correo de me@gmail.com",
+        f"<p>{emails.GMAIL} ha solicitado reenviar automáticamente el correo.</p><p>{body_url}</p>",
+        sender="Equipo de Gmail <forwarding-noreply@google.com>", forwarded=False, auth_results=auth_results,
+    )
+
+
+def test_confirmation_must_pass_dmarc_as_checked_by_ses():
+    assert handle_message(_confirmation_with(emails.GOOGLE_DMARC_PASS), "k", CONFIG).forwarding.url
+    for auth in (None, "amazonses.com; spf=pass; dkim=fail; dmarc=fail header.from=google.com;"):
+        result = handle_message(_confirmation_with(auth), "k", CONFIG)
+        assert result.forwarding is None
+        assert result.ignored_reason  # falls through to the normal gate, which rejects it
+
+
+def test_only_ses_own_authentication_results_counts():
+    # SES's failing verdict is on top; a pass the sender added further down must not count.
+    raw = _confirmation_with("amazonses.com; spf=fail; dkim=fail; dmarc=fail header.from=google.com;")
+    forged = b"Authentication-Results: " + emails.GOOGLE_DMARC_PASS.encode() + b"\nFrom:"
+    raw = raw.replace(b"\nFrom:", b"\n" + forged, 1)
+    assert raw.index(b"dmarc=fail") < raw.index(b"dmarc=pass")
+    assert handle_message(raw, "k", CONFIG).forwarding is None
+
+
+def test_only_gmail_confirm_links_are_kept():
+    for url in ("https://evil.example/mail/vf-x", "https://mail.google.com.evil.example/mail/vf-x",
+                "https://mail.google.com/mail/uf-cancel"):
+        assert handle_message(_confirmation_with(emails.GOOGLE_DMARC_PASS, url), "k", CONFIG).forwarding is None
 
 
 def test_s3_objects_decodes_keys():

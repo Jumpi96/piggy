@@ -108,6 +108,15 @@ export function entryToDraft(entry: ImportEntry, settings: ImportSettings): Impo
     };
 }
 
+/**
+ * Gmail's "confirm forwarding" link, as stored by the Santander importer. The Inbox shows it as
+ * a button, so anything that isn't exactly a mail.google.com confirm link is refused (the
+ * importer checks this too).
+ */
+export function isGmailConfirmUrl(url: unknown): url is string {
+    return typeof url === 'string' && url.startsWith('https://mail.google.com/mail/vf-');
+}
+
 /** account_ref values seen in entries that no rule maps yet (for the Settings screen). */
 export function unmappedAccountRefs(entries: ImportEntry[], rules: CardRule[]): string[] {
     const refs = new Set<string>();

@@ -21,6 +21,10 @@ through SES, add its S3 copy as `santander_<kind>_<n>_forwarded.eml`.
 There is no real "transfer received" sample yet; that kind is covered only by the synthetic
 emails in `tests/emails.py`.
 
+`gmail_forwarding_confirmation_es.eml` is Gmail's real forwarding confirmation, in Spanish. It
+has no code, only a confirm link (`vf-`) and a cancel link (`uf-`). The addresses and both link
+tokens were replaced, and SES's `Authentication-Results` (DMARC pass) was kept.
+
 ## Mercado Pago: real report, anonymized
 
 `mp_release_1.csv` is rows from a real release report (one month, `,` separator), keeping one

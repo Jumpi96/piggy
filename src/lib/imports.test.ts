@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_IMPORT_SETTINGS, entryToDraft, matchCardRule, parseImportSettings, unmappedAccountRefs } from './imports';
+import {
+    DEFAULT_IMPORT_SETTINGS, entryToDraft, isGmailConfirmUrl, matchCardRule, parseImportSettings, unmappedAccountRefs,
+} from './imports';
 import type { CardRule, ImportEntry, ImportSettings } from '../types';
 
 function entry(overrides: Partial<ImportEntry> = {}): ImportEntry {
@@ -125,5 +127,16 @@ describe('unmappedAccountRefs', () => {
             entry({ id: 'e5', source: 'mercadopago', kind: 'mp_outflow', account_ref: 'mp' }),
         ];
         expect(unmappedAccountRefs(entries, [visa])).toEqual(['Tarjeta AMEX terminada en 9999']);
+    });
+});
+
+describe('isGmailConfirmUrl', () => {
+    it('accepts only Gmail confirm links', () => {
+        expect(isGmailConfirmUrl('https://mail.google.com/mail/vf-%5BTOKEN%5D-abc')).toBe(true);
+        expect(isGmailConfirmUrl('https://mail.google.com/mail/uf-%5BTOKEN%5D-abc')).toBe(false);
+        expect(isGmailConfirmUrl('https://mail.google.com.evil.example/mail/vf-x')).toBe(false);
+        expect(isGmailConfirmUrl('javascript:alert(1)')).toBe(false);
+        expect(isGmailConfirmUrl(null)).toBe(false);
+        expect(isGmailConfirmUrl(undefined)).toBe(false);
     });
 });

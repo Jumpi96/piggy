@@ -103,8 +103,10 @@ verified in us-east-1, and an MX record `in.<yourdomain> MX 10 inbound-smtp.us-e
 1. Set `ENABLE_SANTANDER_IMPORT=true`, `INBOUND_ADDRESS`, `FORWARDING_GMAIL` (and `PIGGY_USER_ID`) and release.
 2. Enable Santander's purchase and transfer email alerts.
 3. In Gmail: Settings → Forwarding and POP/IMAP → **Add a forwarding address** → `INBOUND_ADDRESS`.
-   Gmail emails a confirmation code to that address; it shows up in Piggy's **Inbox** (status strip
-   at the top) within seconds. Enter it in Gmail.
+   Gmail emails a confirmation to that address. Within seconds, the status strip at the top of
+   Piggy's **Inbox** shows either a **Confirm Gmail forwarding** button (current emails, at least
+   in Spanish, only carry a link) or a code to enter in Gmail. It shows the button only if the
+   email passed DMARC for google.com and the link is a `https://mail.google.com/mail/vf-…` one.
 4. Create a Gmail filter: `from:(santander.com.ar)` → **Forward it to** `INBOUND_ADDRESS`.
 
 Only mail that Gmail forwarded from `FORWARDING_GMAIL`, whose original sender matches

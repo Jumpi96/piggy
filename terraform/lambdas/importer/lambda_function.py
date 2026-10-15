@@ -37,18 +37,21 @@ def handle_santander(event, conn, user_id):
     for bucket, key in s3_objects(event):
         raw = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
         result = handle_message(raw, key, config)
-        if result.forwarding_code:
-            logger.info("Gmail forwarding confirmation code received")
-            db.update_status(conn, user_id, "santander", {"forwarding_code": result.forwarding_code})
+        if result.forwarding:
+            logger.info("Gmail forwarding confirmation received")
+            db.update_status(conn, user_id, "santander", {
+                "forwarding_code": result.forwarding.code,
+                "forwarding_url": result.forwarding.url,
+            })
             continue
         if result.ignored_reason:
             logger.warning("Ignored s3://%s/%s: %s", bucket, key, result.ignored_reason)
             continue
         entry = result.entry
         if not forwarding_works:
-            # A forwarded alert got through, so the confirmation code is no longer needed.
+            # A forwarded alert got through, so the confirmation is no longer needed.
             forwarding_works = True
-            db.update_status(conn, user_id, "santander", {"forwarding_code": None})
+            db.update_status(conn, user_id, "santander", {"forwarding_code": None, "forwarding_url": None})
         if not settings.wants(entry):
             logger.info("Skipped %s (%s, %s): disabled in settings or before start date", entry.external_id, entry.kind, entry.date)
             continue

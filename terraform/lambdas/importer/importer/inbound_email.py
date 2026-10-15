@@ -7,12 +7,17 @@ inbound address:
 - its original From is one of the configured Santander senders,
 - SES did not flag it as spam or a virus.
 
-Gmail's one-time "forwarding confirmation" email is recognised separately: its code is
-surfaced in the app so the forwarding address can be verified without reading S3.
+Gmail's one-time "forwarding confirmation" email is recognised separately, and its confirmation
+link (and code, in the older format) is surfaced in the app so the forwarding address can be
+verified without reading S3. Because that link becomes a button in the app, the email must pass
+DMARC for google.com as checked by SES, and only a https://mail.google.com/mail/vf-... link is
+accepted.
 """
 from __future__ import annotations
 
 import email
+import email.errors
+import email.header
 import email.policy
 import logging
 import re
@@ -28,6 +33,8 @@ from .santander import message_text, parse_email
 logger = logging.getLogger(__name__)
 
 GMAIL_FORWARDING_SENDER = "forwarding-noreply@google.com"
+# The "confirm" link; the "uf-" one in the same email cancels the request instead.
+GMAIL_CONFIRM_URL_RE = re.compile(r"https://mail\.google\.com/mail/vf-[^\s<>\"']+")
 
 
 @dataclass
@@ -37,9 +44,15 @@ class GateConfig:
 
 
 @dataclass
+class ForwardingConfirmation:
+    code: Optional[str] = None  # older emails carry a code
+    url: Optional[str] = None  # current ones (at least in Spanish) only a link
+
+
+@dataclass
 class InboundResult:
     entry: Optional[Entry] = None
-    forwarding_code: Optional[str] = None
+    forwarding: Optional[ForwardingConfirmation] = None
     ignored_reason: Optional[str] = None
 
 
@@ -91,16 +104,45 @@ def _forwarded_by(msg: Message, gmail: str) -> bool:
     return bool(gmail) and gmail in forwarded.lower()
 
 
-def forwarding_confirmation_code(msg: Message, gmail: str) -> Optional[str]:
-    """The code from Gmail's 'Forwarding Confirmation' email for this Gmail address, if it is one."""
+def _header_text(msg: Message, name: str) -> str:
+    """A header with RFC 2047 encoded words (=?UTF-8?Q?...?=) decoded."""
+    value = msg.get(name)
+    if value is None:
+        return ""
+    try:
+        return str(email.header.make_header(email.header.decode_header(str(value))))
+    except (UnicodeDecodeError, LookupError, email.errors.HeaderParseError):
+        return str(value)
+
+
+def _dmarc_pass_for(msg: Message, domain: str) -> bool:
+    """SES's own verdict: it prepends Authentication-Results, so only the first one counts
+    (a sender can add more below it)."""
+    results = str(msg.get("Authentication-Results", ""))
+    if not results.strip().lower().startswith("amazonses.com"):
+        return False
+    return re.search(rf"\bdmarc=pass\b[^;]*header\.from={re.escape(domain)}\b", results, re.IGNORECASE) is not None
+
+
+def forwarding_confirmation(msg: Message, gmail: str) -> Optional[ForwardingConfirmation]:
+    """Gmail's 'Forwarding Confirmation' email for this Gmail address, if it is one."""
     if GMAIL_FORWARDING_SENDER not in _addresses(msg, "From"):
         return None
-    subject = str(msg.get("Subject", ""))
+    subject = _header_text(msg, "Subject")
     text = f"{subject}\n{message_text(msg)}"
     if gmail.strip().lower() not in text.lower():
         return None
-    m = re.search(r"\(#(\d{6,})\)", subject) or re.search(r"(?:confirmation code|c[oó]digo de confirmaci[oó]n)\D{0,20}(\d{6,})", text, re.IGNORECASE)
-    return m.group(1) if m else None
+    if not _dmarc_pass_for(msg, "google.com"):
+        logger.warning("Ignored a Gmail forwarding confirmation that did not pass DMARC for google.com")
+        return None
+    m = re.search(r"\(#(\d{6,})\)", subject) or re.search(
+        r"(?:confirmation code|c[oó]digo de confirmaci[oó]n)\D{0,20}(\d{6,})", text, re.IGNORECASE)
+    url = GMAIL_CONFIRM_URL_RE.search(text)
+    confirmation = ForwardingConfirmation(
+        code=m.group(1) if m else None,
+        url=url.group(0).rstrip(".,;)") if url else None,
+    )
+    return confirmation if confirmation.code or confirmation.url else None
 
 
 def message_id(msg: Message, fallback: str) -> str:
@@ -112,9 +154,9 @@ def message_id(msg: Message, fallback: str) -> str:
 def handle_message(raw: bytes, key: str, config: GateConfig) -> InboundResult:
     msg = parse_message(raw)
 
-    code = forwarding_confirmation_code(msg, config.forwarding_gmail)
-    if code:
-        return InboundResult(forwarding_code=code)
+    forwarding = forwarding_confirmation(msg, config.forwarding_gmail)
+    if forwarding:
+        return InboundResult(forwarding=forwarding)
 
     flagged = _ses_flagged(msg)
     if flagged:

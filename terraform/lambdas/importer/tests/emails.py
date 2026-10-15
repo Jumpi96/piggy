@@ -12,8 +12,10 @@ INBOUND = "santander-abc123@in.example.com"
 
 def build(subject: str, html: str, sender: str = SANTANDER, forwarded: bool = True,
           spam: str = "PASS", message_id: str = "<alert-1@santander.com.ar>",
-          date: str = "Tue, 14 Oct 2026 16:05:00 -0300") -> bytes:
+          date: str = "Tue, 14 Oct 2026 16:05:00 -0300", auth_results: str | None = None) -> bytes:
     msg = EmailMessage()
+    if auth_results is not None:
+        msg["Authentication-Results"] = auth_results
     msg["From"] = sender
     msg["To"] = GMAIL
     msg["Subject"] = subject
@@ -75,6 +77,9 @@ UNRECOGNIZED = build(
     message_id="<alert-6@santander.com.ar>",
 )
 
+# What SES prepends to genuine Gmail mail.
+GOOGLE_DMARC_PASS = "amazonses.com; spf=pass; dkim=pass header.i=@google.com; dmarc=pass header.from=google.com;"
+
 FORWARDING_CONFIRMATION = build(
     "(#123456789) Gmail Forwarding Confirmation - Receive Mail from me@gmail.com",
     f"""<p>{GMAIL} has requested to automatically forward mail to your email address {INBOUND}.</p>
@@ -82,4 +87,5 @@ FORWARDING_CONFIRMATION = build(
     sender="Gmail Team <forwarding-noreply@google.com>",
     forwarded=False,
     message_id="<confirm@google.com>",
+    auth_results=GOOGLE_DMARC_PASS,
 )
