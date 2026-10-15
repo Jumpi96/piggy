@@ -114,7 +114,7 @@ create table if not exists parameters (
 -- Import Entries Table (the Inbox): unconfirmed movements inserted by the importer Lambdas.
 -- The app only reads them and changes their status. (user_id, source, external_id) dedupes re-runs.
 create table if not exists import_entries (
-  id uuid primary key default uuid_generate_v4(),
+  id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) not null,
   source text not null check (source in ('mercadopago', 'santander')),
   external_id text not null,

@@ -7,7 +7,9 @@
 -- so re-runs never overwrite what was done in the app.
 
 create table if not exists import_entries (
-  id uuid primary key default uuid_generate_v4(),
+  -- gen_random_uuid() is built in; uuid_generate_v4() lives in Supabase's `extensions`
+  -- schema, which `supabase db push` doesn't have on its search_path.
+  id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) not null,
   source text not null check (source in ('mercadopago', 'santander')),
   external_id text not null,
