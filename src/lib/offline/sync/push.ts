@@ -255,6 +255,16 @@ async function adoptServerId(
              WHERE table_name = $2 AND record_id = $3 AND synced_at IS NULL`,
             [serverId, table, localId]
         );
+        if (table === 'transactions') {
+            // Balance entries made for this override point at the local id; the server's FK
+            // would reject them, so move them (and their queued payloads) onto the server id.
+            await db.query(`UPDATE balance_entries SET transaction_id = $1 WHERE transaction_id = $2`, [serverId, localId]);
+            await db.query(
+                `UPDATE _pending_changes SET payload = replace(payload, $2, $1)
+                 WHERE table_name = 'balance_entries' AND synced_at IS NULL`,
+                [serverId, localId]
+            );
+        }
         console.log(`[Sync Push] Adopted server id for ${table}: ${localId} -> ${serverId}`);
         return serverId;
     } catch (err) {
@@ -330,6 +340,12 @@ function preparePayloadForServer(
     // the local (stringified) copy back.
     if (table === 'import_entries') {
         delete prepared.raw;
+    }
+
+    // Changes queued before schema v7 can still carry the dropped flag; the server no
+    // longer has the column (balance_entries replaced it).
+    if (table === 'transactions') {
+        delete prepared.to_be_balanced;
     }
 
     if (table === 'parameters' && typeof prepared.value === 'string') {

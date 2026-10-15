@@ -8,6 +8,9 @@ interface Props {
     apd: number; // Amount per day in USD (not cents)
     periodStart?: string; // YYYY-MM-DD inclusive
     periodEnd?: string;   // YYYY-MM-DD exclusive
+    // USD cents moved into the balance from each transaction (> 0 for expenses). That part
+    // was outside the budget, so it isn't daily spending.
+    balancedUsdByTransaction?: Map<string, number>;
 }
 
 const formatUSD = (cents: number) => {
@@ -34,17 +37,16 @@ const CustomTooltip = ({ active, payload }: any) => {
  * DailySpendingChart - Shows daily spending excluding:
  * - Recurring rule transactions (even if modified)
  * - Credit card payments
- * - To-be-balanced expenses
+ * - The part of an expense moved into the balance
  */
-export function DailySpendingChart({ transactions, apd, periodStart, periodEnd }: Props) {
+export function DailySpendingChart({ transactions, apd, periodStart, periodEnd, balancedUsdByTransaction }: Props) {
     // Filter transactions:
     // 1. Only expenses
     // 2. Exclude recurring rules (recurring_rule_id is set)
     // 3. Exclude credit card payments (payment_method === 'card' or credit_card_id is set)
-    // 4. Exclude to-be-balanced transactions
+    // The balanced part of each expense is subtracted below.
     const filteredTransactions = transactions.filter(t =>
         t.direction === 'expense' &&
-        !t.to_be_balanced &&
         !t.recurring_rule_id &&
         t.payment_method !== 'card' &&
         !t.credit_card_id &&
@@ -55,7 +57,8 @@ export function DailySpendingChart({ transactions, apd, periodStart, periodEnd }
     // span two calendar months, so bucketing by day-of-month alone scrambles the timeline.
     const dailyMap = new Map<string, number>();
     filteredTransactions.forEach(t => {
-        const amountInBaseCurrency = t.amount_cents / (t.exchange_rate?.rate || 1);
+        const balanced = balancedUsdByTransaction?.get(t.id) ?? 0;
+        const amountInBaseCurrency = Math.max(0, t.amount_cents / (t.exchange_rate?.rate || 1) - balanced);
         dailyMap.set(t.date, (dailyMap.get(t.date) || 0) + amountInBaseCurrency);
     });
 

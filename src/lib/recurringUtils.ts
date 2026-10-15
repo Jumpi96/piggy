@@ -88,7 +88,6 @@ export function generateOccurrences(
                     payment_method: rule.payment_method,
                     credit_card_id: rule.credit_card_id,
                     recurring_rule_id: rule.id,
-                    to_be_balanced: false,
                     note: rule.note,
                     exchange_rate: ruleRate ? { rate: ruleRate } : null,
                     created_at: rule.created_at,

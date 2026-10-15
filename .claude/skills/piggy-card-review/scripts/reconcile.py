@@ -197,6 +197,10 @@ def main() -> int:
     items = st["items"]
     txns = [t for t in p.transactions(start, end) if t.credit_card_id == card["id"]]
     pairs, missing, extra = match(items, txns)
+    # Rows with (part of) their amount in the month's balance ledger.
+    balanced = {str(r["transaction_id"]) for r in p.q(
+        "SELECT DISTINCT transaction_id FROM balance_entries WHERE user_id = %s "
+        "AND deleted_at IS NULL AND transaction_id IS NOT NULL", (p.user_id,))}
     # A charge and its refund both on the statement (or both in Piggy) need no action.
     zero_m = cancelling(missing, lambda it: (it["currency"], it["cents"]))
     zero_x = cancelling(extra, lambda t: (t.currency_code, signed(t)))
@@ -208,12 +212,12 @@ def main() -> int:
             "card": card, "month": a.month, "anchor": anchor, "window": [start, end], "pay_date": due,
             "meta": st["meta"],
             "matched": [{**it, "piggy_id": t.id, "piggy_cents": signed(t), "tag": t.tag, "note": t.note,
-                         "virtual": t.virtual, "to_be_balanced": t.to_be_balanced} for it, t in pairs],
+                         "virtual": t.virtual, "balanced": str(t.id) in balanced} for it, t in pairs],
             "missing": [{**it, "diagnosis": diag[id(it)], "cancels_out": i in zero_m}
                         for i, it in enumerate(missing)],
             "extra": [{"id": t.id, "date": t.date, "cents": signed(t), "currency": t.currency_code,
                        "category": t.category, "tag": t.tag, "note": t.note, "virtual": t.virtual,
-                       "rule_id": t.recurring_rule_id, "to_be_balanced": t.to_be_balanced,
+                       "rule_id": t.recurring_rule_id, "balanced": str(t.id) in balanced,
                        "cancels_out": i in zero_x} for i, t in enumerate(extra)],
         }, default=str, indent=1, ensure_ascii=False))
         return 0
@@ -230,7 +234,7 @@ def main() -> int:
         off = signed(t) - it["cents"]
         print(f"  {str(it['date']):10} {it['desc'][:30]:30} {it['cuotas']:8} {fmt(it['currency'], it['cents']):>15}"
               f"  → {t.tag or ''}/{t.note or ''}{' (rule)' if t.virtual else ''}"
-              f"{' TBB' if t.to_be_balanced else ''}{f'  [{off:+d}¢]' if off else ''}")
+              f"{' TBB' if str(t.id) in balanced else ''}{f'  [{off:+d}¢]' if off else ''}")
 
     print(f"\nMISSING FROM PIGGY {len(missing)}")
     for it in missing:

@@ -9,6 +9,7 @@ import {
     fetchDistinctTags,
     insertRecurringRule, updateRecurringRule, fetchRecurringRule, migrateFutureTransactions,
     confirmImportEntry, confirmImportEntryAsInstallments, upsertParameter,
+    fetchBalanceEntriesForTransactions, insertBalanceEntry, updateBalanceEntryAmount, deleteBalanceEntry, detachBalanceEntry,
     type TransactionInput
 } from '../lib/api';
 import {
@@ -16,7 +17,7 @@ import {
     installmentEndDate, installmentNote, matchCardRule,
 } from '../lib/imports';
 import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
-import type { Currency, CreditCard, Direction, ImportEntry, ImportSettings, PaymentMethod, Transaction } from '../types';
+import type { BalanceEntry, Currency, CreditCard, Direction, ImportEntry, ImportSettings, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { sortCreditCards } from '../lib/creditCards';
@@ -24,6 +25,9 @@ import { exceptionDatesFrom } from '../lib/recurringUtils';
 import { Loader2 } from 'lucide-react';
 import { AmountInput } from './AmountInput';
 import { evaluateAmountExpression } from '../lib/amountExpression';
+import { signedBalanceCents } from '../lib/balance';
+
+type LinkedBalanceAction = 'keep' | 'detach' | 'remove';
 
 const shortDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -80,7 +84,16 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     // with no card picked, so it has to be chosen rather than silently saved as cash.
     const [method, setMethod] = useState<PaymentMethod>(initialData?.payment_method || (cuotas != null ? 'card' : importDraft?.payment_method) || (!initialData && defaultCardId ? 'card' : 'cash'));
     const [cardId, setCardId] = useState(initialData?.credit_card_id || importDraft?.credit_card_id || (!initialData ? defaultCardId ?? '' : ''));
-    const [toBeBalanced, setToBeBalanced] = useState(initialData?.to_be_balanced || false);
+    // Balance: put (part of) this transaction into the month's balance ledger. The amount
+    // follows the transaction's until it's edited by hand.
+    const [balanceOn, setBalanceOn] = useState(false);
+    const [balanceAmount, setBalanceAmount] = useState(amount);
+    const [balanceAmountEdited, setBalanceAmountEdited] = useState(false);
+    // Entries already made from this transaction (editing only). They don't follow the
+    // transaction, so each is kept (amount editable), detached or removed on save.
+    const [linkedEntries, setLinkedEntries] = useState<BalanceEntry[]>([]);
+    const [linkedActions, setLinkedActions] = useState<Record<string, LinkedBalanceAction>>({});
+    const [linkedAmounts, setLinkedAmounts] = useState<Record<string, string>>({});
     const [note, setNote] = useState(initialData?.note || installmentDraft?.note || importDraft?.note || '');
     const [editType, setEditType] = useState<'this' | 'future' | null>(null);
 
@@ -113,6 +126,20 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
         loadData();
     }, [initialData, importDraft]);
 
+    useEffect(() => {
+        if (!balanceAmountEdited) setBalanceAmount(amount);
+    }, [amount, balanceAmountEdited]);
+
+    useEffect(() => {
+        if (!initialData || mode === 'clone' || initialData.id.startsWith('virtual-')) return;
+        fetchBalanceEntriesForTransactions([initialData.id])
+            .then(entries => {
+                setLinkedEntries(entries);
+                setLinkedAmounts(Object.fromEntries(entries.map(e => [e.id, (Math.abs(e.amount_cents) / 100).toString()])));
+            })
+            .catch(err => console.error('Failed to load balance entries', err));
+    }, [initialData, mode]);
+
     // Close suggestions on click outside
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -140,6 +167,15 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             if (method === 'card' && !cardId) throw new Error("Credit card is required");
             if (asInstallments && cuotas != null && method !== 'card') {
                 throw new Error("Cuotas are paid with a credit card: pick the card, or switch cuotas off");
+            }
+            const balanceValue = showBalance && balanceOn ? evaluateAmountExpression(balanceAmount) : null;
+            if (showBalance && balanceOn && (balanceValue === null || balanceValue <= 0)) throw new Error("Invalid balance amount");
+            const linkedValues: Record<string, number> = {};
+            for (const entry of linkedEntries) {
+                if ((linkedActions[entry.id] ?? 'keep') !== 'keep') continue;
+                const value = evaluateAmountExpression(linkedAmounts[entry.id] ?? '');
+                if (value === null || value <= 0) throw new Error("Invalid balance amount");
+                linkedValues[entry.id] = value;
             }
 
             // Normalize tag: if it matches an existing tag case-and-accent-insensitively, use that casing
@@ -186,9 +222,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 payment_method: method,
                 credit_card_id: method === 'card' ? cardId : null,
                 exchange_rate_id: exchangeRateId,
-                to_be_balanced: toBeBalanced,
                 note: note || null
             };
+
+            // The transaction a new balance entry links to (none when saving a rule).
+            let savedId: string | null = null;
 
             if (importEntry) {
                 if (asInstallments && cuotas != null) {
@@ -208,7 +246,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                         note: note || null,
                     });
                 } else {
-                    await confirmImportEntry(importEntry.id, { ...transactionMeta, recurring_rule_id: null });
+                    savedId = (await confirmImportEntry(importEntry.id, { ...transactionMeta, recurring_rule_id: null })).id;
                 }
                 if (canRememberCard && rememberCard) {
                     const settings = importSettings ?? DEFAULT_IMPORT_SETTINGS;
@@ -221,7 +259,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                     });
                 }
             } else if (mode === 'clone') {
-                await insertTransaction({ ...transactionMeta, recurring_rule_id: null });
+                savedId = (await insertTransaction({ ...transactionMeta, recurring_rule_id: null })).id;
             } else if (initialData?.recurring_rule_id) {
                 if (editType === 'this' || !editType) {
                     // Edit this instance: save as physical with original_date
@@ -231,9 +269,9 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                         original_date: initialData.original_date || initialData.date,
                     };
                     if (initialData.id.startsWith('virtual-')) {
-                        await insertTransaction(tx);
+                        savedId = (await insertTransaction(tx)).id;
                     } else {
-                        await updateTransaction(initialData.id, tx);
+                        savedId = (await updateTransaction(initialData.id, tx)).id;
                     }
                 } else {
                     // Edit future ones: split rule
@@ -268,9 +306,33 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                     await migrateFutureTransactions(rule.id, newRuleId, dateStr);
                 }
             } else if (initialData) {
-                await updateTransaction(initialData.id, { ...transactionMeta, recurring_rule_id: null });
+                savedId = (await updateTransaction(initialData.id, { ...transactionMeta, recurring_rule_id: null })).id;
             } else {
-                await insertTransaction({ ...transactionMeta, recurring_rule_id: null });
+                savedId = (await insertTransaction({ ...transactionMeta, recurring_rule_id: null })).id;
+            }
+
+            for (const entry of linkedEntries) {
+                const action = linkedActions[entry.id] ?? 'keep';
+                if (action === 'remove') {
+                    await deleteBalanceEntry(entry.id);
+                } else if (action === 'detach') {
+                    await detachBalanceEntry(entry.id);
+                } else {
+                    const cents = Math.round(linkedValues[entry.id] * 100);
+                    if (cents !== Math.abs(entry.amount_cents)) {
+                        await updateBalanceEntryAmount(entry.id, Math.sign(entry.amount_cents || 1) * cents);
+                    }
+                }
+            }
+
+            if (balanceValue !== null && savedId) {
+                await insertBalanceEntry({
+                    date: dateStr,
+                    amount_cents: signedBalanceCents(direction, Math.round(balanceValue * 100)),
+                    currency_code: currencyCode,
+                    exchange_rate_id: exchangeRateId,
+                    transaction_id: savedId,
+                });
             }
 
             if (onSuccess) {
@@ -286,6 +348,12 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     };
 
     const filteredCategories = CATEGORIES.filter(c => c.direction === direction);
+
+    // A balance entry links to one saved transaction, so not when saving a rule
+    // (cuotas, or "all future ones").
+    const savesRule = (asInstallments && cuotas != null) ||
+        (mode !== 'clone' && !!initialData?.recurring_rule_id && editType === 'future');
+    const showBalance = !savesRule;
 
     // Switching cuotas on/off swaps the amount (per cuota vs total) and the default note, but
     // keeps a note the user already edited.
@@ -560,19 +628,85 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 </div>
             )}
 
-            {/* To Be Balanced */}
-            <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-zinc-800 transition-colors">
-                <input
-                    type="checkbox"
-                    id="toBeBalanced"
-                    checked={toBeBalanced}
-                    onChange={(e) => setToBeBalanced(e.target.checked)}
-                    className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                />
-                <label htmlFor="toBeBalanced" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                    Mark as "To be Balanced" <span className="text-gray-400 text-xs block sm:inline">(e.g. unexpected expense)</span>
-                </label>
-            </div>
+            {/* Balance */}
+            {showBalance && (
+                <div className="p-3 rounded-xl border border-gray-100 dark:border-zinc-800 space-y-3">
+                    {linkedEntries.map(entry => {
+                        const action = linkedActions[entry.id] ?? 'keep';
+                        return (
+                            <div key={entry.id} className="space-y-2">
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    In this month's balance: {entry.amount_cents >= 0 ? '+' : '−'}{entry.currency_code} {(Math.abs(entry.amount_cents) / 100).toLocaleString('en-US')}
+                                </p>
+                                <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+                                    {(['keep', 'detach', 'remove'] as const).map(a => (
+                                        <button
+                                            key={a}
+                                            type="button"
+                                            onClick={() => setLinkedActions(prev => ({ ...prev, [entry.id]: a }))}
+                                            className={cn(
+                                                "flex-1 py-1.5 rounded-md text-xs font-semibold transition-all",
+                                                action === a
+                                                    ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm"
+                                                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                            )}
+                                        >
+                                            {a === 'keep' ? 'Keep' : a === 'detach' ? 'Detach' : 'Remove'}
+                                        </button>
+                                    ))}
+                                </div>
+                                {action === 'keep' && (
+                                    <div className="relative flex items-center gap-2">
+                                        <AmountInput
+                                            value={linkedAmounts[entry.id] ?? ''}
+                                            onChange={v => setLinkedAmounts(prev => ({ ...prev, [entry.id]: v }))}
+                                            className="flex-1 min-w-0 p-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        />
+                                        <span className="text-sm text-gray-500">{entry.currency_code}</span>
+                                    </div>
+                                )}
+                                <p className="text-xs text-gray-400">
+                                    {action === 'keep' && "It doesn't follow changes to the transaction — adjust it here if needed."}
+                                    {action === 'detach' && 'Stays in the balance, no longer linked to this transaction.'}
+                                    {action === 'remove' && 'Taken out of the balance.'}
+                                </p>
+                            </div>
+                        );
+                    })}
+
+                    <div className="flex items-center gap-3">
+                        <input
+                            type="checkbox"
+                            id="balanceOn"
+                            checked={balanceOn}
+                            onChange={(e) => setBalanceOn(e.target.checked)}
+                            className="w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <label htmlFor="balanceOn" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                            {linkedEntries.length > 0 ? 'Balance another amount' : 'Balance it'}{' '}
+                            <span className="text-gray-400 text-xs block sm:inline">(outside the budget, e.g. unexpected {direction})</span>
+                        </label>
+                    </div>
+                    {balanceOn && (
+                        <div className="space-y-1">
+                            <div className="relative flex items-center gap-2">
+                                <AmountInput
+                                    value={balanceAmount}
+                                    onChange={v => { setBalanceAmount(v); setBalanceAmountEdited(true); }}
+                                    className="flex-1 min-w-0 p-2 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                                />
+                                <span className="text-sm text-gray-500">{currencyCode}</span>
+                            </div>
+                            <p className="text-xs text-gray-400">
+                                {direction === 'expense'
+                                    ? 'Adds this amount to what this month needs from savings.'
+                                    : 'Takes this amount off what this month needs from savings.'}
+                                {' '}Defaults to the full amount — change it to balance only part.
+                            </p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Error Message */}
             {error && (

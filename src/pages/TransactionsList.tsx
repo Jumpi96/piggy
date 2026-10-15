@@ -1,7 +1,8 @@
 import { useState, useEffect, Fragment, useMemo } from 'react';
-import { fetchTransactions, deleteTransaction, updateTransaction, skipRecurringOccurrence, updateRecurringRule, deleteFutureTransactionsForRule } from '../lib/api';
+import { fetchTransactions, deleteTransaction, insertTransaction, fetchExchangeRate, skipRecurringOccurrence, updateRecurringRule, deleteFutureTransactionsForRule, fetchBalanceEntriesForTransactions, insertBalanceEntry, resolveLinkedBalanceEntries } from '../lib/api';
 import type { Transaction } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, AlertCircle, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat, Copy } from 'lucide-react';
+import { signedBalanceCents, balancedByTransaction } from '../lib/balance';
+import { Loader2, ChevronLeft, ChevronRight, Scale, Banknote, CreditCard, Edit2, Trash2, X, Calendar, TrendingUp as UpIcon, TrendingDown as DownIcon, Search, Repeat, Copy } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { formatLocalDate, parseLocalDate, formatLocalMonth, getTodayLocalDate, getPeriodForDate, getPeriodLabel, formatPeriodRangeLabel, getPersistentMonth, setPersistentMonth } from '../lib/dates';
@@ -15,6 +16,10 @@ export function TransactionsList() {
     const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
     const [cloningTransaction, setCloningTransaction] = useState<Transaction | null>(null);
     const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
+    // Signed amount each transaction put into the balance (entry currency, cents).
+    const [balanced, setBalanced] = useState<Map<string, number>>(new Map());
+    // What deleting a transaction does to its balance entries.
+    const [deleteBalanceAction, setDeleteBalanceAction] = useState<'remove' | 'detach'>('remove');
     const [showFuture, setShowFuture] = useState(false);
 
     // Subscribe to sync data updates
@@ -34,7 +39,9 @@ export function TransactionsList() {
         setIsLoading(true);
         try {
             const data = await fetchTransactions(formatLocalMonth(currentMonth));
+            const linked = await fetchBalanceEntriesForTransactions(data.map(t => t.id));
             setTransactions(data);
+            setBalanced(balancedByTransaction(linked));
         } catch (err) {
             console.error(err);
         } finally {
@@ -63,13 +70,14 @@ export function TransactionsList() {
         }).format(cents / 100);
     };
 
-    const toggleBalanced = async (t: Transaction) => {
+    // Quick "balance it": the whole amount goes into the month's balance. A recurring
+    // occurrence that only exists virtually is saved as an override first, to link to it.
+    const balanceTransaction = async (t: Transaction) => {
         try {
+            let tx = t;
             if (t.id.startsWith('virtual-')) {
-                // Virtual transaction: need to create a physical override
-                const { insertTransaction, fetchExchangeRate } = await import('../lib/api');
                 const exchangeRateId = await fetchExchangeRate(t.currency_code, t.date);
-                await insertTransaction({
+                tx = await insertTransaction({
                     direction: t.direction,
                     amount_cents: t.amount_cents,
                     currency_code: t.currency_code,
@@ -79,15 +87,18 @@ export function TransactionsList() {
                     payment_method: t.payment_method,
                     credit_card_id: t.credit_card_id || null,
                     exchange_rate_id: exchangeRateId,
-                    to_be_balanced: !t.to_be_balanced,
                     note: t.note || null,
                     recurring_rule_id: t.recurring_rule_id || null,
                     original_date: t.original_date || t.date,
                 });
-            } else {
-                // Physical transaction: just update it
-                await updateTransaction(t.id, { to_be_balanced: !t.to_be_balanced });
             }
+            await insertBalanceEntry({
+                date: tx.date,
+                amount_cents: signedBalanceCents(tx.direction, tx.amount_cents),
+                currency_code: tx.currency_code,
+                exchange_rate_id: tx.exchange_rate_id ?? null,
+                transaction_id: tx.id,
+            });
             loadTransactions();
         } catch (err) {
             console.error(err);
@@ -95,7 +106,8 @@ export function TransactionsList() {
     };
 
     const handleDelete = async (t: Transaction) => {
-        if (t.recurring_rule_id) {
+        if (t.recurring_rule_id || balanced.has(t.id)) {
+            setDeleteBalanceAction('remove');
             setDeletingTransaction(t);
         } else {
             if (!confirm('Are you sure you want to delete this transaction?')) return;
@@ -108,11 +120,28 @@ export function TransactionsList() {
         }
     };
 
+    // A one-off transaction with balance entries: delete it and remove or keep them.
+    const confirmDeleteOneOff = async (action: 'remove' | 'detach') => {
+        if (!deletingTransaction) return;
+        try {
+            await resolveLinkedBalanceEntries([deletingTransaction.id], action);
+            await deleteTransaction(deletingTransaction.id);
+            setDeletingTransaction(null);
+            loadTransactions();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
     const confirmDelete = async (allFuture: boolean) => {
         if (!deletingTransaction || !deletingTransaction.recurring_rule_id) return;
 
+        // The choice is offered when this occurrence has balance entries. Other overrides
+        // removed with "all future ones" keep theirs (detached) unless it was "remove".
+        const balanceAction = balanced.has(deletingTransaction.id) ? deleteBalanceAction : 'detach';
         try {
             if (!allFuture) {
+                await resolveLinkedBalanceEntries([deletingTransaction.id], balanceAction);
                 await skipRecurringOccurrence(deletingTransaction);
             } else {
                 const ruleId = deletingTransaction.recurring_rule_id!;
@@ -125,7 +154,8 @@ export function TransactionsList() {
                 await updateRecurringRule(ruleId, { end_date: formatLocalDate(prevDay) });
 
                 // Cleanup future physical overrides linked to this rule
-                await deleteFutureTransactionsForRule(ruleId, dateStr);
+                const deletedIds = await deleteFutureTransactionsForRule(ruleId, dateStr);
+                await resolveLinkedBalanceEntries([deletingTransaction.id, ...deletedIds], balanceAction);
             }
             setDeletingTransaction(null);
             loadTransactions();
@@ -149,12 +179,12 @@ export function TransactionsList() {
             const cat = term.slice(9).trim();
             return transactions.filter(t => t.category.toLowerCase().trim() === cat);
         }
-        // Balance shortcuts: "balance" = balanced, "!balance" = not balanced
+        // Balance shortcuts: "balance" = put into the balance, "!balance" = not
         if (term === 'balance') {
-            return transactions.filter(t => t.to_be_balanced === true);
+            return transactions.filter(t => balanced.has(t.id));
         }
         if (term === '!balance') {
-            return transactions.filter(t => t.to_be_balanced === false);
+            return transactions.filter(t => !balanced.has(t.id));
         }
         // Method filter: method:cash or method:cards
         if (term === 'method:cash') {
@@ -173,7 +203,7 @@ export function TransactionsList() {
                 paymentMethodStr.toLowerCase().includes(term)
             );
         });
-    }, [transactions, searchTerm]);
+    }, [transactions, searchTerm, balanced]);
 
     // Group transactions
     const futureTransactions = filteredTransactions.filter((t: Transaction) => t.date > todayStr).sort((a: Transaction, b: Transaction) => b.date.localeCompare(a.date));
@@ -302,7 +332,7 @@ export function TransactionsList() {
                                                     </div>
                                                     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-gray-100 dark:border-zinc-800 overflow-hidden divide-y divide-gray-50 dark:divide-zinc-800">
                                                         {txs.map(t => (
-                                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} toggleBalanced={toggleBalanced} setEditingTransaction={setEditingTransaction} setCloningTransaction={setCloningTransaction} handleDelete={handleDelete} />
+                                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} balancedCents={balanced.get(t.id)} balanceTransaction={balanceTransaction} setEditingTransaction={setEditingTransaction} setCloningTransaction={setCloningTransaction} handleDelete={handleDelete} />
                                                         ))}
                                                     </div>
                                                 </div>
@@ -322,7 +352,7 @@ export function TransactionsList() {
                                     </div>
                                     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-md border border-gray-100 dark:border-zinc-800 overflow-hidden divide-y divide-gray-50 dark:divide-zinc-800">
                                         {txs.map(t => (
-                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} toggleBalanced={toggleBalanced} setEditingTransaction={setEditingTransaction} setCloningTransaction={setCloningTransaction} handleDelete={handleDelete} />
+                                            <TransactionItem key={t.id} t={t} formatCurrency={formatCurrency} balancedCents={balanced.get(t.id)} balanceTransaction={balanceTransaction} setEditingTransaction={setEditingTransaction} setCloningTransaction={setCloningTransaction} handleDelete={handleDelete} />
                                         ))}
                                     </div>
                                 </div>
@@ -332,7 +362,53 @@ export function TransactionsList() {
                 )}
             </div>
 
-            {/* Delete Modal */}
+            {/* Delete Modal: one-off with balance entries */}
+            {deletingTransaction && !deletingTransaction.recurring_rule_id && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-zinc-800 p-8 space-y-6">
+                        <div className="text-center space-y-2">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-zinc-100">Delete Transaction</h3>
+                            <p className="text-sm text-gray-500 dark:text-zinc-400">
+                                Part of it is in this month's balance. What should happen to that?
+                            </p>
+                        </div>
+
+                        <div className="flex flex-col gap-4">
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => confirmDeleteOneOff('remove')}
+                                    className="w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-sm font-bold transition-all shadow-lg shadow-red-200 dark:shadow-none active:scale-[0.98]"
+                                >
+                                    Remove it from the balance
+                                </button>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2">
+                                    The balance goes back to what it was without this transaction.
+                                </p>
+                            </div>
+                            <div className="space-y-1">
+                                <button
+                                    onClick={() => confirmDeleteOneOff('detach')}
+                                    className="w-full bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 py-4 rounded-2xl text-sm font-bold transition-all active:scale-[0.98]"
+                                >
+                                    Keep it in the balance
+                                </button>
+                                <p className="text-[10px] text-gray-400 dark:text-zinc-500 text-center px-2">
+                                    The balance entry stays, no longer linked to a transaction.
+                                </p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setDeletingTransaction(null)}
+                            className="w-full py-2 text-gray-400 dark:text-zinc-600 text-xs font-medium hover:text-gray-600 dark:hover:text-zinc-400 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Modal: recurring */}
             {deletingTransaction && deletingTransaction.recurring_rule_id && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                     <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100 dark:border-zinc-800 p-8 space-y-6">
@@ -342,6 +418,29 @@ export function TransactionsList() {
                                 How would you like to handle this deletion?
                             </p>
                         </div>
+
+                        {balanced.has(deletingTransaction.id) && (
+                            <div className="space-y-2">
+                                <p className="text-xs font-medium text-gray-500 dark:text-zinc-400 text-center">This occurrence is in the balance:</p>
+                                <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+                                    {(['remove', 'detach'] as const).map(a => (
+                                        <button
+                                            key={a}
+                                            type="button"
+                                            onClick={() => setDeleteBalanceAction(a)}
+                                            className={cn(
+                                                "flex-1 py-1.5 rounded-md text-xs font-semibold transition-all",
+                                                deleteBalanceAction === a
+                                                    ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm"
+                                                    : "text-gray-500"
+                                            )}
+                                        >
+                                            {a === 'remove' ? 'Remove from balance' : 'Keep in balance'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex flex-col gap-4">
                             <div className="space-y-1">
@@ -431,13 +530,16 @@ export function TransactionsList() {
 type TransactionItemProps = {
     t: Transaction;
     formatCurrency: (cents: number, currency: string) => string;
-    toggleBalanced: (transaction: Transaction) => void;
+    balancedCents?: number;
+    balanceTransaction: (transaction: Transaction) => void;
     setEditingTransaction: (transaction: Transaction) => void;
     setCloningTransaction: (transaction: Transaction) => void;
     handleDelete: (transaction: Transaction) => void;
 };
 
-function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransaction, setCloningTransaction, handleDelete }: TransactionItemProps) {
+function TransactionItem({ t, formatCurrency, balancedCents, balanceTransaction, setEditingTransaction, setCloningTransaction, handleDelete }: TransactionItemProps) {
+    const isBalanced = balancedCents !== undefined;
+    const isPartial = isBalanced && Math.abs(balancedCents) !== t.amount_cents;
     return (
         <div className="p-4 hover:bg-gray-50/50 dark:hover:bg-zinc-800/30 transition-colors group">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -458,23 +560,23 @@ function TransactionItem({ t, formatCurrency, toggleBalanced, setEditingTransact
                                     <Repeat className="w-3 h-3 text-gray-400" />
                                 )}
                             </h3>
-                            {t.to_be_balanced && (
+                            {isBalanced && (
                                 <button
-                                    onClick={() => toggleBalanced(t)}
-                                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
-                                    title="Click to mark as balanced"
+                                    onClick={() => setEditingTransaction(t)}
+                                    className="flex items-center gap-1 whitespace-nowrap text-[10px] font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                                    title="In this month's balance — edit to change, detach or remove"
                                 >
-                                    <AlertCircle className="w-3 h-3" />
-                                    To Balance
+                                    <Scale className="w-3 h-3" />
+                                    {isPartial ? `Balanced ${formatCurrency(Math.abs(balancedCents), t.currency_code)}` : 'Balanced'}
                                 </button>
                             )}
-                            {!t.to_be_balanced && (
+                            {!isBalanced && (
                                 <button
-                                    onClick={() => toggleBalanced(t)}
+                                    onClick={() => balanceTransaction(t)}
                                     className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-amber-500 transition-all ml-1"
-                                    title="Mark as to be balanced"
+                                    title="Balance it (whole amount)"
                                 >
-                                    <AlertCircle className="w-4 h-4" />
+                                    <Scale className="w-4 h-4" />
                                 </button>
                             )}
                         </div>

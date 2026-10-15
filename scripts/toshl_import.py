@@ -2,6 +2,7 @@ import csv
 import os
 import requests
 import argparse
+import uuid
 from datetime import datetime
 from decimal import Decimal
 
@@ -166,6 +167,7 @@ def import_toshl_csv(file_path, supabase_url, supabase_key, user_id, dry_run=Fal
         
         # 4. Process transactions for this month
         transactions_to_insert = []
+        balance_entries_to_insert = []
         for row in month_rows:
             date_obj = row['_date_obj']
             formatted_date = date_obj.strftime('%Y-%m-%d')
@@ -200,6 +202,7 @@ def import_toshl_csv(file_path, supabase_url, supabase_key, user_id, dry_run=Fal
                 rate_id = initial_rates[currency]['id']
             
             tx = {
+                "id": str(uuid.uuid4()),
                 "user_id": user_id,
                 "date": formatted_date,
                 "direction": direction,
@@ -210,13 +213,24 @@ def import_toshl_csv(file_path, supabase_url, supabase_key, user_id, dry_run=Fal
                 "payment_method": tag_data['payment_method'],
                 "credit_card_id": card_id,
                 "exchange_rate_id": rate_id,
-                "to_be_balanced": tag_data['to_be_balanced'],
                 "note": description if description else None
             }
             transactions_to_insert.append(tx)
+            # Tagged "balance": the whole amount goes into the month's balance ledger,
+            # linked to the transaction (> 0 owed from savings for an expense, < 0 for income).
+            if tag_data['to_be_balanced']:
+                balance_entries_to_insert.append({
+                    "user_id": user_id,
+                    "date": formatted_date,
+                    "amount_cents": amount_cents if direction == 'expense' else -amount_cents,
+                    "currency_code": currency,
+                    "exchange_rate_id": rate_id,
+                    "transaction_id": tx["id"],
+                })
             
         if dry_run:
-            print(f"  Dry run: Would insert {len(transactions_to_insert)} transactions for {month}.")
+            print(f"  Dry run: Would insert {len(transactions_to_insert)} transactions "
+                  f"and {len(balance_entries_to_insert)} balance entries for {month}.")
         else:
             print(f"  Inserting {len(transactions_to_insert)} transactions for {month}...")
             url = f"{supabase_url}/rest/v1/transactions"
@@ -224,6 +238,14 @@ def import_toshl_csv(file_path, supabase_url, supabase_key, user_id, dry_run=Fal
             if response.status_code != 201:
                 print(f"    Error inserting transactions: {response.status_code}")
                 print(response.text)
+            elif balance_entries_to_insert:
+                # After the transactions, which the entries reference.
+                print(f"  Inserting {len(balance_entries_to_insert)} balance entries for {month}...")
+                response = requests.post(f"{supabase_url}/rest/v1/balance_entries",
+                                         headers=headers, json=balance_entries_to_insert)
+                if response.status_code != 201:
+                    print(f"    Error inserting balance entries: {response.status_code}")
+                    print(response.text)
                 
     # 5. Restore initial exchange rates at the end
     print("\nRestoring initial exchange rates...")

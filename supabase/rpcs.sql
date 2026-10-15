@@ -93,6 +93,9 @@ begin
     from parameters where user_id = auth.uid()
   union all
   select 'import_entries'::text, count(*)::bigint
-    from import_entries where user_id = auth.uid() and deleted_at is null;
+    from import_entries where user_id = auth.uid() and deleted_at is null
+  union all
+  select 'balance_entries'::text, count(*)::bigint
+    from balance_entries where user_id = auth.uid() and deleted_at is null;
 end;
 $$;

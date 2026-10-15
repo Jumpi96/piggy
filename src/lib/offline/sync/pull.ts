@@ -30,8 +30,9 @@ const PULL_OVERLAP_MS = 2 * 60 * 1000;
 const REFERENCED_BY: Partial<Record<SyncTableName, Array<[SyncTableName, string]>>> = {
     // import_entries has no local FK, but a confirmed entry whose transaction never reached
     // the server would fail its own push forever (the server FK), so it counts as a reference.
-    transactions: [['import_entries', 'transaction_id']],
-    exchange_rates: [['transactions', 'exchange_rate_id']],
+    // balance_entries likewise: its server FK on transaction_id would reject the push.
+    transactions: [['import_entries', 'transaction_id'], ['balance_entries', 'transaction_id']],
+    exchange_rates: [['transactions', 'exchange_rate_id'], ['balance_entries', 'exchange_rate_id']],
     credit_cards: [['transactions', 'credit_card_id'], ['recurring_rules', 'credit_card_id']],
     recurring_rules: [['transactions', 'recurring_rule_id']],
 };
@@ -297,6 +298,9 @@ function prepareRecordForLocal(
     const prepared: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(record)) {
+        // Dropped locally in schema v7 (replaced by balance_entries). The server may still
+        // send it until its own migration runs; inserting it would fail the whole row.
+        if (key === 'to_be_balanced') continue;
         // Convert JSONB fields to string. These columns are jsonb on Supabase but TEXT
         // locally, and every local reader JSON.parse()s them — pass an array through
         // unstringified and the exception list is silently lost on the next pull.

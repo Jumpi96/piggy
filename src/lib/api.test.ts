@@ -104,7 +104,6 @@ describe('api', () => {
                 category: 'Food',
                 tag: 'groceries',
                 payment_method: 'cash',
-                to_be_balanced: false,
             };
 
             // INSERT returns the row
@@ -578,7 +577,6 @@ describe('import entries', () => {
             payment_method: 'card',
             credit_card_id: 'card-visa',
             recurring_rule_id: null,
-            to_be_balanced: false,
             note: 'SUPERMERCADO DIA',
         });
 

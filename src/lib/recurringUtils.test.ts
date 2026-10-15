@@ -112,7 +112,6 @@ describe('recurringUtils', () => {
                 original_date: '2024-01-02',
                 created_at: '2024-01-02T10:00:00Z',
                 updated_at: '2024-01-02T10:00:00Z',
-                to_be_balanced: false
             }
         ];
 
@@ -140,7 +139,6 @@ describe('recurringUtils', () => {
                     payment_method: 'cash',
                     created_at: '2024-01-05T00:00:00Z',
                     updated_at: '2024-01-05T00:00:00Z',
-                    to_be_balanced: false
                 }
             ];
             const merged = mergeTransactions(virtual, regularPhysical);
