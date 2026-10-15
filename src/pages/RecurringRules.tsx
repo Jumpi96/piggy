@@ -5,6 +5,8 @@ import { getTodayLocalDate, formatLocalDate } from '../lib/dates';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { sortCreditCards } from '../lib/creditCards';
 import { CATEGORIES, PAYMENT_METHODS } from '../lib/constants';
+import { evaluateAmountExpression } from '../lib/amountExpression';
+import { AmountInput } from '../components/AmountInput';
 import type { RecurringRule, Currency, ScheduleType, CreditCard } from '../types';
 import { Plus, Trash2, Edit2, Copy, Loader2, Info, Calendar, HelpCircle } from 'lucide-react';
 
@@ -37,6 +39,8 @@ export function RecurringRulesPage() {
         start_date: getTodayLocalDate(),
         end_date: null
     });
+    // Raw amount text so calculator expressions ("100+20") survive until submit
+    const [amountInput, setAmountInput] = useState('');
 
     // Autocomplete State
     const [allTags, setAllTags] = useState<string[]>([]);
@@ -104,6 +108,11 @@ export function RecurringRulesPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const amountValue = evaluateAmountExpression(amountInput);
+        if (amountValue === null || amountValue <= 0) {
+            alert("Invalid amount");
+            return;
+        }
         try {
             // Normalize tag casing and accents
             const currentTag = formData.tag || '';
@@ -111,7 +120,7 @@ export function RecurringRulesPage() {
             const existingTag = allTags.find(t => normalizeForComparison(t) === normTag);
             const finalTag = existingTag || currentTag.trim();
 
-            const payload = { ...formData, tag: finalTag };
+            const payload = { ...formData, amount_cents: Math.round(amountValue * 100), tag: finalTag };
             if (editingId) {
                 await updateRecurringRule(editingId, payload);
             } else {
@@ -141,12 +150,14 @@ export function RecurringRulesPage() {
             start_date: getTodayLocalDate(),
             end_date: null
         });
+        setAmountInput('');
         setOccurrencesHelper('');
     };
 
     const handleEdit = (rule: RecurringRule) => {
         setEditingId(rule.id);
         setFormData(rule);
+        setAmountInput((rule.amount_cents / 100).toString());
         setShowForm(true);
     };
 
@@ -171,6 +182,7 @@ export function RecurringRulesPage() {
             note: rule.note,
             exception_dates: [],
         });
+        setAmountInput((rule.amount_cents / 100).toString());
         setOccurrencesHelper('');
         setShowForm(true);
     };
@@ -460,14 +472,12 @@ export function RecurringRulesPage() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div>
+                                <div className="relative">
                                     <label className="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wider">Amount</label>
-                                    <input
-                                        type="number" step="0.01"
-                                        value={formData.amount_cents ? formData.amount_cents / 100 : ''}
-                                        onChange={e => setFormData({ ...formData, amount_cents: e.target.value ? Math.round(parseFloat(e.target.value) * 100) : 0 })}
+                                    <AmountInput
+                                        value={amountInput}
+                                        onChange={setAmountInput}
                                         className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-zinc-700 dark:bg-zinc-800 font-bold focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                        required
                                     />
                                 </div>
                                 <div>

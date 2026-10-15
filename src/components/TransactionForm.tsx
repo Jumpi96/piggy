@@ -18,7 +18,9 @@ import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
 import { sortCreditCards } from '../lib/creditCards';
 import { exceptionDatesFrom } from '../lib/recurringUtils';
-import { Loader2, Plus, Minus, X, Divide, Equal } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { AmountInput } from './AmountInput';
+import { evaluateAmountExpression } from '../lib/amountExpression';
 
 export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit', defaultCardId, importEntry, importSettings }: {
     initialData?: Transaction,
@@ -60,11 +62,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
 
     // Tag Autocomplete State
     const [showTagSuggestions, setShowTagSuggestions] = useState(false);
-    const [isAmountFocused, setIsAmountFocused] = useState(false);
     const tagInputRef = useRef<HTMLInputElement>(null);
     const suggestionsRef = useRef<HTMLDivElement>(null);
-    const amountInputRef = useRef<HTMLInputElement>(null);
-    const amountBlurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         async function loadData() {
@@ -103,50 +102,15 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     }, []);
 
 
-    const handleAmountKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' || e.key === '=') {
-            e.preventDefault();
-            calculateAmount();
-        }
-    };
-
-    const calculateAmount = () => {
-        try {
-            // Only allow numbers and basic math operators
-            const cleanExpr = amount.replace(/[^-+/()*.\d]/g, '');
-            if (!cleanExpr) return;
-
-            // Safe evaluation using Function constructor
-            const result = new Function(`return (${cleanExpr})`)();
-
-            if (typeof result === 'number' && !isNaN(result) && isFinite(result)) {
-                setAmount((Math.round(result * 100) / 100).toString());
-                // After successful calculation, we don't refocus, 
-                // allowing the toolbar to disappear on the next tick if it's no longer a calculation
-            }
-        } catch (err) {
-            console.error("Calculator error:", err);
-        }
-    };
-
-    const insertOperator = (op: string) => {
-        // Prevent double operators
-        const lastChar = amount.slice(-1);
-        if (['+', '-', '*', '/'].includes(lastChar) && ['+', '-', '*', '/'].includes(op)) {
-            setAmount(amount.slice(0, -1) + op);
-        } else {
-            setAmount(amount + op);
-        }
-        amountInputRef.current?.focus();
-    };
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
         setIsLoading(true);
 
         try {
-            if (!amount || parseFloat(amount) <= 0) throw new Error("Invalid amount");
+            // Evaluate any pending calculator expression (e.g. "100+20") so it isn't truncated
+            const amountValue = evaluateAmountExpression(amount);
+            if (amountValue === null || amountValue <= 0) throw new Error("Invalid amount");
             if (!category) throw new Error("Category is required");
             if (!tag) throw new Error("Tag is required");
             if (method === 'card' && !cardId) throw new Error("Credit card is required");
@@ -156,7 +120,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             const existingTag = allTags.find(t => normalizeForComparison(t) === normTag);
             const finalTag = existingTag || tag.trim();
 
-            const amountCents = Math.round(parseFloat(amount) * 100);
+            const amountCents = Math.round(amountValue * 100);
 
             // Effective Date Logic
             // Only derive the card effective date from a genuinely new/raw purchase date.
@@ -286,10 +250,6 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     // Filter tags: match text case-and-accent-insensitively
     const filteredTags = allTags.filter(t => normalizeForComparison(t).includes(normalizeForComparison(tag)));
 
-    // Show calculator if focused OR if there's an ongoing calculation (has operators)
-    const hasCalculation = amount.length > 0 && !/^-?\d*\.?\d*$/.test(amount);
-    const showCalculator = isAmountFocused || hasCalculation;
-
     return (
         <form onSubmit={handleSubmit} className="max-w-lg mx-auto bg-white dark:bg-zinc-900 p-6 pb-24 md:pb-6 rounded-xl shadow-lg border border-gray-100 dark:border-zinc-800 space-y-6">
 
@@ -366,60 +326,10 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                 <div className="col-span-2 space-y-2 relative">
                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Amount</label>
 
-                    {/* Calculator Toolbar */}
-                    {showCalculator && (
-                        <div className="absolute bottom-full left-0 right-0 mb-2 flex gap-1 bg-gray-100 dark:bg-zinc-800 p-1.5 rounded-lg shadow-sm animate-in slide-in-from-bottom-2 z-10">
-                            {[
-                                { op: '+', icon: Plus },
-                                { op: '-', icon: Minus },
-                                { op: '*', icon: X },
-                                { op: '/', icon: Divide },
-                            ].map(({ op, icon: Icon }) => (
-                                <button
-                                    key={op}
-                                    type="button"
-                                    onClick={() => insertOperator(op)}
-                                    className="flex-1 h-10 flex items-center justify-center bg-white dark:bg-zinc-700 rounded text-gray-700 dark:text-gray-200 shadow-sm hover:bg-gray-50 active:bg-gray-200 transition-colors"
-                                >
-                                    <Icon className="w-4 h-4" />
-                                </button>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={calculateAmount}
-                                className="flex-1 h-10 flex items-center justify-center bg-emerald-600 text-white rounded shadow-sm hover:bg-emerald-700 active:bg-emerald-800 transition-colors"
-                            >
-                                <Equal className="w-4 h-4" />
-                            </button>
-                        </div>
-                    )}
-
-                    <input
-                        ref={amountInputRef}
-                        type="text"
-                        inputMode="decimal"
+                    <AmountInput
                         value={amount}
-                        onChange={(e) => {
-                            // Replace comma with dot immediately
-                            const val = e.target.value.replace(/,/g, '.');
-                            // Allow digits, operators, dots, and parens
-                            if (/^[0-9+\-*/().]*$/.test(val)) {
-                                setAmount(val);
-                            }
-                        }}
-                        onFocus={() => {
-                            if (amountBlurTimeoutRef.current) clearTimeout(amountBlurTimeoutRef.current);
-                            setIsAmountFocused(true);
-                        }}
-                        onBlur={() => {
-                            // Small delay to allow button clicks on the toolbar
-                            amountBlurTimeoutRef.current = setTimeout(() => setIsAmountFocused(false), 200);
-                        }}
-                        onKeyDown={handleAmountKeyDown}
-                        placeholder="0.00"
+                        onChange={setAmount}
                         className="w-full p-3 rounded-lg border border-gray-200 dark:border-zinc-700 bg-transparent text-xl font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
-                        autoComplete="off"
-                        required
                     />
                 </div>
                 <div className="space-y-2">
