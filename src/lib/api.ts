@@ -1,11 +1,12 @@
 import { getDatabaseAsync, getCurrentUserId } from './offline/database';
 import { trackChange, triggerBackgroundSync } from './offline/sync';
-import type { Currency, CreditCard, Transaction, RecurringRule, Parameter, ImportEntry, ImportStatus } from '../types';
+import type { Currency, CreditCard, Transaction, RecurringRule, Parameter, ImportEntry, ImportStatus, BalanceEntry } from '../types';
 import { getTodayLocalDate, getPeriodRange, getPeriodForDate, cacheMonthStartDay } from './dates';
 import { generateOccurrences, mergeTransactions } from './recurringUtils';
 import { normalizeForComparison } from './utils';
 import { pickRateForDate } from './currency';
 import { sortCreditCards } from './creditCards';
+import { sumBalanceUsdCents } from './balance';
 
 // Transaction Input without system fields
 export type TransactionInput = Omit<Transaction, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'deleted_at'>;
@@ -55,7 +56,7 @@ export async function migrateFutureTransactions(oldRuleId: string, newRuleId: st
 /**
  * Deletes physical transactions for a rule starting from a specific date.
  */
-export async function deleteFutureTransactionsForRule(ruleId: string, startDate: string): Promise<void> {
+export async function deleteFutureTransactionsForRule(ruleId: string, startDate: string): Promise<string[]> {
     try {
         const db = await getDatabaseAsync();
         const userId = await getUserId();
@@ -78,6 +79,7 @@ export async function deleteFutureTransactionsForRule(ruleId: string, startDate:
             triggerBackgroundSync();
         }
         console.log(`[API] Deleted future transactions for rule ${ruleId}`);
+        return result.rows.map(row => row.id);
     } catch (err) {
         console.error('[API] Failed to delete future transactions:', err);
         throw err;
@@ -416,14 +418,14 @@ export async function insertTransaction(transaction: TransactionInput): Promise<
         INSERT INTO transactions (
             id, user_id, date, direction, amount_cents, currency_code,
             exchange_rate_id, category, tag, payment_method, credit_card_id,
-            recurring_rule_id, original_date, to_be_balanced, note, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+            recurring_rule_id, original_date, note, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     `, [
         id, userId, transaction.date, transaction.direction, transaction.amount_cents,
         transaction.currency_code, transaction.exchange_rate_id || null, transaction.category,
         transaction.tag, transaction.payment_method, transaction.credit_card_id || null,
         transaction.recurring_rule_id || null, transaction.original_date || null,
-        transaction.to_be_balanced, transaction.note || null,
+        transaction.note || null,
         timestamp, timestamp
     ]);
 
@@ -450,7 +452,7 @@ export async function updateTransaction(id: string, updates: Partial<Transaction
     const updateableFields = [
         'date', 'direction', 'amount_cents', 'currency_code', 'exchange_rate_id',
         'category', 'tag', 'payment_method', 'credit_card_id', 'recurring_rule_id',
-        'original_date', 'to_be_balanced', 'note'
+        'original_date', 'note'
     ];
 
     for (const field of updateableFields) {
@@ -496,44 +498,177 @@ export async function deleteTransaction(id: string): Promise<void> {
     triggerBackgroundSync();
 }
 
-export async function clearBalancedTransactions(monthStart: string): Promise<number> {
+// ============================================================================
+// Balance Ledger
+// ============================================================================
+
+export type BalanceEntryInput = Pick<BalanceEntry, 'date' | 'amount_cents' | 'currency_code'> &
+    Partial<Pick<BalanceEntry, 'exchange_rate_id' | 'transaction_id' | 'kind' | 'note'>>;
+
+type BalanceEntryRow = BalanceEntry & {
+    exchange_rate_value?: number | null;
+    tx_category?: string | null;
+    tx_tag?: string | null;
+    tx_note?: string | null;
+    tx_deleted_at?: string | null;
+};
+
+const BALANCE_ENTRY_SELECT = `
+    SELECT b.*, er.rate AS exchange_rate_value,
+           t.category AS tx_category, t.tag AS tx_tag, t.note AS tx_note, t.deleted_at AS tx_deleted_at
+    FROM balance_entries b
+    LEFT JOIN exchange_rates er ON b.exchange_rate_id = er.id
+    LEFT JOIN transactions t ON b.transaction_id = t.id
+`;
+
+/** Resolves each entry's rate the same way transactions do (pinned id, else the month's rate). */
+async function withBalanceRates(rows: BalanceEntryRow[]): Promise<BalanceEntry[]> {
+    const rates = await fetchAllRates();
+    return rows.map(({ exchange_rate_value, tx_category, tx_tag, tx_note, tx_deleted_at, ...row }) => {
+        let rate: number | undefined = exchange_rate_value ?? undefined;
+        if (!rate && row.currency_code !== 'USD') {
+            rate = pickRateForDate(rates, row.currency_code, row.date)?.rate;
+        }
+        return {
+            ...row,
+            amount_cents: Number(row.amount_cents),
+            exchange_rate: rate ? { rate: Number(rate) } : (row.currency_code === 'USD' ? { rate: 1 } : null),
+            source: row.transaction_id && tx_category != null
+                ? { category: tx_category, tag: tx_tag ?? '', note: tx_note ?? null, deleted: !!tx_deleted_at }
+                : null,
+        };
+    });
+}
+
+/** The period's ledger, newest first. */
+export async function fetchBalanceEntries(monthStart: string): Promise<BalanceEntry[]> {
     const db = await getDatabaseAsync();
     const userId = await getUserId();
+    const { start, end } = getPeriodRange(monthStart);
+
+    const result = await db.query<BalanceEntryRow>(`
+        ${BALANCE_ENTRY_SELECT}
+        WHERE b.user_id = $1
+          AND b.deleted_at IS NULL
+          AND b.date >= $2
+          AND b.date < $3
+        ORDER BY b.date DESC, b.created_at DESC
+    `, [userId, start, end]);
+
+    return withBalanceRates(result.rows);
+}
+
+/** Live entries linked to any of these transactions (virtual ids never have any). */
+export async function fetchBalanceEntriesForTransactions(transactionIds: string[]): Promise<BalanceEntry[]> {
+    const ids = transactionIds.filter(id => !id.startsWith('virtual-'));
+    if (ids.length === 0) return [];
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+
+    const placeholders = ids.map((_, i) => `$${i + 2}`).join(', ');
+    const result = await db.query<BalanceEntryRow>(`
+        ${BALANCE_ENTRY_SELECT}
+        WHERE b.user_id = $1
+          AND b.deleted_at IS NULL
+          AND b.transaction_id IN (${placeholders})
+        ORDER BY b.created_at ASC
+    `, [userId, ...ids]);
+
+    return withBalanceRates(result.rows);
+}
+
+export async function insertBalanceEntry(input: BalanceEntryInput): Promise<BalanceEntry> {
+    const db = await getDatabaseAsync();
+    const userId = await getUserId();
+    const id = generateId();
     const timestamp = now();
 
-    // monthStart is a period anchor; derive the period window.
-    const { start: startStr, end: endStr } = getPeriodRange(monthStart);
+    const entry: BalanceEntry = {
+        id,
+        user_id: userId,
+        date: input.date,
+        amount_cents: input.amount_cents,
+        currency_code: input.currency_code,
+        exchange_rate_id: input.exchange_rate_id ?? null,
+        transaction_id: input.transaction_id ?? null,
+        kind: input.kind ?? 'entry',
+        note: input.note ?? null,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null,
+    };
 
-    // Get all balanced transactions for the period
-    const result = await db.query<{ id: string }>(`
-        SELECT id FROM transactions
-        WHERE user_id = $1
-          AND deleted_at IS NULL
-          AND to_be_balanced = true
-          AND date >= $2
-          AND date < $3
-    `, [userId, startStr, endStr]);
+    await db.query(`
+        INSERT INTO balance_entries (
+            id, user_id, date, amount_cents, currency_code, exchange_rate_id,
+            transaction_id, kind, note, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `, [
+        entry.id, entry.user_id, entry.date, entry.amount_cents, entry.currency_code,
+        entry.exchange_rate_id, entry.transaction_id, entry.kind, entry.note,
+        entry.created_at, entry.updated_at,
+    ]);
 
-    // Update each transaction and track changes
-    for (const row of result.rows) {
-        await db.query(`
-            UPDATE transactions
-            SET to_be_balanced = false, updated_at = $1
-            WHERE id = $2
-        `, [timestamp, row.id]);
+    await trackChange('balance_entries', id, 'INSERT', entry);
+    triggerBackgroundSync();
 
-        await trackChange('transactions', row.id, 'UPDATE', {
-            id: row.id,
-            to_be_balanced: false,
-            updated_at: timestamp
-        });
+    return entry;
+}
+
+export async function updateBalanceEntryAmount(id: string, amountCents: number): Promise<void> {
+    const db = await getDatabaseAsync();
+    const timestamp = now();
+    await db.query(`UPDATE balance_entries SET amount_cents = $1, updated_at = $2 WHERE id = $3`, [amountCents, timestamp, id]);
+    await trackChange('balance_entries', id, 'UPDATE', { id, amount_cents: amountCents, updated_at: timestamp });
+    triggerBackgroundSync();
+}
+
+export async function deleteBalanceEntry(id: string): Promise<void> {
+    const db = await getDatabaseAsync();
+    const timestamp = now();
+    await db.query(`UPDATE balance_entries SET deleted_at = $1, updated_at = $1 WHERE id = $2`, [timestamp, id]);
+    await trackChange('balance_entries', id, 'DELETE', { id, deleted_at: timestamp });
+    triggerBackgroundSync();
+}
+
+/** Keeps the entry in the ledger but forgets which transaction it came from. */
+export async function detachBalanceEntry(id: string): Promise<void> {
+    const db = await getDatabaseAsync();
+    const timestamp = now();
+    await db.query(`UPDATE balance_entries SET transaction_id = NULL, updated_at = $1 WHERE id = $2`, [timestamp, id]);
+    await trackChange('balance_entries', id, 'UPDATE', { id, transaction_id: null, updated_at: timestamp });
+    triggerBackgroundSync();
+}
+
+/**
+ * What to do with the balance entries of transactions being deleted: drop them from the
+ * ledger, or keep them (detached, so they don't point at a deleted row).
+ */
+export async function resolveLinkedBalanceEntries(transactionIds: string[], action: 'remove' | 'detach'): Promise<void> {
+    const linked = await fetchBalanceEntriesForTransactions(transactionIds);
+    for (const entry of linked) {
+        if (action === 'remove') {
+            await deleteBalanceEntry(entry.id);
+        } else {
+            await detachBalanceEntry(entry.id);
+        }
     }
+}
 
-    if (result.rows.length > 0) {
-        triggerBackgroundSync();
-    }
-
-    return result.rows.length;
+/**
+ * Brings the period's balance back to 0 by adding a 'settle' entry for minus its total.
+ * Only the ledger changes — moving the money is up to you. Returns the entry, or null if
+ * the period was already settled.
+ */
+export async function settleBalance(monthStart: string): Promise<BalanceEntry | null> {
+    const total = sumBalanceUsdCents(await fetchBalanceEntries(monthStart));
+    if (total === 0) return null;
+    return insertBalanceEntry({
+        date: getPeriodRange(monthStart).start,
+        amount_cents: -total,
+        currency_code: 'USD',
+        kind: 'settle',
+    });
 }
 
 // ============================================================================

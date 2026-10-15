@@ -210,7 +210,6 @@ def import_toshl_csv(file_path, supabase_url, supabase_key, user_id, dry_run=Fal
                 "payment_method": tag_data['payment_method'],
                 "credit_card_id": card_id,
                 "exchange_rate_id": rate_id,
-                "to_be_balanced": tag_data['to_be_balanced'],
                 "note": description if description else None
             }
             transactions_to_insert.append(tx)

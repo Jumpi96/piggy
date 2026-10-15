@@ -11,6 +11,8 @@ plan.json is a list of operations, all applied in ONE database transaction:
       exception_dates — the physical row is shown regardless. Optional "amount_cents".
       If a row already owns (rule, date) — even a voided one — it's restored and
       updated instead, because the unique index counts soft-deleted rows.
+      "tbb" puts the whole amount into the month's balance (a balance_entries row
+      linked to the transaction).
 
   {"op": "extend", "rule": "<rule uuid>", "end": "2026-12-03", "hide_before": "2026-10-01"}
       Move the rule's end_date. Occurrences newly exposed before "hide_before" are
@@ -23,7 +25,7 @@ plan.json is a list of operations, all applied in ONE database transaction:
   {"op": "add", "date": "2026-10-03", "card": "VISA Black", "direction": "expense",
    "amount_cents": 1018, "currency": "USD", "category": "Recreation",
    "tag": "tecnología", "note": "Fly.io", "tbb": true}
-      A one-off card charge, pinned to the effective exchange rate.
+      A one-off card charge, pinned to the effective exchange rate. "tbb" as above.
 
   {"op": "void", "id": "<transaction uuid>"}
       Soft-delete a physical row. Refuses override rows — voiding one resurrects the
@@ -56,6 +58,16 @@ def rate_id(p: Piggy, currency: str, d: date) -> str | None:
     return str(ok[0]["id"]) if ok else None
 
 
+def balance_entry(p: Piggy, txn_id: str, d: date, direction: str, amount: int,
+                  currency: str, rate: str | None) -> tuple[str, tuple]:
+    """TO BALANCE: the whole amount into the month's balance ledger, linked to the row.
+    Signed like the app: an expense is owed from savings (> 0), an income goes back (< 0)."""
+    signed = amount if direction == "expense" else -amount
+    return ("INSERT INTO balance_entries (id, user_id, date, amount_cents, currency_code, "
+            "exchange_rate_id, transaction_id) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+            (str(uuid.uuid4()), p.user_id, d, signed, currency, rate, txn_id))
+
+
 def rule(p: Piggy, rid: str) -> dict:
     hit = [r for r in p.rules() if r["id"] == rid]
     if not hit:
@@ -69,21 +81,30 @@ def build(p: Piggy, op: dict) -> tuple[list[tuple[str, tuple]], date]:
     if kind == "occurrence":
         r, d = rule(p, op["rule"]), date.fromisoformat(op["date"])
         amount = int(op.get("amount_cents", r["amount_cents"]))
-        tbb = bool(op.get("tbb", False))
+        rate = rate_id(p, r["currency_code"], d)
         existing = p.q("SELECT id, deleted_at FROM transactions WHERE user_id = %s "
                        "AND recurring_rule_id = %s AND original_date = %s", (p.user_id, r["id"], d))
         if existing:
-            return [("UPDATE transactions SET deleted_at = NULL, date = %s, amount_cents = %s, "
-                     "to_be_balanced = %s, updated_at = now() WHERE id = %s AND user_id = %s",
-                     (d, amount, tbb, str(existing[0]["id"]), p.user_id))], d
-        return [("""INSERT INTO transactions
-                 (id, user_id, date, direction, amount_cents, currency_code, exchange_rate_id,
-                  category, tag, payment_method, credit_card_id, recurring_rule_id, original_date,
-                  to_be_balanced, note)
-                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                 (str(uuid.uuid4()), p.user_id, d, r["direction"], amount, r["currency_code"],
-                  rate_id(p, r["currency_code"], d), r["category"], r["tag"], r["payment_method"],
-                  r.get("credit_card_id"), r["id"], d, tbb, r.get("note")))], d
+            txn_id = str(existing[0]["id"])
+            stmts = [("UPDATE transactions SET deleted_at = NULL, date = %s, amount_cents = %s, "
+                      "updated_at = now() WHERE id = %s AND user_id = %s",
+                      (d, amount, txn_id, p.user_id))]
+        else:
+            txn_id = str(uuid.uuid4())
+            stmts = [("""INSERT INTO transactions
+                     (id, user_id, date, direction, amount_cents, currency_code, exchange_rate_id,
+                      category, tag, payment_method, credit_card_id, recurring_rule_id, original_date,
+                      note)
+                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                     (txn_id, p.user_id, d, r["direction"], amount, r["currency_code"],
+                      rate, r["category"], r["tag"], r["payment_method"],
+                      r.get("credit_card_id"), r["id"], d, r.get("note")))]
+        # A restored row may already be in the balance; don't count it twice.
+        in_balance = existing and p.q("SELECT 1 FROM balance_entries WHERE transaction_id = %s "
+                                      "AND deleted_at IS NULL", (txn_id,))
+        if op.get("tbb") and not in_balance:
+            stmts.append(balance_entry(p, txn_id, d, r["direction"], amount, r["currency_code"], rate))
+        return stmts, d
 
     if kind in ("extend", "shift"):
         r = rule(p, op["rule"])
@@ -105,12 +126,18 @@ def build(p: Piggy, op: dict) -> tuple[list[tuple[str, tuple]], date]:
     if kind == "add":
         card = find_card(p, op["card"])
         d = date.fromisoformat(op["date"])
-        res = p.insert_transaction(
-            txn_date=d, direction=op.get("direction", "expense"), amount_cents=int(op["amount_cents"]),
-            currency_code=op["currency"], category=op["category"], tag=op["tag"],
-            payment_method="card", credit_card_id=card["id"], note=op.get("note"),
-            to_be_balanced=bool(op.get("tbb", False)), commit=False)
-        return [(res["sql"], res["args"])], d
+        direction, amount = op.get("direction", "expense"), int(op["amount_cents"])
+        rate = rate_id(p, op["currency"], d)
+        txn_id = str(uuid.uuid4())
+        stmts = [("""INSERT INTO transactions
+                 (id, user_id, date, direction, amount_cents, currency_code, exchange_rate_id,
+                  category, tag, payment_method, credit_card_id, note)
+                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'card',%s,%s)""",
+                 (txn_id, p.user_id, d, direction, amount, op["currency"], rate,
+                  op["category"], op["tag"], card["id"], op.get("note")))]
+        if op.get("tbb"):
+            stmts.append(balance_entry(p, txn_id, d, direction, amount, op["currency"], rate))
+        return stmts, d
 
     if kind == "void":
         row = p.q("SELECT date, recurring_rule_id FROM transactions WHERE id = %s AND user_id = %s",

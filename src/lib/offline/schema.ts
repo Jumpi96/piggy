@@ -1,5 +1,5 @@
 // Schema version - increment when schema changes
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 // Tables that need to be synced with Supabase (in FK dependency order)
 export const SYNC_TABLES = [
@@ -9,10 +9,33 @@ export const SYNC_TABLES = [
     'recurring_rules',
     'transactions',
     'parameters',
-    'import_entries'
+    'import_entries',
+    'balance_entries'
 ] as const;
 
 export type SyncTableName = typeof SYNC_TABLES[number];
+
+// Balance ledger: signed amounts (> 0 = unexpected expense to cover from savings,
+// < 0 = unexpected income) whose date puts them in a period. transaction_id only records
+// where an entry came from (no local FK, like import_entries). Shared with the v7 migration.
+export const BALANCE_ENTRIES_SQL = `
+CREATE TABLE IF NOT EXISTS balance_entries (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    amount_cents BIGINT NOT NULL,
+    currency_code TEXT NOT NULL,
+    exchange_rate_id TEXT,
+    transaction_id TEXT,
+    kind TEXT NOT NULL DEFAULT 'entry',
+    note TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT,
+    deleted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_balance_entries_date ON balance_entries(date, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_balance_entries_transaction ON balance_entries(transaction_id);
+`;
 
 // Full schema SQL for local SQLite database
 // Mirrors Supabase schema but simplified (no RLS, no auth references)
@@ -108,7 +131,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     credit_card_id TEXT REFERENCES credit_cards(id),
     recurring_rule_id TEXT REFERENCES recurring_rules(id),
     original_date TEXT, -- YYYY-MM-DD for recurring instances
-    to_be_balanced BOOLEAN NOT NULL DEFAULT false,
     note TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -152,6 +174,7 @@ CREATE TABLE IF NOT EXISTS import_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_import_entries_status ON import_entries(status, deleted_at);
 
+${BALANCE_ENTRIES_SQL}
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_deleted ON transactions(user_id, deleted_at);
@@ -169,5 +192,5 @@ export function tableHasUpdatedAt(_table: SyncTableName): boolean {
 
 // Helper to check if a table supports soft delete
 export function tableHasSoftDelete(table: SyncTableName): boolean {
-    return ['transactions', 'recurring_rules', 'credit_cards', 'import_entries'].includes(table);
+    return ['transactions', 'recurring_rules', 'credit_cards', 'import_entries', 'balance_entries'].includes(table);
 }

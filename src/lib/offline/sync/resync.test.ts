@@ -65,7 +65,7 @@ const tx = (id: string, cardId: string | null) => ({
     id, user_id: 'u1', date: '2026-10-01', direction: 'expense', amount_cents: 100,
     currency_code: 'USD', exchange_rate_id: null, category: 'Food', tag: 'x',
     payment_method: cardId ? 'card' : 'cash', credit_card_id: cardId, recurring_rule_id: null,
-    original_date: null, to_be_balanced: false, note: null, created_at: TS, updated_at: TS, deleted_at: null,
+    original_date: null, note: null, created_at: TS, updated_at: TS, deleted_at: null,
 });
 
 async function insert(table: string, row: Record<string, unknown>) {
@@ -165,6 +165,43 @@ describe('pull natural-key repair', () => {
         await pullChanges();
 
         expect(await ids('parameters')).toEqual(['local-id']);
+    });
+});
+
+describe('balance ledger sync', () => {
+    beforeEach(async () => {
+        db = new PGlite();
+        await db.exec(SCHEMA_SQL);
+        await db.query(`INSERT INTO currencies (code, name) VALUES ('USD', 'Dollar')`);
+        serverRows = {};
+    });
+
+    const entry = (id: string, transactionId: string | null) => ({
+        id, user_id: 'u1', date: '2026-10-01', amount_cents: 100, currency_code: 'USD',
+        exchange_rate_id: null, transaction_id: transactionId, kind: 'entry', note: null,
+        created_at: TS, updated_at: '2026-10-06T12:00:00.000Z', deleted_at: null,
+    });
+
+    it('pulls transactions from a server that still has the to_be_balanced column', async () => {
+        serverRows.transactions = [{ ...tx('t1', null), to_be_balanced: true, updated_at: '2026-10-06T12:00:00.000Z' }];
+        serverRows.balance_entries = [entry('b1', 't1')];
+
+        const result = await pullChanges();
+
+        expect(result.success).toBe(true);
+        expect(await ids('transactions')).toEqual(['t1']);
+        const rows = await db.query(`SELECT id, transaction_id, amount_cents FROM balance_entries`);
+        expect(rows.rows).toEqual([{ id: 'b1', transaction_id: 't1', amount_cents: 100 }]);
+    });
+
+    it('keeps a local-only transaction a balance entry still points at during a resync', async () => {
+        await insert('transactions', tx('t-local', null));
+        await insert('balance_entries', entry('b1', 't-local'));
+        serverRows.transactions = [];
+
+        await fullTableResync('transactions');
+
+        expect(await ids('transactions')).toEqual(['t-local']);
     });
 });
 

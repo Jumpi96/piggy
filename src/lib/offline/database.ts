@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { IdbFs } from '@electric-sql/pglite';
-import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
+import { BALANCE_ENTRIES_SQL, SCHEMA_SQL, SCHEMA_VERSION } from './schema';
 
 const DB_NAME = 'piggy-offline-db';
 
@@ -166,6 +166,18 @@ async function runMigrations(database: PGlite): Promise<void> {
                 // the new table right away instead of within the hour.
                 await database.query(`DELETE FROM _sync_meta WHERE key = 'last_reconcile_at'`);
             }
+
+            if (currentVersion < 7) {
+                console.log('[Offline DB] Applying version 7 migration (Balance ledger)');
+                // The flags aren't converted here: the server migration turns them into
+                // balance entries, which reach this device by sync. Converting locally too
+                // would duplicate them. If an older build already pulled past the migration,
+                // they sit below the watermark — clearing the reconcile stamp makes the next
+                // sync compare counts and resync the new table (same as v6).
+                await database.exec(BALANCE_ENTRIES_SQL);
+                await database.exec(`ALTER TABLE transactions DROP COLUMN IF EXISTS to_be_balanced;`);
+                await database.query(`DELETE FROM _sync_meta WHERE key = 'last_reconcile_at'`);
+            }
         }
 
         // Update schema version
@@ -184,6 +196,7 @@ export async function clearDatabase(): Promise<void> {
 
     // Clear all user data tables (preserve schema)
     const tables = [
+        'balance_entries',
         'import_entries',
         'transactions',
         'recurring_rules',

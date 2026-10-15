@@ -24,7 +24,6 @@ describe('annualReportUtils', () => {
             payment_method: 'cash',
             currency_code: 'USD',
             exchange_rate: { rate: 1 },
-            to_be_balanced: false
         },
         {
             id: '2',
@@ -40,7 +39,6 @@ describe('annualReportUtils', () => {
             payment_method: 'card',
             currency_code: 'USD',
             exchange_rate: { rate: 1 },
-            to_be_balanced: false
         },
         {
             id: '3',
@@ -56,7 +54,6 @@ describe('annualReportUtils', () => {
             payment_method: 'card',
             currency_code: 'USD',
             exchange_rate: { rate: 1 },
-            to_be_balanced: false
         }
     ];
 
@@ -90,7 +87,7 @@ describe('annualReportUtils', () => {
                 id, user_id: 'u1', direction: 'expense', amount_cents: cents,
                 category: 'Recreation', tag: 't', date: '2024-03-15', note: '',
                 created_at: '', updated_at: '', payment_method: 'cash',
-                currency_code: 'ARS', exchange_rate: { rate: 3 }, to_be_balanced: false,
+                currency_code: 'ARS', exchange_rate: { rate: 3 },
             });
             // Each row is 100/3 = 33.33: per-transaction rounding would give 33+33=66;
             // summing first gives round(200/3)=67.
@@ -142,7 +139,7 @@ describe('annualReportUtils', () => {
                 id, user_id: 'u1', direction: dir, amount_cents: cents,
                 category: 'Taxes', tag: 't', date: '2024-01-15', note: '',
                 created_at: '', updated_at: '', payment_method: 'cash',
-                currency_code: 'USD', exchange_rate: { rate: 1 }, to_be_balanced: false,
+                currency_code: 'USD', exchange_rate: { rate: 1 },
             });
             const total = calculateTotalTaxes([mk('a', 'expense', 5000), mk('b', 'income', 3000)]);
             expect(total).toBe(5000);

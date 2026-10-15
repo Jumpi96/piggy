@@ -86,7 +86,6 @@ create table if not exists transactions (
   credit_card_id uuid references credit_cards(id),
   recurring_rule_id uuid references recurring_rules(id),
   original_date date,
-  to_be_balanced boolean not null default false,
   note text,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
@@ -135,6 +134,24 @@ create table if not exists import_entries (
   updated_at timestamptz default now(),
   deleted_at timestamptz,
   unique (user_id, source, external_id)
+);
+
+-- Balance Entries Table: the month's balance ledger. Signed amount (> 0 = unexpected expense
+-- to cover from savings, < 0 = unexpected income); the date puts it in a period.
+-- transaction_id only records where an entry came from. 'settle' entries zero a period.
+create table if not exists balance_entries (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) not null default auth.uid(),
+  date date not null,
+  amount_cents bigint not null,
+  currency_code text not null references currencies(code),
+  exchange_rate_id uuid references exchange_rates(id),
+  transaction_id uuid references transactions(id),
+  kind text not null default 'entry' check (kind in ('entry', 'settle')),
+  note text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  deleted_at timestamptz
 );
 
 -- RLS Policies
@@ -197,6 +214,14 @@ begin
     end if;
 end $$;
 
+alter table balance_entries enable row level security;
+do $$
+begin
+    if not exists (select 1 from pg_policies where policyname = 'Users can all balance_entries') then
+        create policy "Users can all balance_entries" on balance_entries for all to authenticated using (user_id = auth.uid()) with check (user_id = auth.uid());
+    end if;
+end $$;
+
 -- Triggers for all tables
 do $$
 begin
@@ -226,5 +251,9 @@ begin
 
     if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_import_entries') then
         create trigger set_updated_at_import_entries before insert or update on import_entries for each row execute procedure update_updated_at_column();
+    end if;
+
+    if not exists (select 1 from pg_trigger where tgname = 'set_updated_at_balance_entries') then
+        create trigger set_updated_at_balance_entries before insert or update on balance_entries for each row execute procedure update_updated_at_column();
     end if;
 end $$;

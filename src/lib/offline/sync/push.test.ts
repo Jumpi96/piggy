@@ -117,6 +117,14 @@ describe('pushInsert override conflict handling', () => {
         const pendingRemap = dbQueryMock.mock.calls.find(c => /_pending_changes SET record_id/.test(c[0]));
         expect(pendingRemap).toBeDefined();
         expect(pendingRemap![1]).toEqual(['srv-id', 'transactions', 'local-uuid']);
+
+        // Balance entries made for the override follow it, queued payloads included,
+        // or the server FK on transaction_id would reject them forever.
+        const relink = dbQueryMock.mock.calls.find(c => /UPDATE balance_entries SET transaction_id/.test(c[0]));
+        expect(relink![1]).toEqual(['srv-id', 'local-uuid']);
+        const payloadRemap = dbQueryMock.mock.calls.find(c => /SET payload = replace/.test(c[0]));
+        expect(payloadRemap![0]).toContain("table_name = 'balance_entries'");
+        expect(payloadRemap![1]).toEqual(['srv-id', 'local-uuid']);
     });
 
     it('does not touch local ids when the server already holds our id', async () => {
@@ -152,6 +160,21 @@ describe('pushUpdate / pushDelete zero-row handling', () => {
         terminalResult = { data: [], error: null };
         const ok = await pushChangeImmediately(change('DELETE', { id: 't1', deleted_at: 'x' }));
         expect(ok).toBe(false);
+    });
+});
+
+describe('dropped to_be_balanced flag', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        terminalResult = { data: [{ id: 't1' }], error: null };
+    });
+
+    it('is never sent for transaction changes queued before schema v7', async () => {
+        const ok = await pushChangeImmediately(change('UPDATE', { id: 't1', amount_cents: 5, to_be_balanced: true, updated_at: 'x' }));
+        expect(ok).toBe(true);
+        const sent = updateMock.mock.calls[0][0];
+        expect(sent).not.toHaveProperty('to_be_balanced');
+        expect(sent).toMatchObject({ amount_cents: 5 });
     });
 });
 

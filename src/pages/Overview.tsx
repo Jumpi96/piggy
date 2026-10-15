@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates, clearBalancedTransactions } from '../lib/api';
-import type { Transaction, ExchangeRate } from '../types';
-import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar, PieChart as PieChartIcon, Filter, XCircle } from 'lucide-react';
+import { fetchTransactions, computeMonthBalance, fetchParameters, fetchLatestRates, fetchBalanceEntries, settleBalance } from '../lib/api';
+import type { Transaction, ExchangeRate, BalanceEntry } from '../types';
+import { Loader2, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Wallet, Calendar, PieChart as PieChartIcon, Filter, CheckCircle2 } from 'lucide-react';
+import { BalanceLedger } from '../components/BalanceLedger';
+import { balanceEntryUsdCents, sumBalanceUsdCents } from '../lib/balance';
 import { cn } from '../lib/utils';
 import { CategoryPieChart } from '../components/charts/CategoryPieChart';
 import { TagBarChart } from '../components/charts/TagBarChart';
@@ -26,7 +28,11 @@ export function Overview() {
     const [totalIncome, setTotalIncome] = useState(0);
     const [totalExpense, setTotalExpense] = useState(0);
     const [taxes, setTaxes] = useState(0);
-    const [toBeBalancedTotal, setToBeBalancedTotal] = useState(0);
+    const [balanceEntries, setBalanceEntries] = useState<BalanceEntry[]>([]);
+    const [showLedger, setShowLedger] = useState(false);
+    // Bumped after a ledger change made here, so the page reloads without waiting for sync.
+    const [reloadKey, setReloadKey] = useState(0);
+    const toBeBalancedTotal = sumBalanceUsdCents(balanceEntries);
     const [availableCash, setAvailableCash] = useState(0);
     const [cashIfCardsPaid, setCashIfCardsPaid] = useState(0);
 
@@ -35,7 +41,7 @@ export function Overview() {
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [showTopTagsOnly, setShowTopTagsOnly] = useState(true);
 
-    // Clear balanced state
+    // Settle (hold) state
     const [clearProgress, setClearProgress] = useState(0);
     const [isClearing, setIsClearing] = useState(false);
     const [shouldClear, setShouldClear] = useState(false);
@@ -78,9 +84,10 @@ export function Overview() {
             setShouldClear(false);
             try {
                 const monthStr = getMonthStr(currentMonth);
-                await clearBalancedTransactions(monthStr);
+                await settleBalance(monthStr);
+                setReloadKey(k => k + 1);
             } catch (err) {
-                console.error('Failed to clear balanced transactions:', err);
+                console.error('Failed to settle the balance:', err);
             } finally {
                 setIsClearing(false);
             }
@@ -119,11 +126,12 @@ export function Overview() {
                 // If not, this line will cause an error.
                 const monthStr = getMonthStr(currentMonth);
 
-                const [txs, balanceData, params, rates] = await Promise.all([
+                const [txs, balanceData, params, rates, ledger] = await Promise.all([
                     fetchTransactions(monthStr),
                     computeMonthBalance(monthStr),
                     fetchParameters(),
-                    fetchLatestRates()
+                    fetchLatestRates(),
+                    fetchBalanceEntries(monthStr)
                 ]);
 
                 setTransactions(txs);
@@ -136,13 +144,9 @@ export function Overview() {
                 const apdParam = params.find(p => p.key === 'amount_per_day');
                 setApd(apdParam ? parseFloat(apdParam.value) : 0);
 
-                // Money to balance: Sum(Expenses) - Sum(Incomes) for marked transactions
-                // Negative means unexpected incomes, positive means unexpected expenses.
-                const tbb = txs.filter(t => t.to_be_balanced).reduce((acc, t) => {
-                    const amount = t.amount_cents / (t.exchange_rate?.rate || 1);
-                    return acc + (t.direction === 'expense' ? amount : -amount);
-                }, 0);
-                setToBeBalancedTotal(tbb);
+                // The month's balance ledger. Positive means unexpected expenses (money
+                // needed from savings), negative unexpected incomes.
+                setBalanceEntries(ledger);
 
                 // Available cash should be (until today)
                 const todayStr = formatLocalDate(new Date());
@@ -174,13 +178,23 @@ export function Overview() {
             }
         }
         load();
-    }, [currentMonth, lastDataUpdate]);
+    }, [currentMonth, lastDataUpdate, reloadKey]);
 
     const formatMonth = (d: Date) => getPeriodLabel(formatLocalMonth(d));
 
     const formatUSD = (cents: number, isCents = true) => {
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((isCents ? cents / 100 : cents));
     };
+
+    // USD put into the balance from each transaction: not daily spending.
+    const balancedUsdByTransaction = useMemo(() => {
+        const out = new Map<string, number>();
+        for (const e of balanceEntries) {
+            if (!e.transaction_id) continue;
+            out.set(e.transaction_id, (out.get(e.transaction_id) ?? 0) + balanceEntryUsdCents(e));
+        }
+        return out;
+    }, [balanceEntries]);
 
     // Data aggregation for charts (exclude Taxes from spending insights)
     const categoryData = useMemo(() => {
@@ -327,10 +341,14 @@ export function Overview() {
                             <div className="space-y-1">
                                 <span className="text-[10px] font-black uppercase opacity-70 tracking-widest">To be Balanced</span>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-baseline gap-2">
+                                    <button
+                                        onClick={() => setShowLedger(true)}
+                                        className="flex items-baseline gap-2 hover:opacity-80 transition-opacity"
+                                        title="Open this month's balance ledger"
+                                    >
                                         <p className={cn("text-2xl font-black", toBeBalancedTotal > 0 ? "text-red-200" : "text-white")}>{formatUSD(toBeBalancedTotal)}</p>
                                         <span className="text-xs opacity-60">⚖️</span>
-                                    </div>
+                                    </button>
                                     {toBeBalancedTotal !== 0 && (
                                         <button
                                             onMouseDown={handleClearStart}
@@ -340,7 +358,7 @@ export function Overview() {
                                             onTouchEnd={handleClearEnd}
                                             disabled={isClearing}
                                             className="relative w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 transition-colors flex items-center justify-center overflow-hidden disabled:opacity-50"
-                                            title="Hold to clear all balanced transactions"
+                                            title="Hold to settle: sets this month's balance to 0 (ledger only)"
                                         >
                                             <svg className="absolute inset-0 w-full h-full -rotate-90">
                                                 <circle
@@ -365,7 +383,7 @@ export function Overview() {
                                             {isClearing ? (
                                                 <Loader2 className="w-4 h-4 animate-spin relative z-10" />
                                             ) : (
-                                                <XCircle className="w-4 h-4 relative z-10" />
+                                                <CheckCircle2 className="w-4 h-4 relative z-10" />
                                             )}
                                         </button>
                                     )}
@@ -565,7 +583,7 @@ export function Overview() {
                                 </h3>
                             </div>
                             <span className="text-xs text-zinc-400 font-mono">
-                                excl. recurring, cards, to-balance, savings
+                                excl. recurring, cards, balanced, savings
                             </span>
                         </div>
                         <div className="h-[280px]">
@@ -574,6 +592,7 @@ export function Overview() {
                                 apd={apd}
                                 periodStart={periodStartStr}
                                 periodEnd={periodEndExclStr}
+                                balancedUsdByTransaction={balancedUsdByTransaction}
                             />
                         </div>
                     </div>
@@ -585,6 +604,15 @@ export function Overview() {
                         </div>
                     )}
                 </>
+            )}
+
+            {showLedger && (
+                <BalanceLedger
+                    monthStart={getMonthStr(currentMonth)}
+                    entries={balanceEntries}
+                    onChanged={() => setReloadKey(k => k + 1)}
+                    onClose={() => setShowLedger(false)}
+                />
             )}
         </div>
     );

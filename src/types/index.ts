@@ -64,8 +64,35 @@ export interface Transaction {
     credit_card?: { name: string } | null;
     recurring_rule_id?: string | null;
     original_date?: string | null;
-    to_be_balanced: boolean;
     note?: string | null;
+    created_at: string;
+    updated_at: string;
+    deleted_at?: string | null;
+}
+
+export type BalanceEntryKind = 'entry' | 'settle';
+
+/**
+ * One line of a month's balance ledger: money to move between savings and the general
+ * account because of spending or income outside the budget. It only tracks — no money
+ * moves. amount_cents is signed: > 0 is an unexpected expense to cover from savings,
+ * < 0 an unexpected income. The date puts it in a period. transaction_id only records
+ * which transaction it came from; the entry is not tied to it. A 'settle' entry brings
+ * its period's total back to 0.
+ */
+export interface BalanceEntry {
+    id: string;
+    user_id: string;
+    date: string; // YYYY-MM-DD
+    amount_cents: number;
+    currency_code: string;
+    exchange_rate_id?: string | null;
+    exchange_rate?: { rate: number } | null; // resolved on read, like Transaction
+    transaction_id: string | null;
+    kind: BalanceEntryKind;
+    note?: string | null;
+    // The linked transaction, joined on read for labels (deleted: it was deleted since).
+    source?: { category: string; tag: string; note: string | null; deleted: boolean } | null;
     created_at: string;
     updated_at: string;
     deleted_at?: string | null;

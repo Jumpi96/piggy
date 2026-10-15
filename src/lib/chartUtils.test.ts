@@ -43,7 +43,6 @@ describe('chartUtils', () => {
             payment_method: 'cash',
             currency_code: 'USD',
             exchange_rate: { rate: 1 },
-            to_be_balanced: false
         },
         {
             id: '2',
@@ -59,7 +58,6 @@ describe('chartUtils', () => {
             payment_method: 'cash',
             currency_code: 'ARS',
             exchange_rate: { rate: 1000 },
-            to_be_balanced: false
         },
         {
             id: '3',
@@ -75,7 +73,6 @@ describe('chartUtils', () => {
             payment_method: 'card',
             currency_code: 'USD',
             exchange_rate: { rate: 1 },
-            to_be_balanced: false
         }
     ];
 

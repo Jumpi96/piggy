@@ -109,7 +109,9 @@ table; commit only after an explicit go. Ops (full reference in `fix.py --help`)
 
 **"TO BALANCE" (`"tbb": true`)**: when he asks for the fixed rows to carry TO BALANCE,
 set it on the rows created for *this* review (the `occurrence` / `add` rows) — never on
-the rule, so future months stay clean. Nov/Dec occurrences produced by an `extend`
+the rule, so future months stay clean. It adds a `balance_entries` row for the whole
+amount, linked to the transaction (the month's balance is a ledger now, not a flag on
+transactions); `reconcile.py` marks rows with a linked entry as TBB. Nov/Dec occurrences produced by an `extend`
 remain plain recurring virtuals unless he asks otherwise.
 
 After `--commit`, `fix.py` prints the expense total of every period around the change,

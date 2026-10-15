@@ -22,7 +22,7 @@ A modern, mobile-first Progressive Web App (PWA) for personal finance management
 - **Multi-Currency Support**: Track transactions in multiple currencies (USD, EUR, ARS, etc.) with monthly exchange rate management
 - **Credit Card Intelligence**: Automatic "Effective Date" calculation based on credit card closing and payment days
 - **Recurring Transactions**: Define rules for recurring income/expenses and automatically generate transactions up to 24 months ahead
-- **To Be Balanced Flag**: Mark transactions for future reconciliation or shared expenses
+- **Monthly Balance Ledger**: Track how much of a month's spending (or income) was outside the budget — "balance" all or part of a transaction, add manual adjustments, and settle the month to 0 once the money is moved from savings
 - **Monthly Dashboard**: Real-time overview showing net balance, income, and expenses in USD
 - **Smart Tag Autocomplete**: Frequency-based tag suggestions for faster transaction entry
 - **Credit Card Reports**: View monthly credit card statements with proper date calculations
@@ -348,7 +348,10 @@ npm run build
 - **transactions**: Main ledger for all financial transactions
   - Supports multiple currencies
   - Links to credit cards for effective date calculation
-  - Includes "to be balanced" flag for reconciliation
+
+- **balance_entries**: The monthly balance ledger
+  - Signed amounts (> 0 needs money from savings, < 0 goes back) dated into a period
+  - Optionally records the transaction it came from; "settle" entries zero a month
 
 - **credit_cards**: Credit card configurations
   - Closing day and payment day for statement cycles
