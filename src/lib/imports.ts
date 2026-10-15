@@ -1,5 +1,6 @@
 import type { CardRule, Direction, ImportEntry, ImportKind, ImportSettings, ImportSource, PaymentMethod } from '../types';
 import { normalizeForComparison } from './utils';
+import { addMonthsClamped, formatLocalDate, parseLocalDate } from './dates';
 
 export const IMPORT_SETTINGS_KEY = 'import_settings';
 export const IMPORT_STATUS_KEY = 'import_status';
@@ -106,6 +107,31 @@ export function entryToDraft(entry: ImportEntry, settings: ImportSettings): Impo
         credit_card_id: rule?.credit_card_id ?? null,
         note: entry.description?.trim() ?? '',
     };
+}
+
+/** How many cuotas an entry was bought in, when it is more than one. */
+export function entryInstallments(entry: Pick<ImportEntry, 'installments'> | null | undefined): number | null {
+    const count = entry?.installments;
+    return count != null && count > 1 ? count : null;
+}
+
+/** One cuota of a purchase: the total split evenly, rounded to the cent. */
+export function installmentAmountCents(totalCents: number, count: number): number {
+    return Math.round(totalCents / count);
+}
+
+/**
+ * Last cuota of a purchase whose first cuota falls on `firstDate`. Cuotas are a monthly
+ * recurring rule from the first payment date, so the last one is count - 1 months later.
+ */
+export function installmentEndDate(firstDate: string, count: number): string {
+    return formatLocalDate(addMonthsClamped(parseLocalDate(firstDate), count - 1));
+}
+
+/** Default note for a cuotas rule, keeping the purchase total, e.g. "SHOP · 119.300 en 3 cuotas". */
+export function installmentNote(description: string | null, totalCents: number, count: number): string {
+    const total = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 }).format(totalCents / 100);
+    return [description?.trim(), `${total} en ${count} cuotas`].filter(Boolean).join(' · ');
 }
 
 /**

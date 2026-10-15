@@ -1041,6 +1041,21 @@ export async function confirmImportEntry(entryId: string, transaction: Transacti
     return tx;
 }
 
+/**
+ * Turns an entry bought in cuotas into a monthly recurring rule (one occurrence per cuota),
+ * the way installment purchases are modelled. The entry is confirmed without a
+ * transaction_id: confirmed + no transaction means "added as cuotas".
+ */
+export async function confirmImportEntryAsInstallments(
+    entryId: string,
+    rule: Partial<RecurringRule>
+): Promise<RecurringRule> {
+    const created = await insertRecurringRule(rule);
+    await setImportEntryStatus(entryId, 'confirmed', null);
+    triggerBackgroundSync();
+    return created;
+}
+
 export async function dismissImportEntry(entryId: string): Promise<void> {
     await setImportEntryStatus(entryId, 'dismissed', null);
     triggerBackgroundSync();

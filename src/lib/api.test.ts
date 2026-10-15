@@ -598,6 +598,37 @@ describe('import entries', () => {
         });
     });
 
+    it('confirm as cuotas queues the rule INSERT, then the entry UPDATE without a transaction', async () => {
+        const rule = await api.confirmImportEntryAsInstallments('entry-1', {
+            direction: 'expense',
+            amount_cents: 3976667,
+            currency_code: 'ARS',
+            category: 'Recreation',
+            tag: 'Deporte',
+            payment_method: 'card',
+            credit_card_id: 'card-visa',
+            schedule_type: 'monthly_day',
+            schedule_config: { n: 1 },
+            start_date: '2026-11-03',
+            end_date: '2027-01-03',
+            note: 'MERPAGO*LECLUBDEPORTE · 119.300 en 3 cuotas',
+        });
+
+        expect(rule).toMatchObject({ start_date: '2026-11-03', end_date: '2027-01-03', credit_card_id: 'card-visa' });
+        const calls = vi.mocked(trackChange).mock.calls;
+        expect(calls.map(c => [c[0], c[2]])).toEqual([
+            ['recurring_rules', 'INSERT'],
+            ['import_entries', 'UPDATE'],
+        ]);
+        expect(calls[1][3]).toEqual({
+            id: 'entry-1',
+            status: 'confirmed',
+            transaction_id: null,
+            resolved_at: expect.any(String),
+            updated_at: expect.any(String),
+        });
+    });
+
     it('dismiss and reopen only change status fields', async () => {
         await api.dismissImportEntry('entry-1');
         await api.reopenImportEntry('entry-1');

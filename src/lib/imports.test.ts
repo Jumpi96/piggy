@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
-    DEFAULT_IMPORT_SETTINGS, entryToDraft, isGmailConfirmUrl, matchCardRule, parseImportSettings, unmappedAccountRefs,
+    DEFAULT_IMPORT_SETTINGS, entryInstallments, entryToDraft, installmentAmountCents, installmentEndDate, installmentNote,
+    isGmailConfirmUrl, matchCardRule, parseImportSettings, unmappedAccountRefs,
 } from './imports';
 import type { CardRule, ImportEntry, ImportSettings } from '../types';
 
@@ -138,5 +139,31 @@ describe('isGmailConfirmUrl', () => {
         expect(isGmailConfirmUrl('javascript:alert(1)')).toBe(false);
         expect(isGmailConfirmUrl(null)).toBe(false);
         expect(isGmailConfirmUrl(undefined)).toBe(false);
+    });
+});
+
+describe('cuotas', () => {
+    it('only counts more than one cuota', () => {
+        expect(entryInstallments({ installments: 3 })).toBe(3);
+        expect(entryInstallments({ installments: 1 })).toBeNull();
+        expect(entryInstallments({ installments: null })).toBeNull();
+        expect(entryInstallments(undefined)).toBeNull();
+    });
+
+    it('splits the total per cuota, rounded to the cent', () => {
+        expect(installmentAmountCents(11930000, 3)).toBe(3976667);
+        expect(installmentAmountCents(5913674, 3)).toBe(1971225);
+    });
+
+    it('ends count - 1 months after the first cuota', () => {
+        expect(installmentEndDate('2026-11-03', 3)).toBe('2027-01-03');
+        expect(installmentEndDate('2026-11-03', 12)).toBe('2027-10-03');
+        // Clamped to the month's last day, like monthly recurring occurrences.
+        expect(installmentEndDate('2026-01-31', 2)).toBe('2026-02-28');
+    });
+
+    it('keeps the purchase total in the note', () => {
+        expect(installmentNote('MERPAGO*LECLUBDEPORTE', 11930000, 3)).toBe('MERPAGO*LECLUBDEPORTE · 119.300 en 3 cuotas');
+        expect(installmentNote(null, 5913674, 3)).toBe('59.136,74 en 3 cuotas');
     });
 });

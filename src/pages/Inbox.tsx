@@ -5,7 +5,7 @@ import {
 } from '../lib/api';
 import {
     IMPORT_KIND_LABELS, IMPORT_SOURCE_LABELS, IMPORT_SETTINGS_KEY, IMPORT_STATUS_KEY,
-    DEFAULT_IMPORT_SETTINGS, entryBodyText, isGmailConfirmUrl, matchCardRule, parseImportSettings,
+    DEFAULT_IMPORT_SETTINGS, entryBodyText, entryInstallments, isGmailConfirmUrl, matchCardRule, parseImportSettings,
 } from '../lib/imports';
 import type { CreditCard, ImportEntry, ImportSettings, ImportSource, ImportStatusParam } from '../types';
 import { TransactionForm } from '../components/TransactionForm';
@@ -24,6 +24,12 @@ function formatAmount(cents: number, currency: string | null): string {
 function formatDate(date: string | null): string {
     if (!date) return 'No date';
     return parseLocalDate(date).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** Confirmed without a transaction means it was added as a cuotas recurring item. */
+function addedLabel(entry: ImportEntry): string {
+    const cuotas = entryInstallments(entry);
+    return !entry.transaction_id && cuotas != null ? `Added as ${cuotas} cuotas` : 'Added';
 }
 
 function formatWhen(iso: string | undefined): string {
@@ -230,7 +236,7 @@ export function Inbox() {
                                             entry.status === 'confirmed' ? 'text-emerald-600' : 'text-gray-500'
                                         )}>
                                             {entry.status === 'confirmed'
-                                                ? <><CheckCircle2 className="w-3.5 h-3.5" /> Added</>
+                                                ? <><CheckCircle2 className="w-3.5 h-3.5" /> {addedLabel(entry)}</>
                                                 : <><XCircle className="w-3.5 h-3.5" /> Dismissed</>}
                                         </span>
                                         <button
