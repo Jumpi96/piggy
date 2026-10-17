@@ -37,6 +37,21 @@ Each movement is three rows sharing a SOURCE_ID: `reserve_for_*` debit, `reserve
 then the movement. The payments API responses used in the tests (`test_mercadopago.py`) are real
 shapes trimmed to the fields the importer reads.
 
+## Mercado Pago: card purchases pending capture
+
+`mp_release_2_day.csv` and `mp_release_2_manual.csv` are one real day (anonymized: ids, references
+and the balance/total rows replaced) as two reports saw it:
+
+- `_day`: the scheduled daily report, generated the next morning. The two prepaid-card purchases
+  (`92000000002`, `92000000003`) are only authorized, so each is a lone `reserve_for_payment`
+  debit. `92000000006` is an open payout hold, and `92000000007` a hold released the same day with
+  no payment (a cancelled authorization).
+- `_manual`: a report made two days later, after the merchants captured. The release and the
+  `payment` rows of those purchases are back-dated to the purchase time, which is why no later
+  daily report ever carries them.
+
+The importer imports an open hold as the purchase, keyed like the `payment` row it turns into.
+
 ## Synthetic
 
 Files prefixed `synthetic_`, and the emails in `tests/emails.py`, are hand-written stand-ins.
