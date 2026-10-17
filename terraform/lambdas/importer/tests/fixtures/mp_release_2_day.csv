@@ -1,0 +1,15 @@
+DATE,SOURCE_ID,EXTERNAL_REFERENCE,RECORD_TYPE,DESCRIPTION,NET_CREDIT_AMOUNT,NET_DEBIT_AMOUNT,GROSS_AMOUNT,PAYMENT_METHOD,PAYMENT_METHOD_TYPE
+2026-10-15T00:00:00.000-03:00,,,initial_available_balance,,100000.00,0.00,100000.00,,
+2026-10-15T00:25:37.000-03:00,92000000001,,release,asset_management,60.77,0.00,60.77,available_money,
+2026-10-15T13:46:06.000-03:00,92000000002,REF-2,release,reserve_for_payment,0.00,11319.00,-11319.00,available_money,account_money
+2026-10-15T14:09:09.000-03:00,92000000003,REF-3,release,reserve_for_payment,0.00,300.00,-300.00,available_money,account_money
+2026-10-15T18:19:35.000-03:00,92000000004,REF-4,release,reserve_for_payment,0.00,1000.00,-1000.00,available_money,account_money
+2026-10-15T18:19:35.000-03:00,92000000004,REF-4,release,reserve_for_payment,1000.00,0.00,1000.00,available_money,account_money
+2026-10-15T18:19:35.000-03:00,92000000004,REF-4,release,payment,0.00,1000.00,-1000.00,available_money,account_money
+2026-10-15T19:40:38.000-03:00,92000000005,,release,reserve_for_payout,0.00,15000.00,-15000.00,available_money,
+2026-10-15T19:40:41.000-03:00,92000000005,,release,reserve_for_payout,15000.00,0.00,15000.00,available_money,
+2026-10-15T19:40:41.000-03:00,92000000005,REF-5,release,payout,0.00,15000.00,-15000.00,available_money,
+2026-10-15T21:10:00.000-03:00,92000000006,,release,reserve_for_payout,0.00,2500.00,-2500.00,available_money,
+2026-10-15T22:05:00.000-03:00,92000000007,REF-7,release,reserve_for_payment,0.00,4200.00,-4200.00,available_money,account_money
+2026-10-15T22:31:00.000-03:00,92000000007,REF-7,release,reserve_for_payment,4200.00,0.00,4200.00,available_money,account_money
+,,,total,,73541.77,0.00,,,

@@ -8,7 +8,15 @@ the outflows and the interest ("rendimientos") rows. Re-processing a report is h
 Checked against a real account's report (tests/fixtures/mp_release_1.csv). Every movement comes
 as three rows sharing a SOURCE_ID: `reserve_for_<x>` debit, `reserve_for_<x>` credit (the hold
 and its release), then the movement itself (`payment`, `payout`, `tip`...). Only that last row
-is imported. A hold with no movement after it (cancelled or still pending) imports nothing.
+is imported. A hold released with no movement (a cancelled authorization) imports nothing.
+
+Purchases with the Mercado Pago prepaid card are card authorizations (`pending_capture` in the
+payments API): on the purchase day the report has only the hold debit. The merchant captures a
+day or two later, and Mercado Pago then writes the release and the `payment` row back-dated to
+the purchase time, so they never reach a later daily report (each covers one day). An open hold
+is therefore imported as the purchase itself, keyed like the `payment` row it becomes, so a
+report that later carries the capture dedupes onto it. An authorization cancelled after its day
+closes is the one false positive; it is dismissed in the Inbox.
 
 The report has no counterparty column, so `payment`/`tip` rows are described from the payments
 API (merchant name or payment description). Transfers out (`payout`) aren't in that API.
@@ -74,6 +82,9 @@ DEFAULT_INTEREST_MARKERS = ("asset_management",)
 DESCRIPTION_LABELS = {
     "payment": "Pago", "payout": "Transferencia enviada", "tip": "Propina", "asset_management": "Rendimientos",
 }
+
+# Marks an entry built from an open hold (see the module docstring), in its raw row.
+PENDING_CAPTURE_FLAG = "PIGGY_PENDING_CAPTURE"
 
 # Report rows whose SOURCE_ID is a payment id that GET /v1/payments/{id} can describe.
 PAYMENT_DESCRIPTIONS = {"payment", "tip"}
@@ -221,6 +232,37 @@ def _row_date(value: str) -> Optional[str]:
         return None
 
 
+def _movement_description(description: str) -> str:
+    """`reserve_for_payment` -> `payment`: the movement a hold belongs to (normalized)."""
+    norm = normalize(description)
+    for prefix in SKIPPED_DESCRIPTION_PREFIXES:
+        if norm.startswith(prefix):
+            return norm[len(prefix):]
+    return norm
+
+
+def _cents(row: dict[str, str], column: str) -> int:
+    return parse_amount_cents(row.get(column, "")) or 0
+
+
+def _entry(row: dict[str, str], kind: str, direction: str, amount_cents: int, description: str) -> Entry:
+    source_id = row.get("SOURCE_ID", "")
+    return Entry(
+        source="mercadopago",
+        # One SOURCE_ID can carry several movements (a payment and its refund), so the kind
+        # is part of the key; rows without an id dedupe on their content.
+        external_id=f"{source_id}:{kind}" if source_id else row_hash(row),
+        kind=kind,
+        date=_row_date(row.get("DATE", "")),
+        direction=direction,
+        amount_cents=amount_cents,
+        currency_code="ARS",
+        description=DESCRIPTION_LABELS.get(normalize(description), description) or None,
+        account_ref="mp",
+        raw=row,
+    )
+
+
 def parse_release_csv(
     text: str,
     interest_markers: tuple[str, ...] = DEFAULT_INTEREST_MARKERS,
@@ -228,7 +270,8 @@ def parse_release_csv(
 ) -> list[Entry]:
     """
     Keeps outflows (expense) and interest inflows (income); drops balance/total rows and every
-    other inflow. `stats`, if given, collects PAYMENT_METHOD and inflow DESCRIPTION counts.
+    other inflow. A hold still open at the end of the report (a card purchase pending capture)
+    counts as an outflow. `stats`, if given, collects PAYMENT_METHOD and inflow DESCRIPTION counts.
     """
     if stats is not None:
         stats.setdefault("payment_methods", Counter())
@@ -242,19 +285,44 @@ def parse_release_csv(
     reader = csv.DictReader(io.StringIO(text), dialect=dialect)
     markers = tuple(normalize(m) for m in interest_markers)
 
-    entries: list[Entry] = []
+    rows: list[dict[str, str]] = []
     for raw_row in reader:
         row = {(k or "").strip().upper(): (v or "").strip() for k, v in raw_row.items() if k}
-        record_type = normalize(row.get("RECORD_TYPE", ""))
         description = row.get("DESCRIPTION", "")
-        if record_type in SKIPPED_RECORD_TYPES or normalize(description) in SKIPPED_RECORD_TYPES:
+        if normalize(row.get("RECORD_TYPE", "")) in SKIPPED_RECORD_TYPES or normalize(description) in SKIPPED_RECORD_TYPES:
             continue
+        rows.append(row)
+
+    # Per SOURCE_ID: whether a movement row exists, and how much of its holds is still open.
+    has_movement: set[str] = set()
+    open_hold: Counter = Counter()
+    for row in rows:
+        source_id = row.get("SOURCE_ID", "")
+        if not source_id:
+            continue
+        if normalize(row.get("DESCRIPTION", "")).startswith(SKIPPED_DESCRIPTION_PREFIXES):
+            open_hold[source_id] += _cents(row, "NET_DEBIT_AMOUNT") - _cents(row, "NET_CREDIT_AMOUNT")
+        else:
+            has_movement.add(source_id)
+
+    entries: list[Entry] = []
+    emitted_holds: set[str] = set()
+    for row in rows:
+        description = row.get("DESCRIPTION", "")
+        source_id = row.get("SOURCE_ID", "")
+
         if normalize(description).startswith(SKIPPED_DESCRIPTION_PREFIXES):
+            # Holds only stand in for a movement the report doesn't have (yet).
+            if (source_id and source_id not in has_movement and source_id not in emitted_holds
+                    and open_hold[source_id] > 0 and _cents(row, "NET_DEBIT_AMOUNT") > 0):
+                emitted_holds.add(source_id)
+                entries.append(_entry(
+                    {**row, PENDING_CAPTURE_FLAG: "true"}, "mp_outflow", "expense",
+                    open_hold[source_id], _movement_description(description),
+                ))
             continue
 
-        credit = parse_amount_cents(row.get("NET_CREDIT_AMOUNT", "")) or 0
-        debit = parse_amount_cents(row.get("NET_DEBIT_AMOUNT", "")) or 0
-        net = credit - debit
+        net = _cents(row, "NET_CREDIT_AMOUNT") - _cents(row, "NET_DEBIT_AMOUNT")
         if net == 0:
             continue
 
@@ -270,21 +338,7 @@ def parse_release_csv(
                 continue  # top-ups, transfers received, refunds...: not imported
             kind, direction = "mp_interest", "income"
 
-        source_id = row.get("SOURCE_ID", "")
-        entries.append(Entry(
-            source="mercadopago",
-            # One SOURCE_ID can carry several movements (a payment and its refund), so the kind
-            # is part of the key; rows without an id dedupe on their content.
-            external_id=f"{source_id}:{kind}" if source_id else row_hash(row),
-            kind=kind,
-            date=_row_date(row.get("DATE", "")),
-            direction=direction,
-            amount_cents=abs(net),
-            currency_code="ARS",
-            description=DESCRIPTION_LABELS.get(normalize(description), description) or None,
-            account_ref="mp",
-            raw=row,
-        ))
+        entries.append(_entry(row, kind, direction, abs(net), description))
     return entries
 
 
@@ -299,7 +353,7 @@ def run_daily(client: Client, now: Optional[datetime] = None) -> tuple[list[Entr
             entries[entry.external_id] = entry
     for entry in entries.values():
         source_id = entry.raw.get("SOURCE_ID", "")
-        if source_id and normalize(entry.raw.get("DESCRIPTION", "")) in PAYMENT_DESCRIPTIONS:
+        if source_id and _movement_description(entry.raw.get("DESCRIPTION", "")) in PAYMENT_DESCRIPTIONS:
             payment = client.payment(source_id)
             described = describe_payment(payment) if payment else None
             if described:
