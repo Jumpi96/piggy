@@ -26,6 +26,7 @@ name there, only the recipient's user id, so it is named after that user's publi
 from __future__ import annotations
 
 import csv
+import http.client
 import io
 import json
 import logging
@@ -181,15 +182,17 @@ class Client:
         return json.loads(payload or b"{}")
 
     def user_nickname(self, user_id: Any) -> Optional[str]:
-        """A Mercado Pago user's public nickname, or None if it can't be read. Never fails the
-        run: the token was already proven by the report calls, so a 403 here is that profile."""
+        """A Mercado Pago user's public nickname, or None if it can't be read. Best effort, so it
+        never fails the run: the token was already proven by the report calls (a 403 here is
+        that profile), and a network error or an odd body just leaves the transfer unnamed."""
         try:
             _, payload = self._call("GET", "/users/" + urllib.parse.quote(str(user_id)), base=API_ROOT)
-        except MercadoPagoError as exc:
+            profile = json.loads(payload or b"{}")
+        except (MercadoPagoError, OSError, http.client.HTTPException, ValueError) as exc:
             logger.warning("Mercado Pago user %s not described: %s", user_id, exc)
             return None
-        nickname = collapse_ws(str(json.loads(payload or b"{}").get("nickname") or ""))
-        return nickname or None
+        nickname = profile.get("nickname") if isinstance(profile, dict) else None
+        return collapse_ws(str(nickname or "")) or None
 
 
 def transfer_recipient_id(payment: dict[str, Any]) -> Optional[Any]:

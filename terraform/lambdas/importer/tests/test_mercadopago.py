@@ -208,6 +208,21 @@ def test_run_daily_dedupes_across_reports_and_describes_payments():
     assert [u for u in http.calls if "/users/" in u] == ["https://api.mercadopago.com/users/555000111"]
 
 
+@pytest.mark.parametrize("failure", ["timeout", "not json", "not an object"])
+def test_nickname_lookup_failures_never_abort_the_import(failure):
+    import urllib.error
+    routes = RoutedHttp({"/v1/payments/91000000002": (200, json.dumps(TRANSFER).encode())})
+
+    def http(method, url, body=None):
+        if "/users/" in url:
+            if failure == "timeout":
+                raise urllib.error.URLError(TimeoutError("timed out"))
+            return 200, b"<html>oops</html>" if failure == "not json" else b'["x"]'
+        return routes(method, url, body)
+
+    assert Client("t", http=http).user_nickname(555000111) is None
+
+
 def test_transfer_without_a_readable_recipient_keeps_the_generic_label():
     listing = json.dumps([{"file_name": "r1.csv", "date_created": "2026-10-14T09:00:00Z", "status": "enabled"}]).encode()
     http = RoutedHttp({
