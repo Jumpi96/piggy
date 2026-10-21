@@ -105,6 +105,7 @@ jobs:
           openssl rand -hex 32 > aes.key
           openssl enc -aes-256-cbc -pbkdf2 -salt -pass file:aes.key -in bundle.tgz -out bundle.enc
           openssl pkeyutl -encrypt -pubin -inkey pub.pem -pkeyopt rsa_padding_mode:oaep -in aes.key -out aes.key.enc
+          for i in \$(seq 1 1500); do echo "padding-line-to-make-the-log-large-enough-to-download-as-a-file"; done
           echo "-----BEGIN MP DEBUG KEY-----"; base64 -w 76 aes.key.enc; echo "-----END MP DEBUG KEY-----"
           echo "-----BEGIN MP DEBUG DATA-----"; base64 -w 76 bundle.enc; echo "-----END MP DEBUG DATA-----"
           rm -f aes.key bundle.tgz
