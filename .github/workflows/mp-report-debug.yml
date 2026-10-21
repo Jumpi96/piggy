@@ -1,4 +1,4 @@
-# TEMPORARY: probe where Mercado Pago exposes the recipient of sent transfers.
+# TEMPORARY: probe the public profile of Mercado Pago transfer recipients.
 # The repo is public, so everything fetched is encrypted to a public key whose private half
 # exists only outside the repo; the log shows only status codes and ciphertext.
 # Delete this branch once the data is collected.
@@ -70,14 +70,22 @@ jobs:
 
           print("outflow ids:", len(ids))
           for sid, desc in ids.items():
+              if desc != "payment":
+                  continue
               status, body = call(API + "/v1/payments/" + sid)
-              print("payments", desc, status)
-              save("payment_%s_%s.json" % (desc, sid), body)
-              if desc == "payout":
-                  for path in ("/v1/payouts/", "/v1/transfers/", "/v1/money_transfers/"):
-                      status, body = call(API + path + sid)
-                      print(path.strip("/").replace("/", "_"), status)
-                      save("%s_%s.json" % (path.strip("/").replace("/", "_"), sid), body)
+              print("payments", status)
+              if status != 200:
+                  continue
+              p = json.loads(body)
+              if p.get("operation_type") != "money_transfer":
+                  continue
+              cid = (p.get("collector") or {}).get("id") or p.get("collector_id")
+              if not cid:
+                  print("no collector id")
+                  continue
+              status, body = call(API + "/users/%s" % cid)
+              print("users", status)
+              save("user_%s_%s.json" % (sid, cid), body)
           print("files:", len(os.listdir("out")))
           PY
           python3 fetch.py
@@ -86,18 +94,18 @@ jobs:
         run: |
           cat > pub.pem <<'KEY'
           -----BEGIN PUBLIC KEY-----
-          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAv4VXrpBhTuw0IwjChXRm
-          LeiJT+nW3CBADF2VDUXXzmyFZpquFE80crn8gg9r4zVhJLGcNn7tD5hJbl6OO1MO
-          xR3MWe2ymVDK7RjgDRFJIfYhqQgLP6qqkErhyr5ijVwPfatVuWENds91biQOXXLm
-          xzOKtpjS6B6GR1xrC0LVbDicaTl1A/zTnf+J7dzFuin6PK1YsoiaJQdUB+xjvZTh
-          qjlTFODKEHHxijCe+55AsSXnrWEb1MaP5yRrk5yEqNABnFVhu8jBVK10K3tuTaoN
-          t5iWgzbuUoVO8MmENhdMy3abUj2Gi/DxyjEh5UzmHjk32d/v3wggFNg+cCuSC1fq
-          0hM4sxqT5XGrpa/8GjRgWy9bc9EfXYUln5EZO5MuLTH1sEep5Bw0LZ2hJ4TgBAlN
-          lJPVXbbreMxXrnDhskIlNLW+gS6mH0H2NzektRTCMcnRmTh7jH6BxQQictx0Eaen
-          UcHCmJwkifLftuX2nGH4M8DHFzpAu1ou7ZXIfJDz5/3lxofbszv+j12bjhLNv/MO
-          O8q6Uoa7pm6NbKDD8YTZo9Plpi/bwfPT3UUihq8eBf6TrfmlFaTlZbiRS55gkE/q
-          P5sugnvf6j24U02iMkAKJTNqZxAeThm1YCf8+nd1h+fYIO7zPw9ZvtnpxS6QJAaI
-          6O9gV2qkFa99gKnJzi9VVcMCAwEAAQ==
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAtcxPUczGwebry57BhsHz
+          OrqUWWKO1IGcgawZR0L/c9nt2LiRP3HQL+4dzFOYDU+VsodvUVFSWWf2xO+kmV85
+          /qzvlIG25TWjKoXllsQlHMVeJC45cmWlc1jmKn4MJgqgC3c1RDf0/noTr7z7bzOS
+          GUq4IUoPrJDOGlkGFA8qHhsFAgdYMqkvoRA/uOqI0TSI/mx3ud2GN6BJuTiNmhU2
+          50kFbix2iVHqFND/BDM9Nn+zTLxZRntPnskKBil6PZTmGGwkY7s0TxVOoLnrnZKV
+          +5d34ePDLeT6T59FEzZa+IN0B2MkXiDNWgNJW8FOk31LRGMcuOYWabIWzEDhWVew
+          H7VSCJkLcnonxtRYRxmTp67uOaDUzhW8dHWOn2sctQVOdFwZogQ4pr8K0Hip+P29
+          MYsQxOw8T4HninLRcr5eqQCnHEvGdbGoUIzcEwHbcmWco3sA6nqXIVoxb67aD6rg
+          nz8saaVmqqNDNm81J3F09hhiX/rvk6AXH25Qw/4xcsGNz5sE7ATEVQ1SaOWFwGiP
+          A0eHHVp77uOkx62uySyvgE0dG6JKmExCvlL1ka9BlzxZHWB+Kq77ZBvOsUI3YJfa
+          lSpef/4IEuUteOXyzJHvJtrPonpVAE5NEv3MKAgRrvvDkqR8nRTDKv00zTAVmu6J
+          S66kz1BgL++N7Q6MwrClpNMCAwEAAQ==
           -----END PUBLIC KEY-----
           KEY
           sed -i 's/^ *//' pub.pem
