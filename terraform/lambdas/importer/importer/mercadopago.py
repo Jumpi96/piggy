@@ -19,7 +19,9 @@ report that later carries the capture dedupes onto it. An authorization cancelle
 closes is the one false positive; it is dismissed in the Inbox.
 
 The report has no counterparty column, so `payment`/`tip` rows are described from the payments
-API (merchant name or payment description). Transfers out (`payout`) aren't in that API.
+API (merchant name or payment description). A transfer to another Mercado Pago user carries no
+name there, only the recipient's user id, so it is named after that user's public nickname
+(GET /users/{id}, e.g. "MACARENALUZBARRADO"). Transfers out (`payout`) aren't in that API.
 """
 from __future__ import annotations
 
@@ -178,17 +180,37 @@ class Client:
             return None
         return json.loads(payload or b"{}")
 
+    def user_nickname(self, user_id: Any) -> Optional[str]:
+        """A Mercado Pago user's public nickname, or None if it can't be read. Never fails the
+        run: the token was already proven by the report calls, so a 403 here is that profile."""
+        try:
+            _, payload = self._call("GET", "/users/" + urllib.parse.quote(str(user_id)), base=API_ROOT)
+        except MercadoPagoError as exc:
+            logger.warning("Mercado Pago user %s not described: %s", user_id, exc)
+            return None
+        nickname = collapse_ws(str(json.loads(payload or b"{}").get("nickname") or ""))
+        return nickname or None
 
-def describe_payment(payment: dict[str, Any]) -> Optional[str]:
-    """A human description of a payment: the card merchant, else its description; transfers
-    between Mercado Pago users only say "Varios", so they read as a sent transfer."""
+
+def transfer_recipient_id(payment: dict[str, Any]) -> Optional[Any]:
+    """The Mercado Pago user a transfer went to, if the payment is one."""
+    if payment.get("operation_type") != "money_transfer":
+        return None
+    return (payment.get("collector") or {}).get("id") or payment.get("collector_id")
+
+
+def describe_payment(payment: dict[str, Any], recipient: Optional[str] = None) -> Optional[str]:
+    """A human description of a payment: the card merchant, else its description. Transfers
+    between Mercado Pago users only say "Varios", so they read as a transfer to `recipient`
+    (the recipient's nickname), or just as a sent transfer when it isn't known."""
     interaction = payment.get("point_of_interaction") or {}
     commerce = ((interaction.get("transaction_data") or {}).get("commerce") or {}).get("name")
     description = collapse_ws(str(payment.get("description") or ""))
     if payment.get("operation_type") == "money_transfer":
+        label = f"Transferencia a {recipient}" if recipient else "Transferencia enviada"
         if normalize(description) in UNINFORMATIVE_PAYMENT_DESCRIPTIONS:
-            return "Transferencia enviada"
-        return f"Transferencia enviada · {description}"
+            return label
+        return f"{label} · {description}"
     if commerce:
         return collapse_ws(commerce)
     return description or None
@@ -351,11 +373,18 @@ def run_daily(client: Client, now: Optional[datetime] = None) -> tuple[list[Entr
     for file_name in files:
         for entry in parse_release_csv(client.download(file_name), stats=stats):
             entries[entry.external_id] = entry
+    nicknames: dict[Any, Optional[str]] = {}
     for entry in entries.values():
         source_id = entry.raw.get("SOURCE_ID", "")
         if source_id and _movement_description(entry.raw.get("DESCRIPTION", "")) in PAYMENT_DESCRIPTIONS:
             payment = client.payment(source_id)
-            described = describe_payment(payment) if payment else None
+            recipient = None
+            recipient_id = transfer_recipient_id(payment) if payment else None
+            if recipient_id:
+                if recipient_id not in nicknames:
+                    nicknames[recipient_id] = client.user_nickname(recipient_id)
+                recipient = nicknames[recipient_id]
+            described = describe_payment(payment, recipient) if payment else None
             if described:
                 entry.description = described
     info = {

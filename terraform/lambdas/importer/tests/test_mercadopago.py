@@ -118,8 +118,11 @@ CARD_PAYMENT = {
 }
 QR_PAYMENT = {"operation_type": "regular_payment", "description": "Producto de Kiosco Ejemplo",
               "point_of_interaction": {"type": "INSTORE", "transaction_data": {}}}
-TRANSFER = {"operation_type": "money_transfer", "description": "Varios",
-            "point_of_interaction": {"type": "PSP_TRANSFER", "transaction_data": {"bank_info": {}}}}
+# A transfer to another Mercado Pago user: no name, only the recipient's user id.
+TRANSFER = {"operation_type": "money_transfer", "description": "Varios", "collector": {"id": 555000111},
+            "point_of_interaction": {"type": "PSP_TRANSFER", "sub_type": "INTRA_PSP", "transaction_data": {}}}
+# GET /users/{id}: the public profile, whose nickname is often the name run together.
+RECIPIENT = {"id": 555000111, "nickname": "ANAEJEMPLO", "site_id": "MLA", "country_id": "AR"}
 TIP = {"operation_type": "regular_payment", "description": "Dlo*pedidosya propina",
        "point_of_interaction": {"transaction_data": {"commerce": {"name": "DLO*PedidosYa Propina"}}}}
 # A prepaid-card authorization not yet captured: the payments API already knows the merchant.
@@ -133,6 +136,8 @@ def test_describe_payment():
     assert describe_payment(QR_PAYMENT) == "Producto de Kiosco Ejemplo"
     assert describe_payment(TRANSFER) == "Transferencia enviada"
     assert describe_payment({**TRANSFER, "description": "Alquiler"}) == "Transferencia enviada · Alquiler"
+    assert describe_payment(TRANSFER, "ANAEJEMPLO") == "Transferencia a ANAEJEMPLO"
+    assert describe_payment({**TRANSFER, "description": "Alquiler"}, "ANAEJEMPLO") == "Transferencia a ANAEJEMPLO · Alquiler"
     assert describe_payment({"operation_type": "regular_payment"}) is None
 
 
@@ -183,6 +188,7 @@ def test_run_daily_dedupes_across_reports_and_describes_payments():
         "/list": (200, listing), "/r1.csv": (200, report), "/r2.csv": (200, report),
         "/v1/payments/91000000001": (200, json.dumps(CARD_PAYMENT).encode()),
         "/v1/payments/91000000002": (200, json.dumps(TRANSFER).encode()),
+        "/users/555000111": (200, json.dumps(RECIPIENT).encode()),
         "/v1/payments/91000000009": (200, json.dumps(TIP).encode()),
         # 91000000007 is unknown to the payments API: it keeps the report's label.
     })
@@ -193,12 +199,24 @@ def test_run_daily_dedupes_across_reports_and_describes_payments():
         ("91000000007", "Pago"),
         ("91000000008", "Pago"),  # open hold, unknown to the payments API
         ("91000000009", "DLO*PedidosYa Propina"),
-        ("91000000002", "Transferencia enviada"),
+        ("91000000002", "Transferencia a ANAEJEMPLO"),
         ("91000000003", "Transferencia enviada"),  # payout: never looked up
     ]
     assert info["reports"] == ["r1.csv", "r2.csv"]
     payment_calls = [u for u in http.calls if "/v1/payments/" in u]
     assert len(payment_calls) == 5  # once per payment (incl. the open hold), not per report
+    assert [u for u in http.calls if "/users/" in u] == ["https://api.mercadopago.com/users/555000111"]
+
+
+def test_transfer_without_a_readable_recipient_keeps_the_generic_label():
+    listing = json.dumps([{"file_name": "r1.csv", "date_created": "2026-10-14T09:00:00Z", "status": "enabled"}]).encode()
+    http = RoutedHttp({
+        "/list": (200, listing), "/r1.csv": (200, real_report().encode()),
+        "/v1/payments/91000000002": (200, json.dumps(TRANSFER).encode()),
+        "/users/555000111": (403, b'{"message":"forbidden"}'),  # a private profile
+    })
+    entries, _ = run_daily(Client("t", http=http), now=datetime(2026, 10, 14, 12, tzinfo=timezone.utc))
+    assert {e.external_id: e.description for e in entries}["91000000002:mp_outflow"] == "Transferencia enviada"
 
 
 def test_run_daily_describes_open_holds_and_dedupes_their_capture():
