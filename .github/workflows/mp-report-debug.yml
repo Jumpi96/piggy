@@ -1,4 +1,4 @@
-# TEMPORARY: fetch the real Mercado Pago release report to debug the importer.
+# TEMPORARY: probe where Mercado Pago exposes the recipient of sent transfers.
 # The repo is public, so everything fetched is encrypted to a public key whose private half
 # exists only outside the repo; the log shows only status codes and ciphertext.
 # Delete this branch once the data is collected.
@@ -14,29 +14,25 @@ permissions:
 jobs:
   fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
-      - name: Fetch reports and payments
+      - name: Fetch reports and transfer details
         env:
           MP_ACCESS_TOKEN: ${{ secrets.MP_ACCESS_TOKEN }}
         run: |
           mkdir -p out
           cat > fetch.py <<'PY'
-          import json, os, time, urllib.error, urllib.parse, urllib.request
+          import csv, io, json, os, urllib.error, urllib.parse, urllib.request
           from datetime import datetime, timedelta, timezone
 
           TOKEN = os.environ["MP_ACCESS_TOKEN"]
           API = "https://api.mercadopago.com"
           RR = API + "/v1/account/release_report"
-          now = datetime.now(timezone.utc)
-          since = now - timedelta(days=14)
+          since = datetime.now(timezone.utc) - timedelta(days=10)
 
-          def call(method, url, body=None):
-              data = json.dumps(body).encode() if body is not None else None
-              req = urllib.request.Request(url, data=data, method=method)
+          def call(url):
+              req = urllib.request.Request(url)
               req.add_header("Authorization", "Bearer " + TOKEN)
-              if data is not None:
-                  req.add_header("Content-Type", "application/json")
               try:
                   with urllib.request.urlopen(req, timeout=60) as r:
                       return r.status, r.read()
@@ -47,70 +43,41 @@ jobs:
               with open(os.path.join("out", name), "wb") as f:
                   f.write(payload)
 
-          def listing():
-              status, payload = call("GET", RR + "/list")
-              print("list:", status)
-              save("list_%d.json" % int(time.time()), payload)
+          status, payload = call(RR + "/list")
+          print("list:", status)
+          reports = json.loads(payload or b"[]")
+          reports = reports if isinstance(reports, list) else reports.get("results", [])
+          ids = {}
+          for r in reports:
+              name = str(r.get("file_name", ""))
+              if r.get("created_from") != "schedule" or not name.endswith(".csv"):
+                  continue
               try:
-                  data = json.loads(payload or b"[]")
+                  created = datetime.fromisoformat(r.get("date_created", "").replace("Z", "+00:00"))
               except ValueError:
-                  return []
-              return data if isinstance(data, list) else data.get("results", [])
+                  continue
+              if created < since:
+                  continue
+              status, body = call(RR + "/" + urllib.parse.quote(name))
+              print("download:", status, len(body), "bytes")
+              if status != 200:
+                  continue
+              save("report_" + name, body)
+              for row in csv.DictReader(io.StringIO(body.decode("utf-8-sig"))):
+                  desc = (row.get("DESCRIPTION") or "").strip()
+                  if desc in ("payment", "payout") and (row.get("NET_DEBIT_AMOUNT") or "0") not in ("0", "0.00", ""):
+                      ids[row["SOURCE_ID"]] = desc
 
-          def created(r):
-              v = r.get("date_created") or ""
-              try:
-                  d = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                  return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
-              except ValueError:
-                  return now
-
-          downloaded = set()
-          def download(names):
-              for name in names:
-                  if name in downloaded:
-                      continue
-                  status, payload = call("GET", RR + "/" + urllib.parse.quote(name))
-                  print("download:", status, len(payload), "bytes")
-                  if status == 200:
-                      save("report_" + name.replace("/", "_"), payload)
-                      downloaded.add(name)
-
-          reports = listing()
-          before = {r.get("file_name") for r in reports}
-          download([r["file_name"] for r in reports
-                    if str(r.get("file_name", "")).endswith(".csv") and created(r) >= since])
-
-          status, payload = call("POST", RR, {
-              "begin_date": since.strftime("%Y-%m-%dT00:00:00Z"),
-              "end_date": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-          })
-          print("manual report request:", status)
-          save("manual_request.json", payload)
-          for _ in range(20):
-              time.sleep(60)
-              new = [r["file_name"] for r in listing()
-                     if r.get("file_name") not in before and str(r.get("file_name", "")).endswith(".csv")]
-              if new:
-                  download(new)
-                  break
-          else:
-              print("manual report not ready in time")
-
-          status, payload = call("GET", API + "/users/me")
-          print("users/me:", status)
-          user_id = json.loads(payload).get("id") if status == 200 else None
-          window = "&range=date_created&begin_date=%s&end_date=NOW&sort=date_created&criteria=desc&limit=100" % urllib.parse.quote(since.strftime("%Y-%m-%dT00:00:00.000-00:00"))
-          if user_id:
-              status, payload = call("GET", API + "/v1/payments/search?payer.id=%s%s" % (user_id, window))
-              print("payments/search payer:", status)
-              save("payments_payer.json", payload)
-          status, payload = call("GET", API + "/v1/payments/search?" + window.lstrip("&"))
-          print("payments/search default:", status)
-          save("payments_default.json", payload)
-          status, payload = call("GET", API + "/mercadopago_account/movements/search?limit=100&range=date_created&begin_date=%s&end_date=NOW" % urllib.parse.quote(since.strftime("%Y-%m-%dT00:00:00.000-00:00")))
-          print("movements/search:", status)
-          save("movements.json", payload)
+          print("outflow ids:", len(ids))
+          for sid, desc in ids.items():
+              status, body = call(API + "/v1/payments/" + sid)
+              print("payments", desc, status)
+              save("payment_%s_%s.json" % (desc, sid), body)
+              if desc == "payout":
+                  for path in ("/v1/payouts/", "/v1/transfers/", "/v1/money_transfers/"):
+                      status, body = call(API + path + sid)
+                      print(path.strip("/").replace("/", "_"), status)
+                      save("%s_%s.json" % (path.strip("/").replace("/", "_"), sid), body)
           print("files:", len(os.listdir("out")))
           PY
           python3 fetch.py
@@ -119,18 +86,18 @@ jobs:
         run: |
           cat > pub.pem <<'KEY'
           -----BEGIN PUBLIC KEY-----
-          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEArT4L1zTPbV0WJjkbl2PU
-          pexF4fOsxi/5wWkLofUjLXZc4oDM1EcAQA8/hGV+vfNlj4DfTFHPcDF55WkrFLVG
-          qVMDloKStbhGC1bk+i/w/agyTMOBWmin15G8R0KSB1UG4EOZrkrhDpFSbrNDHU6E
-          PQQurpJRXbPve6Ad/T9iD4DahBnk6I5ALp6Us7iiVsB7TNnMjB+7QhWXhIGzD9fO
-          jgxRBrGO7Z7mwLZYRaziTdNl44bUg8AcR9aIDaJsoee3rxjbwK+or9dzB0mDQWCn
-          UWaqCiIzM2dj8VqHuMDJ8xspnOffFIXo56+GP66Yw6eHbpWw10LlPjls5Ua36iD2
-          ZBbjLDPn0JVenqhUeOTU/YPb0m8viwXhABFThWijYOq1RMaT7NwKMciC33kRBkaI
-          LmBMLmYvkOvMK0nrN0sf3AOLR1HzuP2vnn5zJftWZmj2wgAoxEDsI/jB10CdyHWo
-          nkdUsfU3XAnrvbHfadJzwWHaxqH4q4ISFjVRK1RhU50i0YltkIAWi7nCuey2wCdl
-          dh502au4wO+JI0PHrMR3q1J7lIwEvu2KXnECm5MURSaC+sFEdGmB58msdyMl+mqq
-          DsttrEy3uszfNCwM6ivIk4BeN7YBTFtmCmkLqXqUwpub50lmkQLVzHvLfOwbjZwZ
-          kNqz0TmmOOZGkbqjyQmLWjkCAwEAAQ==
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAv4VXrpBhTuw0IwjChXRm
+          LeiJT+nW3CBADF2VDUXXzmyFZpquFE80crn8gg9r4zVhJLGcNn7tD5hJbl6OO1MO
+          xR3MWe2ymVDK7RjgDRFJIfYhqQgLP6qqkErhyr5ijVwPfatVuWENds91biQOXXLm
+          xzOKtpjS6B6GR1xrC0LVbDicaTl1A/zTnf+J7dzFuin6PK1YsoiaJQdUB+xjvZTh
+          qjlTFODKEHHxijCe+55AsSXnrWEb1MaP5yRrk5yEqNABnFVhu8jBVK10K3tuTaoN
+          t5iWgzbuUoVO8MmENhdMy3abUj2Gi/DxyjEh5UzmHjk32d/v3wggFNg+cCuSC1fq
+          0hM4sxqT5XGrpa/8GjRgWy9bc9EfXYUln5EZO5MuLTH1sEep5Bw0LZ2hJ4TgBAlN
+          lJPVXbbreMxXrnDhskIlNLW+gS6mH0H2NzektRTCMcnRmTh7jH6BxQQictx0Eaen
+          UcHCmJwkifLftuX2nGH4M8DHFzpAu1ou7ZXIfJDz5/3lxofbszv+j12bjhLNv/MO
+          O8q6Uoa7pm6NbKDD8YTZo9Plpi/bwfPT3UUihq8eBf6TrfmlFaTlZbiRS55gkE/q
+          P5sugnvf6j24U02iMkAKJTNqZxAeThm1YCf8+nd1h+fYIO7zPw9ZvtnpxS6QJAaI
+          6O9gV2qkFa99gKnJzi9VVcMCAwEAAQ==
           -----END PUBLIC KEY-----
           KEY
           sed -i 's/^ *//' pub.pem
