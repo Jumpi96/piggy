@@ -81,7 +81,8 @@ resource "aws_lambda_function" "import_mercadopago" {
   depends_on = [null_resource.build_importer_lambda]
 }
 
-# 10:00 UTC = 07:00 in Argentina, an hour after Mercado Pago generates the daily report.
+# 10:00 UTC = 07:00 in Argentina, a couple of hours after Mercado Pago creates the daily report
+# (about 05:00 there; the listing's date_created says GMT-4 but is really UTC).
 resource "aws_cloudwatch_event_rule" "import_mercadopago_daily" {
   count               = var.enable_mp_import ? 1 : 0
   name                = "piggy-import-mercadopago-daily"
