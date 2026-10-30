@@ -1,4 +1,4 @@
-# TEMPORARY: probe the public profile of Mercado Pago transfer recipients.
+# TEMPORARY: diagnose a Mercado Pago import run (read-only).
 # The repo is public, so everything fetched is encrypted to a public key whose private half
 # exists only outside the repo; the log shows only status codes and ciphertext.
 # Delete this branch once the data is collected.
@@ -16,19 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Fetch reports and transfer details
+      - name: Fetch reports and import state
         env:
           MP_ACCESS_TOKEN: ${{ secrets.MP_ACCESS_TOKEN }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
+          pip install -q psycopg2-binary
           mkdir -p out
           cat > fetch.py <<'PY'
-          import csv, io, json, os, urllib.error, urllib.parse, urllib.request
+          import json, os, urllib.error, urllib.parse, urllib.request
           from datetime import datetime, timedelta, timezone
 
           TOKEN = os.environ["MP_ACCESS_TOKEN"]
-          API = "https://api.mercadopago.com"
-          RR = API + "/v1/account/release_report"
-          since = datetime.now(timezone.utc) - timedelta(days=10)
+          RR = "https://api.mercadopago.com/v1/account/release_report"
+          since = datetime.now(timezone.utc) - timedelta(days=3)
 
           def call(url):
               req = urllib.request.Request(url)
@@ -41,51 +42,39 @@ jobs:
 
           def save(name, payload):
               with open(os.path.join("out", name), "wb") as f:
-                  f.write(payload)
+                  f.write(payload if isinstance(payload, bytes) else payload.encode())
 
           status, payload = call(RR + "/list")
           print("list:", status)
+          save("list.json", payload)
           reports = json.loads(payload or b"[]")
           reports = reports if isinstance(reports, list) else reports.get("results", [])
-          ids = {}
           for r in reports:
               name = str(r.get("file_name", ""))
-              if r.get("created_from") != "schedule" or not name.endswith(".csv"):
-                  continue
               try:
                   created = datetime.fromisoformat(r.get("date_created", "").replace("Z", "+00:00"))
               except ValueError:
                   continue
-              if created < since:
+              if created < since or not name.endswith(".csv"):
                   continue
               status, body = call(RR + "/" + urllib.parse.quote(name))
               print("download:", status, len(body), "bytes")
-              if status != 200:
-                  continue
-              save("report_" + name, body)
-              for row in csv.DictReader(io.StringIO(body.decode("utf-8-sig"))):
-                  desc = (row.get("DESCRIPTION") or "").strip()
-                  if desc in ("payment", "payout") and (row.get("NET_DEBIT_AMOUNT") or "0") not in ("0", "0.00", ""):
-                      ids[row["SOURCE_ID"]] = desc
+              if status == 200:
+                  save("report_" + name, body)
 
-          print("outflow ids:", len(ids))
-          for sid, desc in ids.items():
-              if desc != "payment":
-                  continue
-              status, body = call(API + "/v1/payments/" + sid)
-              print("payments", status)
-              if status != 200:
-                  continue
-              p = json.loads(body)
-              if p.get("operation_type") != "money_transfer":
-                  continue
-              cid = (p.get("collector") or {}).get("id") or p.get("collector_id")
-              if not cid:
-                  print("no collector id")
-                  continue
-              status, body = call(API + "/users/%s" % cid)
-              print("users", status)
-              save("user_%s_%s.json" % (sid, cid), body)
+          try:
+              import psycopg2
+              conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"], connect_timeout=15)
+              cur = conn.cursor()
+              cur.execute("select key, value, updated_at from parameters where key in ('import_status','import_settings')")
+              save("parameters.json", json.dumps(cur.fetchall(), default=str))
+              cur.execute("""select source, kind, external_id, date, amount_cents, description, status, created_at
+                             from import_entries where created_at > now() - interval '4 days' order by created_at""")
+              save("entries.json", json.dumps(cur.fetchall(), default=str))
+              conn.close()
+              print("db: ok")
+          except Exception as e:
+              print("db: failed", type(e).__name__)
           print("files:", len(os.listdir("out")))
           PY
           python3 fetch.py
@@ -94,18 +83,18 @@ jobs:
         run: |
           cat > pub.pem <<'KEY'
           -----BEGIN PUBLIC KEY-----
-          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAtcxPUczGwebry57BhsHz
-          OrqUWWKO1IGcgawZR0L/c9nt2LiRP3HQL+4dzFOYDU+VsodvUVFSWWf2xO+kmV85
-          /qzvlIG25TWjKoXllsQlHMVeJC45cmWlc1jmKn4MJgqgC3c1RDf0/noTr7z7bzOS
-          GUq4IUoPrJDOGlkGFA8qHhsFAgdYMqkvoRA/uOqI0TSI/mx3ud2GN6BJuTiNmhU2
-          50kFbix2iVHqFND/BDM9Nn+zTLxZRntPnskKBil6PZTmGGwkY7s0TxVOoLnrnZKV
-          +5d34ePDLeT6T59FEzZa+IN0B2MkXiDNWgNJW8FOk31LRGMcuOYWabIWzEDhWVew
-          H7VSCJkLcnonxtRYRxmTp67uOaDUzhW8dHWOn2sctQVOdFwZogQ4pr8K0Hip+P29
-          MYsQxOw8T4HninLRcr5eqQCnHEvGdbGoUIzcEwHbcmWco3sA6nqXIVoxb67aD6rg
-          nz8saaVmqqNDNm81J3F09hhiX/rvk6AXH25Qw/4xcsGNz5sE7ATEVQ1SaOWFwGiP
-          A0eHHVp77uOkx62uySyvgE0dG6JKmExCvlL1ka9BlzxZHWB+Kq77ZBvOsUI3YJfa
-          lSpef/4IEuUteOXyzJHvJtrPonpVAE5NEv3MKAgRrvvDkqR8nRTDKv00zTAVmu6J
-          S66kz1BgL++N7Q6MwrClpNMCAwEAAQ==
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAsjLyHF8UQcep6ruMKK2p
+          ze72JGn+GUHfJWGqoEf1oOnXnzhXNf5b3ti0haQJ4TBAeJYyqd/dXE2enOdbdn16
+          JMki4H6HlYLCynZTxeERrwg3Et35ZqXIYtUSOcX3krXwt6vQpHIJTiqJ1B/Q1R2R
+          pIosEzF5DBcmXgFfPKho7+ANKsaS6LjmsDyB9i084Z72n1Eiv21Hrzk94Kwgc3Zv
+          f8JtIsbfJjM6qJwjLnZInkloRHh/SeuWyYbZlZzFyMJPt6b37znCLlT058eP9Bjt
+          Gb4AyDtGzPfXAZtqBZ3j1JfoJLxU9QRaSUdGIB985lVVVJcc29XfddVy4rd+nuXd
+          eNq0duV1BsijulkRmteHJhK3cPQz4XwOCuK5GKObtndpgwtM2UUQ16dkwHqYuROl
+          Wk4aDs5v+jPMw5v6QNKKwfW6S2ZJqDMVeExl+wFhiYmzAHexFqwJxrAh0SG0DzAa
+          rFpOK+jf2siSasp74QHn2UUseiM9mGDskthjaxr20vfQftRPaqcYUjYM/qlLhKHE
+          s4VglcBpvx3XOY6OI5uFf98wmIhCfjjONWzDmVDn9aU7s7m+PYyfSVKqHElcEsL2
+          zMr6wNaWAlJxjlx1lva3YX0Ga81R7JPieLuez0ngMbEm+RMefPb/FtFnTSRpj64v
+          2/FMOaQ9IHF3uL9alKVkhkcCAwEAAQ==
           -----END PUBLIC KEY-----
           KEY
           sed -i 's/^ *//' pub.pem
