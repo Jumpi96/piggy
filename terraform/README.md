@@ -23,7 +23,7 @@ This directory contains Terraform configuration for deploying AWS infrastructure
 - **Runtime**: Python 3.11
 
 ### Importers (optional, see "Automatic imports" below)
-- **`piggy_import_mercadopago`**: daily at 07:00 Argentina time; downloads the Mercado Pago release report.
+- **`piggy_import_mercadopago`**: daily at 09:30 Argentina time, after Mercado Pago creates the day's report (about 08:45); downloads the Mercado Pago release report.
 - **`piggy_import_santander`**: triggered by S3 when SES receives a Santander alert email forwarded by Gmail.
 - Both write unconfirmed rows to `import_entries` (the app's Inbox) and their status to the `import_status` parameter.
 
