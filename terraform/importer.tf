@@ -81,12 +81,12 @@ resource "aws_lambda_function" "import_mercadopago" {
   depends_on = [null_resource.build_importer_lambda]
 }
 
-# 12:30 UTC = 09:30 in Argentina, after Mercado Pago creates the daily report (about 08:45 there).
+# 10:00 UTC = 07:00 in Argentina, an hour after Mercado Pago generates the daily report.
 resource "aws_cloudwatch_event_rule" "import_mercadopago_daily" {
   count               = var.enable_mp_import ? 1 : 0
   name                = "piggy-import-mercadopago-daily"
   description         = "Import the Mercado Pago release report into the Piggy Inbox"
-  schedule_expression = "cron(30 12 * * ? *)"
+  schedule_expression = "cron(0 10 * * ? *)"
 }
 
 resource "aws_cloudwatch_event_target" "import_mercadopago_daily" {

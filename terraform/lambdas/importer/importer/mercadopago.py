@@ -1,9 +1,8 @@
 """
 Mercado Pago importer, based on the Releases report ("Dinero liberado") API.
 
-Flow: once `mp_setup` has configured it, Mercado Pago creates a report each morning covering the
-previous day (a daily frequency ignores the hour; reports appear around 08:45 Argentina time, so
-the import is scheduled at 09:30). The daily run lists recent reports, downloads them and keeps
+Flow: Mercado Pago generates the report daily at 00:00 (a daily frequency ignores the hour),
+once `mp_setup` has configured it. The daily run lists recent reports, downloads them and keeps
 the outflows and the interest ("rendimientos") rows. Re-processing a report is harmless: rows dedupe on SOURCE_ID.
 
 Checked against a real account's report (tests/fixtures/mp_release_1.csv). Every movement comes
