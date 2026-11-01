@@ -7,6 +7,7 @@ import { getPeriodLabel, getPeriodRange, getTodayLocalDate, parseLocalDate } fro
 import { cn } from '../lib/utils';
 import type { BalanceEntry, Currency } from '../types';
 import { AmountInput } from './AmountInput';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const shortDate = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
@@ -37,6 +38,7 @@ export function BalanceLedger({ monthStart, entries, onChanged, onClose }: {
     onChanged: () => void;
     onClose: () => void;
 }) {
+    useScrollLock();
     const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [isAdding, setIsAdding] = useState(false);
     const [sign, setSign] = useState<1 | -1>(1);
@@ -95,9 +97,9 @@ export function BalanceLedger({ monthStart, entries, onChanged, onClose }: {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[90vh]">
-                <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[85dvh]">
+                <div className="shrink-0 p-4 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Balance · {getPeriodLabel(monthStart)}</h2>
                         <p className="text-xs text-gray-500">Positive: needs money from savings. Negative: can go back to them.</p>
@@ -107,7 +109,7 @@ export function BalanceLedger({ monthStart, entries, onChanged, onClose }: {
                     </button>
                 </div>
 
-                <div className="p-4 flex items-center justify-between gap-4 bg-zinc-50 dark:bg-zinc-800/50">
+                <div className="shrink-0 p-4 flex items-center justify-between gap-4 bg-zinc-50 dark:bg-zinc-800/50">
                     <div>
                         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Total</span>
                         <p className={cn("text-3xl font-black", total > 0 ? "text-red-600" : total < 0 ? "text-sky-600" : "text-gray-900 dark:text-white")}>
@@ -123,7 +125,7 @@ export function BalanceLedger({ monthStart, entries, onChanged, onClose }: {
                     </button>
                 </div>
 
-                <div className="overflow-y-auto divide-y divide-gray-50 dark:divide-zinc-800">
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain divide-y divide-gray-50 dark:divide-zinc-800">
                     {entries.length === 0 && (
                         <p className="p-6 text-center text-sm text-gray-400 italic">Nothing in this month's balance.</p>
                     )}
@@ -163,7 +165,7 @@ export function BalanceLedger({ monthStart, entries, onChanged, onClose }: {
                     })}
                 </div>
 
-                <div className="p-4 border-t border-gray-100 dark:border-zinc-800 space-y-3">
+                <div className="shrink-0 p-4 border-t border-gray-100 dark:border-zinc-800 space-y-3">
                     {error && <div className="p-2 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
                     {!isAdding ? (
                         <button
