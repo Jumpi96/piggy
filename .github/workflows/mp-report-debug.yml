@@ -1,6 +1,6 @@
-# TEMPORARY: diagnose a Mercado Pago import run (read-only).
+# TEMPORARY: diagnose the Santander import (read-only).
 # The repo is public, so everything fetched is encrypted to a public key whose private half
-# exists only outside the repo; the log shows only status codes and ciphertext.
+# exists only outside the repo; the log shows only status lines and ciphertext.
 # Delete this branch once the data is collected.
 name: MP report debug (temporary)
 
@@ -16,85 +16,61 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Fetch reports and import state
+      - name: Collect import state
         env:
-          MP_ACCESS_TOKEN: ${{ secrets.MP_ACCESS_TOKEN }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           pip install -q psycopg2-binary
           mkdir -p out
           cat > fetch.py <<'PY'
-          import json, os, urllib.error, urllib.parse, urllib.request
-          from datetime import datetime, timedelta, timezone
-
-          TOKEN = os.environ["MP_ACCESS_TOKEN"]
-          RR = "https://api.mercadopago.com/v1/account/release_report"
-          since = datetime.now(timezone.utc) - timedelta(days=3)
-
-          def call(url):
-              req = urllib.request.Request(url)
-              req.add_header("Authorization", "Bearer " + TOKEN)
-              try:
-                  with urllib.request.urlopen(req, timeout=60) as r:
-                      return r.status, r.read()
-              except urllib.error.HTTPError as e:
-                  return e.code, e.read()
-
+          import json, os
           def save(name, payload):
-              with open(os.path.join("out", name), "wb") as f:
-                  f.write(payload if isinstance(payload, bytes) else payload.encode())
-
-          status, payload = call(RR + "/list")
-          print("list:", status)
-          save("list.json", payload)
-          reports = json.loads(payload or b"[]")
-          reports = reports if isinstance(reports, list) else reports.get("results", [])
-          for r in reports:
-              name = str(r.get("file_name", ""))
-              try:
-                  created = datetime.fromisoformat(r.get("date_created", "").replace("Z", "+00:00"))
-              except ValueError:
-                  continue
-              if created < since or not name.endswith(".csv"):
-                  continue
-              status, body = call(RR + "/" + urllib.parse.quote(name))
-              print("download:", status, len(body), "bytes")
-              if status == 200:
-                  save("report_" + name, body)
-
+              with open(os.path.join("out", name), "w") as f:
+                  f.write(payload)
           try:
               import psycopg2
               conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"], connect_timeout=15)
               cur = conn.cursor()
-              cur.execute("select key, value, updated_at from parameters where key in ('import_status','import_settings')")
-              save("parameters.json", json.dumps(cur.fetchall(), default=str))
-              cur.execute("""select source, kind, external_id, date, amount_cents, description, status, created_at
-                             from import_entries where created_at > now() - interval '4 days' order by created_at""")
+              cur.execute("select value, updated_at from parameters where key = 'import_status'")
+              save("status.json", json.dumps(cur.fetchall(), default=str))
+              cur.execute("""select kind, external_id, date, amount_cents, currency_code, description, account_ref, parse_error, status, created_at,
+                                    raw->>'subject'
+                             from import_entries where source = 'santander' and created_at > now() - interval '8 days' order by created_at""")
               save("entries.json", json.dumps(cur.fetchall(), default=str))
               conn.close()
               print("db: ok")
           except Exception as e:
               print("db: failed", type(e).__name__)
-          print("files:", len(os.listdir("out")))
           PY
           python3 fetch.py
+          B=$(aws s3api list-buckets --query "Buckets[?contains(Name, 'inbound-mail')].Name | [0]" --output text 2>/dev/null)
+          echo "bucket found: $([ -n "$B" ] && [ "$B" != None ] && echo yes || echo no)"
+          if [ -n "$B" ] && [ "$B" != None ]; then
+            aws s3api list-objects-v2 --bucket "$B" --prefix santander/ --query "Contents[].{k:Key,t:LastModified,s:Size}" --output json > out/s3.json 2>out/s3.err || echo "s3 list failed"
+          fi
+          START=$(( ($(date +%s) - 6*86400) * 1000 ))
+          aws logs filter-log-events --log-group-name /aws/lambda/piggy_import_santander --start-time "$START" --output json --query "events[].{t:timestamp,m:message}" > out/logs.json 2>out/logs.err || echo "logs failed"
+          echo "files: $(ls out | wc -l)"
 
       - name: Encrypt and print
         run: |
           cat > pub.pem <<'KEY'
           -----BEGIN PUBLIC KEY-----
-          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAsjLyHF8UQcep6ruMKK2p
-          ze72JGn+GUHfJWGqoEf1oOnXnzhXNf5b3ti0haQJ4TBAeJYyqd/dXE2enOdbdn16
-          JMki4H6HlYLCynZTxeERrwg3Et35ZqXIYtUSOcX3krXwt6vQpHIJTiqJ1B/Q1R2R
-          pIosEzF5DBcmXgFfPKho7+ANKsaS6LjmsDyB9i084Z72n1Eiv21Hrzk94Kwgc3Zv
-          f8JtIsbfJjM6qJwjLnZInkloRHh/SeuWyYbZlZzFyMJPt6b37znCLlT058eP9Bjt
-          Gb4AyDtGzPfXAZtqBZ3j1JfoJLxU9QRaSUdGIB985lVVVJcc29XfddVy4rd+nuXd
-          eNq0duV1BsijulkRmteHJhK3cPQz4XwOCuK5GKObtndpgwtM2UUQ16dkwHqYuROl
-          Wk4aDs5v+jPMw5v6QNKKwfW6S2ZJqDMVeExl+wFhiYmzAHexFqwJxrAh0SG0DzAa
-          rFpOK+jf2siSasp74QHn2UUseiM9mGDskthjaxr20vfQftRPaqcYUjYM/qlLhKHE
-          s4VglcBpvx3XOY6OI5uFf98wmIhCfjjONWzDmVDn9aU7s7m+PYyfSVKqHElcEsL2
-          zMr6wNaWAlJxjlx1lva3YX0Ga81R7JPieLuez0ngMbEm+RMefPb/FtFnTSRpj64v
-          2/FMOaQ9IHF3uL9alKVkhkcCAwEAAQ==
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAphkD77WiyQHxQLq0qy+y
+          MSPTrk/lBkSzDoR5ZhGElxxS6CSCigch5QULQcAxOenaaFQRxFQmPTRi8ETvxRaR
+          IGNIyzPn+6wXY1sb/p0duQA3mi4a76qpNuFrdQKbCGnH2buQVll3VxQPlqgaVkLd
+          BKGiYxBT+t1af+9vi13z8OwBHx6kYn2M09tRdt0YwUb/cJinkHHrdsOgGGeiPsr+
+          mZVF0KPvICPMvJsiFnvJGDAoytmVXguntrBlGjOsnTAToqwaZkNXCCA5A32wuIv5
+          5CQot5U0QWmXTccIKWCfBSB2xqJd7SED7PcKQhlHgpvGlHtbsyQRPixZJvuAZbM9
+          o888emnIFSS0a9CsEiPtoCI320CaXfRCX8BvxBkxn2+t1uWro22GaXgeFYApxQ0v
+          4IQLV7IvHd5oeXG/v3nkBYa+w3oNWnJ115GJtlCGNSsedw1LdhyUOvC3RVpSvH1H
+          +zWbx/HagztAqRdtr2k3sOh/FkPRc7vJh5NQkBi4KhAu/w1V+Swg9qfYRWokCevr
+          jgeJZh//tRd47Ukueiy5vnFlU46inteu8CVp5u91pa2d8uNddIL7B8mKNaNC8/qO
+          onKTnhZv9IewhEBcmV0rUG929V7/iDrjijO2fUmz3qjGM6IYVrkS/h9glCeSzOWx
+          XG0BSBuMCLzFtW+aDmuvUsUCAwEAAQ==
           -----END PUBLIC KEY-----
           KEY
           sed -i 's/^ *//' pub.pem
