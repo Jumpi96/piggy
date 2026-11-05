@@ -96,7 +96,10 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned: CLI 3.0 made `db push` target a local database by default and dropped
+          # `functions deploy --project-ref`, which broke the v0.17.6 deploy. Move to 3.x
+          # deliberately (`db push --remote`, `functions deploy` without --project-ref).
+          version: 2.122.1
 
       - name: Link to Supabase project
         env:
