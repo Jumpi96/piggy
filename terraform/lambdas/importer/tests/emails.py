@@ -6,6 +6,8 @@ unrecognized mail) and drive the gate checks.
 from email.message import EmailMessage
 
 SANTANDER = "Santander <mensajesyavisos@mails.santander.com.ar>"
+# What SES prepends for a Santander alert whose DKIM signature it verified.
+SANTANDER_DKIM_PASS = "amazonses.com; spf=pass; dkim=pass header.i=@mails.santander.com.ar; dmarc=pass header.from=mails.santander.com.ar;"
 GMAIL = "me@gmail.com"
 INBOUND = "santander-abc123@in.example.com"
 
@@ -14,7 +16,9 @@ def build(subject: str, html: str, sender: str = SANTANDER, forwarded: bool = Tr
           spam: str = "PASS", message_id: str = "<alert-1@santander.com.ar>",
           date: str = "Tue, 14 Oct 2026 16:05:00 -0300", auth_results: str | None = None) -> bytes:
     msg = EmailMessage()
-    if auth_results is not None:
+    if auth_results is None and sender == SANTANDER:
+        auth_results = SANTANDER_DKIM_PASS
+    if auth_results:
         msg["Authentication-Results"] = auth_results
     msg["From"] = sender
     msg["To"] = GMAIL

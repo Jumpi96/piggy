@@ -43,6 +43,7 @@ def as_stored_in_s3(raw: bytes) -> bytes:
     """The alert as SES writes it to S3 after Gmail auto-forwards it: the original message with
     Gmail's forwarding headers and SES's verdicts prepended."""
     headers = (
+        f"Authentication-Results: {emails.SANTANDER_DKIM_PASS}\r\n"
         f"X-SES-Spam-Verdict: PASS\r\nX-SES-Virus-Verdict: PASS\r\n"
         f"X-Forwarded-To: {emails.INBOUND}\r\nX-Forwarded-For: {emails.GMAIL} {emails.INBOUND}\r\n"
     )
