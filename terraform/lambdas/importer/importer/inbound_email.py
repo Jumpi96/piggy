@@ -5,7 +5,10 @@ inbound address:
 
 - it was auto-forwarded by the user's own Gmail (Gmail adds X-Forwarded-For / X-Forwarded-To),
 - its original From is one of the configured Santander senders,
-- SES did not flag it as spam or a virus.
+- SES found no virus, and its own Authentication-Results shows a valid DKIM signature from
+  that sender's domain (the signature survives Gmail's forwarding, and only Santander can make
+  it). SES's spam verdict is deliberately not used: it is a content score that flagged genuine
+  purchase and transfer alerts.
 
 Gmail's one-time "forwarding confirmation" email is recognised separately, and its confirmation
 link (and code, in the older format) is surfaced in the app so the forwarding address can be
@@ -91,11 +94,40 @@ def _sender_matches(address: str, allowed: list[str]) -> bool:
     return False
 
 
-def _ses_flagged(msg: Message) -> Optional[str]:
-    for header in ("X-SES-Spam-Verdict", "X-SES-Virus-Verdict"):
-        if str(msg.get(header, "")).strip().upper() == "FAIL":
-            return f"{header} is FAIL"
-    return None
+def _virus_flagged(msg: Message) -> bool:
+    return str(msg.get("X-SES-Virus-Verdict", "")).strip().upper() == "FAIL"
+
+
+def _ses_dkim_domains(msg: Message) -> list[str]:
+    """Domains with a DKIM signature SES verified. SES prepends its own Authentication-Results,
+    so only the first header counts (a sender can add more below it)."""
+    results = str(msg.get("Authentication-Results", ""))
+    if not results.strip().lower().startswith("amazonses.com"):
+        return []
+    # header.i is the signing identity, "[local-part]@domain" (RFC 6376 §3.5): the domain is what
+    # comes after the last "@", never the local part. header.d is the bare domain.
+    identities = re.findall(r"\bdkim=pass\b[^;]*?header\.[id]=([^\s;]+)", results, re.IGNORECASE)
+    return [i.strip('"').rsplit("@", 1)[-1].lower() for i in identities]
+
+
+def _domain_matches(domain: str, allowed: list[str]) -> bool:
+    for entry in allowed:
+        base = entry.strip().lower().rsplit("@", 1)[-1]
+        if base and (domain == base or domain.endswith("." + base)):
+            return True
+    return False
+
+
+def _authenticated_sender(msg: Message, allowed: list[str]) -> bool:
+    """A configured Santander domain signed this message, and it is the domain it claims to be
+    from (relaxed alignment: the same domain or one under the other)."""
+    from_domains = [a.rsplit("@", 1)[-1] for a in _addresses(msg, "From")]
+    for signed in _ses_dkim_domains(msg):
+        if not _domain_matches(signed, allowed):
+            continue
+        if any(f == signed or f.endswith("." + signed) or signed.endswith("." + f) for f in from_domains):
+            return True
+    return False
 
 
 def _forwarded_by(msg: Message, gmail: str) -> bool:
@@ -158,13 +190,16 @@ def handle_message(raw: bytes, key: str, config: GateConfig) -> InboundResult:
     if forwarding:
         return InboundResult(forwarding=forwarding)
 
-    flagged = _ses_flagged(msg)
-    if flagged:
-        return InboundResult(ignored_reason=flagged)
+    if _virus_flagged(msg):
+        return InboundResult(ignored_reason="X-SES-Virus-Verdict is FAIL")
     if not _forwarded_by(msg, config.forwarding_gmail):
         return InboundResult(ignored_reason="not forwarded by the configured Gmail address")
     senders = _addresses(msg, "From")
     if not any(_sender_matches(a, config.santander_senders) for a in senders):
         return InboundResult(ignored_reason=f"sender {senders} is not a configured Santander sender")
+    if not _authenticated_sender(msg, config.santander_senders):
+        return InboundResult(ignored_reason="no valid DKIM signature from a configured Santander domain (as checked by SES)")
+    if str(msg.get("X-SES-Spam-Verdict", "")).strip().upper() == "FAIL":
+        logger.info("SES flagged %s as spam; accepted because its Santander DKIM signature is valid", key)
 
     return InboundResult(entry=parse_email(msg, message_id(msg, key)))

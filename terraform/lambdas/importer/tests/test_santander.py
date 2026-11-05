@@ -1,4 +1,5 @@
 import emails
+import pytest
 from conftest import FIXTURES
 from importer.inbound_email import GateConfig, handle_message, parse_message, s3_objects
 from importer.santander import classify, html_to_text, parse_email
@@ -90,9 +91,64 @@ def test_gate_rejects_other_senders_even_if_forwarded():
     assert handle_message(lookalike, "k", CONFIG).ignored_reason
 
 
-def test_gate_rejects_spam():
-    raw = emails.build("Aviso de compra", "<p>Compra VISA $ 1</p>", spam="FAIL")
-    assert "Spam" in handle_message(raw, "k", CONFIG).ignored_reason
+def test_gate_accepts_a_genuine_alert_that_ses_scored_as_spam():
+    # Real case: a purchase alert and a transfer alert, SPF/DKIM/DMARC all passing, spam verdict FAIL.
+    raw = emails.build("Pagaste $32.799,00", "<p>Compra VISA $ 1</p>", spam="FAIL")
+    result = handle_message(raw, "k", CONFIG)
+    assert result.ignored_reason is None and result.entry is not None
+
+
+def test_gate_accepts_the_authentication_results_shape_ses_writes_for_forwarded_mail():
+    auth = ("amazonses.com; spf=pass (spfCheck: domain of _spf.google.com designates 209.85.210.170 as permitted "
+            "sender) client-ip=209.85.210.170; envelope-from=me+caf_=santander-abc=in.example.com@gmail.com; "
+            "helo=mail-pf1-f170.google.com; dkim=pass header.i=@mails.santander.com.ar; dmarc=pass header.from=mails.santander.com.ar;")
+    raw = emails.build("Pagaste $32.799,00", "<p>Compra VISA $ 1</p>", spam="FAIL", auth_results=auth)
+    assert handle_message(raw, "k", CONFIG).entry is not None
+
+
+def test_gate_accepts_a_signing_identity_with_a_local_part_on_a_santander_domain():
+    raw = emails.build("Aviso", "<p>x</p>", auth_results="amazonses.com; dkim=pass header.i=avisos@mails.santander.com.ar;")
+    assert handle_message(raw, "k", CONFIG).entry is not None
+
+
+def test_gate_rejects_a_virus():
+    raw = emails.build("Aviso de compra", "<p>Compra VISA $ 1</p>").replace(b"X-SES-Virus-Verdict: PASS", b"X-SES-Virus-Verdict: FAIL")
+    assert "Virus" in handle_message(raw, "k", CONFIG).ignored_reason
+
+
+@pytest.mark.parametrize("auth", [
+    "",  # SES verified nothing
+    "amazonses.com; spf=pass; dkim=fail header.i=@mails.santander.com.ar; dmarc=fail header.from=mails.santander.com.ar;",
+    "amazonses.com; spf=pass; dkim=pass header.i=@attacker.example; dmarc=pass header.from=attacker.example;",
+    "mx.google.com; dkim=pass header.i=@mails.santander.com.ar;",  # not SES's own header
+    # The signing identity can carry a local part: the domain is what follows the "@".
+    "amazonses.com; dkim=pass header.i=mails.santander.com.ar@attacker.example; dmarc=pass header.from=attacker.example;",
+    "amazonses.com; dkim=pass header.i=@mails.santander.com.ar.attacker.example;",
+])
+def test_gate_requires_a_valid_santander_dkim_signature(auth):
+    raw = emails.build("Aviso de compra", "<p>Compra VISA $ 1</p>", auth_results=auth)
+    assert "DKIM" in handle_message(raw, "k", CONFIG).ignored_reason
+
+
+def test_gate_ignores_a_forged_authentication_results_below_ses_s():
+    raw = emails.build("Aviso de compra", "<p>Compra VISA $ 1</p>",
+                       auth_results="amazonses.com; dkim=fail header.i=@mails.santander.com.ar;")
+    # A sender-added header further down the headers must not rescue a failed SES result.
+    head, _, body = raw.partition(b"\n\n")
+    forged = b"Authentication-Results: " + emails.SANTANDER_DKIM_PASS.encode()
+    spoofed = head + b"\n" + forged + b"\n\n" + body
+    assert spoofed.index(b"dkim=fail") < spoofed.index(b"dkim=pass")
+    assert "DKIM" in handle_message(spoofed, "k", CONFIG).ignored_reason
+
+
+def test_gate_requires_the_signature_to_match_the_from_domain():
+    other = "Santander <avisos@santander.com.ar>"
+    raw = emails.build("Aviso", "<p>x</p>", sender=other, auth_results="amazonses.com; dkim=pass header.i=@mails.santander.com.ar;")
+    # santander.com.ar and mails.santander.com.ar are the same organization: aligned.
+    assert handle_message(raw, "k", CONFIG).entry is not None
+    unrelated = emails.build("Aviso", "<p>x</p>", sender="Santander <x@mails.santander.com.ar>",
+                             auth_results="amazonses.com; dkim=pass header.i=@santander.com.ar;")
+    assert handle_message(unrelated, "k", CONFIG).entry is not None
 
 
 def test_gmail_forwarding_confirmation_code_is_extracted():
