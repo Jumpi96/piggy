@@ -18,59 +18,46 @@ jobs:
     steps:
       - name: Collect import state
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
-          pip install -q psycopg2-binary
           mkdir -p out
           cat > fetch.py <<'PY'
-          import json, os
-          def save(name, payload):
-              with open(os.path.join("out", name), "w") as f:
-                  f.write(payload)
-          try:
-              import psycopg2
-              conn = psycopg2.connect(os.environ["SUPABASE_DB_URL"], connect_timeout=15)
-              cur = conn.cursor()
-              cur.execute("select value, updated_at from parameters where key = 'import_status'")
-              save("status.json", json.dumps(cur.fetchall(), default=str))
-              cur.execute("""select kind, external_id, date, amount_cents, currency_code, description, account_ref, parse_error, status, created_at,
-                                    raw->>'subject'
-                             from import_entries where source = 'santander' and created_at > now() - interval '8 days' order by created_at""")
-              save("entries.json", json.dumps(cur.fetchall(), default=str))
-              conn.close()
-              print("db: ok")
-          except Exception as e:
-              print("db: failed", type(e).__name__)
+          import email, email.policy, json, os, subprocess
+          B = subprocess.check_output(["aws", "s3api", "list-buckets", "--query", "Buckets[?contains(Name, 'inbound-mail')].Name | [0]", "--output", "text"], text=True).strip()
+          KEEP = ("from", "to", "subject", "date", "message-id", "return-path", "received-spf", "authentication-results", "dkim-signature", "arc-authentication-results", "x-forwarded-for", "x-forwarded-to", "x-ses-spam-verdict", "x-ses-virus-verdict", "x-ses-receipt", "x-gm-message-state", "content-type")
+          out = {}
+          for key in ("santander/k2ig7n9gjl20con44ivj1mhjr0sq90oe4i51g9g1", "santander/14kgovvvkspq1bm2aobcrbudqsran3arg66hu881", "santander/r5hcev4ga75punr2j5758gnq534l8v5jfrg74j01"):
+              raw = subprocess.check_output(["aws", "s3", "cp", "s3://%s/%s" % (B, key), "-"])
+              msg = email.message_from_bytes(raw, policy=email.policy.default)
+              hdr = [(k, str(v)[:400]) for k, v in msg.items() if k.lower() in KEEP]
+              body = msg.get_body(preferencelist=("html", "plain"))
+              text = body.get_content() if body else ""
+              out[key] = {"size": len(raw), "headers": hdr, "body_len": len(text), "body_head": text[:1500]}
+          with open("out/mails.json", "w") as f:
+              json.dump(out, f)
+          print("mails: ok")
           PY
           python3 fetch.py
-          B=$(aws s3api list-buckets --query "Buckets[?contains(Name, 'inbound-mail')].Name | [0]" --output text 2>/dev/null)
-          echo "bucket found: $([ -n "$B" ] && [ "$B" != None ] && echo yes || echo no)"
-          if [ -n "$B" ] && [ "$B" != None ]; then
-            aws s3api list-objects-v2 --bucket "$B" --prefix santander/ --query "Contents[].{k:Key,t:LastModified,s:Size}" --output json > out/s3.json 2>out/s3.err || echo "s3 list failed"
-          fi
-          START=$(( ($(date +%s) - 6*86400) * 1000 ))
-          aws logs filter-log-events --log-group-name /aws/lambda/piggy_import_santander --start-time "$START" --output json --query "events[].{t:timestamp,m:message}" > out/logs.json 2>out/logs.err || echo "logs failed"
           echo "files: $(ls out | wc -l)"
 
       - name: Encrypt and print
         run: |
           cat > pub.pem <<'KEY'
           -----BEGIN PUBLIC KEY-----
-          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAphkD77WiyQHxQLq0qy+y
-          MSPTrk/lBkSzDoR5ZhGElxxS6CSCigch5QULQcAxOenaaFQRxFQmPTRi8ETvxRaR
-          IGNIyzPn+6wXY1sb/p0duQA3mi4a76qpNuFrdQKbCGnH2buQVll3VxQPlqgaVkLd
-          BKGiYxBT+t1af+9vi13z8OwBHx6kYn2M09tRdt0YwUb/cJinkHHrdsOgGGeiPsr+
-          mZVF0KPvICPMvJsiFnvJGDAoytmVXguntrBlGjOsnTAToqwaZkNXCCA5A32wuIv5
-          5CQot5U0QWmXTccIKWCfBSB2xqJd7SED7PcKQhlHgpvGlHtbsyQRPixZJvuAZbM9
-          o888emnIFSS0a9CsEiPtoCI320CaXfRCX8BvxBkxn2+t1uWro22GaXgeFYApxQ0v
-          4IQLV7IvHd5oeXG/v3nkBYa+w3oNWnJ115GJtlCGNSsedw1LdhyUOvC3RVpSvH1H
-          +zWbx/HagztAqRdtr2k3sOh/FkPRc7vJh5NQkBi4KhAu/w1V+Swg9qfYRWokCevr
-          jgeJZh//tRd47Ukueiy5vnFlU46inteu8CVp5u91pa2d8uNddIL7B8mKNaNC8/qO
-          onKTnhZv9IewhEBcmV0rUG929V7/iDrjijO2fUmz3qjGM6IYVrkS/h9glCeSzOWx
-          XG0BSBuMCLzFtW+aDmuvUsUCAwEAAQ==
+          MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAq7uBtmPuUbplPsCGFTX0
+          ljTysyFASQdm/s9hEEYBDhFiNuGbmSK6xnd/5WaZdzPfqJ9cbO2X/PCJxworkyrh
+          BXkFTMQlXU4Y0tU1zEyUEnnUDUgDb0hdz268S12yJjUGhKvUIFmmSzd1dUGaE2Cf
+          eskQ24xMFrYY5AMn8wJeR3JnoiOnR/PehulWk4ocWiK6ZgV1mQzqImy/r/FNknBZ
+          1BKy1SezCZ0EbG69d+XGsckQMU+z/vCO7n7tH4uw2DOtkPxgeCsguV4eZbJfMEen
+          HUHDSO2AsIVVN4D6Z4dhybmSmprFocd0Q6TC4uopUHXxxT4lb3hKq6vjs3eX4p3A
+          e2uMYxRjtSYukRhj26jqlIq5dWHLfK2B4Kl3YmJw9jV1Qja2wDx3HYHnG23jLvo8
+          62ndlab6B4df9cDQACrmAB2t2IlTCjdKI5aXyZ1GDIwqphQ9ZzxV7uSnfU6yNYaG
+          aD6yWmfcxWXXjCIEoiyZkyFy/BVSX2VGOAuqYY6CnuxekA2IOND355xD3lF7kGeU
+          PdfDDf7sgkYFUK8CBMTW0Cuq9+aMB2O1oXASgkh81IHZUtgEM0jvTL5Q0+OxrKUx
+          i9BTE9sGjWm33jUyFTjdsD9wJo7uPgGvteft32hyfst7vgLsTB6xdnwN2p8uSlSY
+          HeckZ7A8p4ieXQTY44AcK5kCAwEAAQ==
           -----END PUBLIC KEY-----
           KEY
           sed -i 's/^ *//' pub.pem
