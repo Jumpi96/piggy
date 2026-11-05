@@ -106,6 +106,11 @@ def test_gate_accepts_the_authentication_results_shape_ses_writes_for_forwarded_
     assert handle_message(raw, "k", CONFIG).entry is not None
 
 
+def test_gate_accepts_a_signing_identity_with_a_local_part_on_a_santander_domain():
+    raw = emails.build("Aviso", "<p>x</p>", auth_results="amazonses.com; dkim=pass header.i=avisos@mails.santander.com.ar;")
+    assert handle_message(raw, "k", CONFIG).entry is not None
+
+
 def test_gate_rejects_a_virus():
     raw = emails.build("Aviso de compra", "<p>Compra VISA $ 1</p>").replace(b"X-SES-Virus-Verdict: PASS", b"X-SES-Virus-Verdict: FAIL")
     assert "Virus" in handle_message(raw, "k", CONFIG).ignored_reason
@@ -116,6 +121,9 @@ def test_gate_rejects_a_virus():
     "amazonses.com; spf=pass; dkim=fail header.i=@mails.santander.com.ar; dmarc=fail header.from=mails.santander.com.ar;",
     "amazonses.com; spf=pass; dkim=pass header.i=@attacker.example; dmarc=pass header.from=attacker.example;",
     "mx.google.com; dkim=pass header.i=@mails.santander.com.ar;",  # not SES's own header
+    # The signing identity can carry a local part: the domain is what follows the "@".
+    "amazonses.com; dkim=pass header.i=mails.santander.com.ar@attacker.example; dmarc=pass header.from=attacker.example;",
+    "amazonses.com; dkim=pass header.i=@mails.santander.com.ar.attacker.example;",
 ])
 def test_gate_requires_a_valid_santander_dkim_signature(auth):
     raw = emails.build("Aviso de compra", "<p>Compra VISA $ 1</p>", auth_results=auth)

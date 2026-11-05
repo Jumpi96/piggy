@@ -104,7 +104,10 @@ def _ses_dkim_domains(msg: Message) -> list[str]:
     results = str(msg.get("Authentication-Results", ""))
     if not results.strip().lower().startswith("amazonses.com"):
         return []
-    return [d.lower() for d in re.findall(r"\bdkim=pass\b[^;]*?header\.[id]=@?([\w.-]+)", results, re.IGNORECASE)]
+    # header.i is the signing identity, "[local-part]@domain" (RFC 6376 §3.5): the domain is what
+    # comes after the last "@", never the local part. header.d is the bare domain.
+    identities = re.findall(r"\bdkim=pass\b[^;]*?header\.[id]=([^\s;]+)", results, re.IGNORECASE)
+    return [i.strip('"').rsplit("@", 1)[-1].lower() for i in identities]
 
 
 def _domain_matches(domain: str, allowed: list[str]) -> bool:
