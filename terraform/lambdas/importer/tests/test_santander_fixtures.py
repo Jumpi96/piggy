@@ -20,6 +20,11 @@ EXPECTED = {
         "card_purchase", "2026-10-08", 7850000, "ARS", "MERPAGO*TIENDANUBE",
         "Tarjeta Santander Visa Crédito terminada en 2222", 1,
     ),
+    # Purchase made with an additional card: same kind, mapped by its own last four digits.
+    "santander_card_additional_1.eml": (
+        "card_purchase", "2026-11-20", 1525050, "ARS", "KIOSCO EJEMPLO 12345 SUC",
+        "Tarjeta Santander Visa Crédito terminada en 3333", 1,
+    ),
     "santander_debit_purchase_1.eml": (
         "debit_purchase", "2026-10-10", 3245000, "ARS", "PEDIDOSYA*RESTAURANTE",
         "Tarjeta Santander Visa Débito terminada en 4821", None,
@@ -74,3 +79,37 @@ def test_forwarded_real_alert_passes_the_gate(name):
 def test_real_alert_not_forwarded_by_the_user_is_ignored():
     result = handle_message(load("santander_card_purchase_1.eml"), "santander/obj", CONFIG)
     assert "not forwarded" in result.ignored_reason
+
+
+def parsed(name: str):
+    return parse_email(parse_message(load(name)), "id")
+
+
+def test_additional_card_alert_keeps_holder_card_and_time():
+    e = parsed("santander_card_additional_1.eml")
+    assert e.raw["subject"] == "Información sobre el pago de tu adicional"  # decoded, not =?utf-8?q?...
+    assert e.raw["card"] == {
+        "brand": "Visa", "type": "Crédito", "last4": "3333", "holder": "Lucía Ejemplo Pérez", "additional": True,
+    }
+    assert e.raw["time"] == "13:43"
+
+
+def test_owner_card_alert_is_not_flagged_as_additional():
+    """Regression: the owner's format has no holder and keeps parsing as before."""
+    e = parsed("santander_card_purchase_1.eml")
+    assert e.raw["card"] == {"brand": "Visa", "type": "Crédito", "last4": "1111"}
+    assert e.raw["time"] == "23:14"
+    assert "holder" not in e.raw["card"]
+    assert e.raw["subject"] == "Pagaste $59.100,50"
+
+
+def test_owner_and_additional_alerts_have_distinct_card_refs():
+    owner, additional = parsed("santander_card_purchase_2.eml"), parsed("santander_card_additional_1.eml")
+    assert owner.account_ref != additional.account_ref
+    assert owner.external_id == additional.external_id == "id"  # real ids come from distinct Message-IDs
+    assert parse_message(load("santander_card_purchase_2.eml"))["Message-ID"] != parse_message(
+        load("santander_card_additional_1.eml"))["Message-ID"]
+
+
+def test_debit_alerts_carry_no_card_details():
+    assert "card" not in parsed("santander_debit_purchase_1.eml").raw

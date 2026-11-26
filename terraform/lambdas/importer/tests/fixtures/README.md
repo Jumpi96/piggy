@@ -10,6 +10,7 @@ and merchants were replaced, the recipient became `me@gmail.com`, and the image 
 |---|---|
 | `santander_card_purchase_1.eml` | Visa credit purchase in 3 cuotas |
 | `santander_card_purchase_2.eml` | Visa credit purchase in 1 cuota, from another card |
+| `santander_card_additional_1.eml` | Visa credit purchase made with an additional card ("Información sobre el pago de tu adicional"), 1 cuota |
 | `santander_debit_purchase_1.eml` | Visa debit purchase in ARS |
 | `santander_debit_purchase_2.eml` | Visa debit purchase in USD (`U$S`) |
 | `santander_transfer_out_1.eml` | Transfer sent (no date in the body; the `Date` header is used) |
@@ -17,6 +18,10 @@ and merchants were replaced, the recipient became `me@gmail.com`, and the image 
 `test_santander_fixtures.py` also wraps each one in the headers Gmail and SES add when it is
 forwarded (`as_stored_in_s3`), to check that it passes the gate. Once an alert really arrives
 through SES, add its S3 copy as `santander_<kind>_<n>_forwarded.eml`.
+
+`santander_card_additional_1.eml` was derived from `santander_card_purchase_2.eml`: the real HTML layout
+with the additional-card wording ("el consumo que hizo NAME con su Tarjeta ...") swapped in, and the
+holder, digits, merchant, amount and date replaced. Replace it with the real alert (anonymized) when convenient.
 
 There is no real "transfer received" sample yet; that kind is covered only by the synthetic
 emails in `tests/emails.py`.

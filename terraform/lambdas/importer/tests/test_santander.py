@@ -22,6 +22,26 @@ def test_credit_card_purchase():
     assert "p{color:red}" not in e.raw["body"]  # styles are not text
 
 
+def test_additional_card_purchase_synthetic_layout():
+    """Label and value in separate table cells, the holder's name wrapped across lines."""
+    raw = emails.build(
+        "Información sobre el pago de tu adicional",
+        """<p>Te acercamos el detalle del consumo que hizo Ana
+        Ejemplo con su <b>Tarjeta Santander Visa Crédito</b> terminada en <b>3333</b>.</p>
+        <table><tr><td>Monto</td><td>$28.300,00</td></tr><tr><td>Cuotas</td><td>1</td></tr>
+        <tr><td>Comercio</td><td>APIES 31355 TIENDA</td></tr><tr><td>Fecha</td><td>26/11/2026</td></tr>
+        <tr><td>Hora</td><td>13:43</td></tr></table>""",
+        message_id="<alert-additional@santander.com.ar>",
+    )
+    e = parse(raw)
+    assert (e.kind, e.direction, e.amount_cents, e.currency_code, e.date) == ("card_purchase", "expense", 2830000, "ARS", "2026-11-26")
+    assert (e.description, e.installments, e.parse_error) == ("APIES 31355 TIENDA", 1, None)
+    assert e.account_ref == "Tarjeta Santander Visa Crédito terminada en 3333"
+    assert e.raw["card"]["holder"] == "Ana Ejemplo"
+    assert e.raw["time"] == "13:43"
+    assert handle_message(raw, "k", CONFIG).entry.external_id == "<alert-additional@santander.com.ar>"
+
+
 def test_usd_purchase_in_installments():
     e = parse(emails.USD_INSTALLMENTS)
     assert (e.kind, e.amount_cents, e.currency_code, e.installments) == ("card_purchase", 4599, "USD", 3)
