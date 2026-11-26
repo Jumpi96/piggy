@@ -53,6 +53,17 @@ describe('matchCardRule', () => {
         expect(matchCardRule(entry(), [{ ...signature, field: 'account_ref' }])).toBeNull();
     });
 
+    it('keeps the owner card and an additional card of the same bank apart by their last four digits', () => {
+        const ref = (digits: string) => `Tarjeta Santander Visa Crédito terminada en ${digits}`;
+        const owner: CardRule = { text: 'terminada en 1111', field: 'account_ref', credit_card_id: 'card-owner' };
+        const additional: CardRule = { text: 'terminada en 3333', field: 'account_ref', credit_card_id: 'card-additional' };
+        expect(matchCardRule(entry({ account_ref: ref('3333') }), [owner, additional])).toBe(additional);
+        expect(matchCardRule(entry({ account_ref: ref('1111') }), [owner, additional])).toBe(owner);
+        // Until the additional card has a rule, its purchases are not silently charged to the owner's card.
+        expect(matchCardRule(entry({ account_ref: ref('3333') }), [owner])).toBeNull();
+        expect(unmappedAccountRefs([entry({ account_ref: ref('3333') })], [owner])).toEqual([ref('3333')]);
+    });
+
     it('returns null when nothing matches or the rule text is blank', () => {
         expect(matchCardRule(entry(), [amex])).toBeNull();
         expect(matchCardRule(entry(), [{ ...visa, text: '  ' }])).toBeNull();

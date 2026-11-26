@@ -8,10 +8,16 @@ becomes an entry, with `parse_error` set, so it shows up in the Inbox as "needs 
 The keywords and labels are tuned against real alerts (tests/fixtures/santander_*.eml). In
 those, every label stands on its own line with no colon ("Comercio" / "PEDIDOSYA*..."), and
 the card is named as "Tarjeta Santander Visa Crédito terminada en NNNN" (`account_ref`).
+
+Alerts for an additional card ("Información sobre el pago de tu adicional") use the same layout; only
+the sentence changes ("el consumo que hizo NAME con su Tarjeta ..."). They are the same `card_purchase`
+kind and map to a Piggy card by their own last four digits. Brand/type/last4, the holder (additional
+cards only) and the time are kept in `raw["card"]` / `raw["time"]`; no column is needed.
 """
 from __future__ import annotations
 
 import re
+from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
@@ -43,6 +49,15 @@ CARD_REF_RE = re.compile(
     r"(?:terminada|finalizada|termina)\s+en\s*:?\s*\**\s*\d{4})",
     re.IGNORECASE,
 )
+# Additional-card alerts say whose purchase it is: "...el detalle del consumo que hizo NAME con su Tarjeta
+# Santander Visa Crédito terminada en 1383". The owner's own alerts say "tu consumo con la Tarjeta ...".
+ADDITIONAL_HOLDER_RE = re.compile(r"consumo\s+que\s+hizo\s+(?P<name>.+?)\s+con\s+su\s+tarjeta\b", re.IGNORECASE)
+CARD_DETAIL_RE = re.compile(
+    r"(?P<brand>visa|american express|amex|mastercard|master)\s*(?P<type>cr[eé]dito|d[eé]bito)?"
+    r".*?(?:terminada|finalizada|termina)\s+en\s*:?\s*\**\s*(?P<last4>\d{4})",
+    re.IGNORECASE,
+)
+TIME_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 # "en 3 cuotas" on one line; not the tail of an amount ("12.345,67" followed by "Cuotas:").
 INSTALLMENTS_RE = re.compile(r"(?<![\d.,])(\d{1,2})[ \t]+cuotas?\b", re.IGNORECASE)
 
@@ -149,8 +164,32 @@ def _installments(lines: list[str], text: str) -> Optional[int]:
     return int(m.group(1)) if m else None
 
 
+def _card_details(account_ref: Optional[str], text: str) -> dict[str, object]:
+    """Brand, type and last four digits of the card an alert names, plus the holder when the alert is
+    for an additional card (the owner's own alerts don't name anyone). Empty when nothing is found."""
+    details: dict[str, object] = {}
+    m = CARD_DETAIL_RE.search(account_ref or "")
+    if m:
+        details["brand"] = collapse_ws(m.group("brand")).title()
+        if m.group("type"):
+            details["type"] = m.group("type").capitalize()
+        details["last4"] = m.group("last4")
+    holder = ADDITIONAL_HOLDER_RE.search(collapse_ws(text))
+    if holder:
+        details["holder"] = holder.group("name")
+        details["additional"] = True
+    return details
+
+
+def _decoded_subject(msg: Message) -> str:
+    try:
+        return collapse_ws(str(make_header(decode_header(str(msg.get("Subject", ""))))))
+    except Exception:  # malformed encoded-words: keep the raw header rather than lose the alert
+        return collapse_ws(str(msg.get("Subject", "")))
+
+
 def parse_email(msg: Message, external_id: str) -> Entry:
-    subject = collapse_ws(str(msg.get("Subject", "")))
+    subject = _decoded_subject(msg)
     body = message_text(msg)
     text = f"{subject}\n{body}"
     lines = [l for l in body.splitlines() if l.strip()]
@@ -175,6 +214,15 @@ def parse_email(msg: Message, external_id: str) -> Entry:
     card = CARD_REF_RE.search(text)
     account_ref = collapse_ws(card.group("ref")) if card else None
     installments = _installments(lines, text)
+
+    raw: dict[str, object] = {"subject": subject, "body": body[:RAW_BODY_LIMIT]}
+    if kind == "card_purchase":
+        details = _card_details(account_ref, body)
+        if details:
+            raw["card"] = details
+        time = TIME_RE.search(_labelled_value(lines, ("hora",)) or "")
+        if time:
+            raw["time"] = f"{int(time.group(1)):02d}:{time.group(2)}"
 
     problems = []
     if kind == "unknown":
@@ -203,6 +251,6 @@ def parse_email(msg: Message, external_id: str) -> Entry:
         description=description,
         account_ref=account_ref,
         installments=installments,
-        raw={"subject": subject, "body": body[:RAW_BODY_LIMIT]},
+        raw=raw,
         parse_error="; ".join(problems) or None,
     )
