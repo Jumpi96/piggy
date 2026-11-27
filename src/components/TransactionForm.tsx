@@ -16,7 +16,7 @@ import {
     DEFAULT_IMPORT_SETTINGS, IMPORT_SETTINGS_KEY, entryInstallments, entryToDraft, installmentAmountCents,
     installmentEndDate, installmentNote, matchCardRule,
 } from '../lib/imports';
-import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
+import { calculateCreditCardEffectiveDate, getPeriodForDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
 import type { BalanceEntry, Currency, CreditCard, Direction, ImportEntry, ImportSettings, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
@@ -28,6 +28,12 @@ import { evaluateAmountExpression } from '../lib/amountExpression';
 import { signedBalanceCents } from '../lib/balance';
 
 type LinkedBalanceAction = 'keep' | 'detach' | 'remove';
+
+/** "November" for the financial period a YYYY-MM-DD date falls in (see month_start_day). */
+function monthLabel(dateStr: string): string {
+    const [year, month] = getPeriodForDate(dateStr).split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long' });
+}
 
 const shortDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -89,6 +95,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [balanceOn, setBalanceOn] = useState(false);
     const [balanceAmount, setBalanceAmount] = useState(amount);
     const [balanceAmountEdited, setBalanceAmountEdited] = useState(false);
+    // How to balance a card purchase whose charge lands in a later month:
+    // - 'card': this month's day-to-day spending put on the card. The purchase month keeps
+    //   money it should have spent, so it gets the opposite entry (−20 for 20 of food).
+    // - 'unexpected': outside the budget, balanced when the charge lands (like cash, later).
+    const [balanceKind, setBalanceKind] = useState<'card' | 'unexpected'>('card');
     // Entries already made from this transaction (editing only). They don't follow the
     // transaction, so each is kept (amount editable), detached or removed on save.
     const [linkedEntries, setLinkedEntries] = useState<BalanceEntry[]>([]);
@@ -153,6 +164,38 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     }, []);
 
 
+    // The date the transaction is stored under: the card's payment date for a new/raw card
+    // purchase, the entered date otherwise.
+    const computeEffectiveDate = (): Date => {
+        let effectiveDate = parseLocalDate(date);
+        if (method === 'card') {
+            const card = creditCards.find(c => c.id === cardId);
+            if (!card) throw new Error("Selected card not found");
+            const shouldDerive = shouldDeriveCardEffectiveDate({
+                isNew: !initialData,
+                enteredDate: date,
+                storedDate: initialData?.date,
+                storedMethod: initialData?.payment_method,
+                storedCardId: initialData?.credit_card_id,
+                cardId,
+            });
+            if (shouldDerive) {
+                effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
+            }
+        }
+        return effectiveDate;
+    };
+
+    // The date the card statement pays this purchase on, when it falls in a later financial
+    // period than the purchase (periods, not calendar months: see month_start_day).
+    let paymentMonthDate: string | null = null;
+    if (method === 'card' && cardId && creditCards.length > 0) {
+        try {
+            const eff = formatLocalDate(computeEffectiveDate());
+            if (getPeriodForDate(eff) !== getPeriodForDate(date)) paymentMonthDate = eff;
+        } catch { /* card not loaded yet */ }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -190,23 +233,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             // Re-applying it to an already-shifted stored date is non-idempotent and would
             // silently push the transaction one month forward on every edit (see
             // shouldDeriveCardEffectiveDate).
-            let effectiveDate = parseLocalDate(date);
-            if (method === 'card') {
-                const card = creditCards.find(c => c.id === cardId);
-                if (!card) throw new Error("Selected card not found");
-                const shouldDerive = shouldDeriveCardEffectiveDate({
-                    isNew: !initialData,
-                    enteredDate: date,
-                    storedDate: initialData?.date,
-                    storedMethod: initialData?.payment_method,
-                    storedCardId: initialData?.credit_card_id,
-                    cardId,
-                });
-                if (shouldDerive) {
-                    effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
-                }
-            }
-
+            const effectiveDate = computeEffectiveDate();
             const dateStr = formatLocalDate(effectiveDate);
 
             // Exchange Rate
@@ -326,11 +353,16 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             }
 
             if (balanceValue !== null && savedId) {
+                // A card purchase of this month's spending: the opposite entry, in the purchase's
+                // month (the month that has the money left over), not the card's payment month.
+                const paidByCard = paymentMonthDate !== null && balanceKind === 'card';
+                const signed = signedBalanceCents(direction, Math.round(balanceValue * 100));
                 await insertBalanceEntry({
-                    date: dateStr,
-                    amount_cents: signedBalanceCents(direction, Math.round(balanceValue * 100)),
+                    date: paidByCard ? date : dateStr,
+                    amount_cents: paidByCard ? -signed : signed,
                     currency_code: currencyCode,
-                    exchange_rate_id: exchangeRateId,
+                    // Valued at the rate of its own date, like a manual ledger entry.
+                    exchange_rate_id: paidByCard ? await fetchExchangeRate(currencyCode, date) : exchangeRateId,
                     transaction_id: savedId,
                 });
             }
@@ -684,7 +716,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                         />
                         <label htmlFor="balanceOn" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                             {linkedEntries.length > 0 ? 'Balance another amount' : 'Balance it'}{' '}
-                            <span className="text-gray-400 text-xs block sm:inline">(outside the budget, e.g. unexpected {direction})</span>
+                            <span className="text-gray-400 text-xs block sm:inline">
+                                {paymentMonthDate
+                                    ? `(charged in ${monthLabel(paymentMonthDate)})`
+                                    : `(outside the budget, e.g. unexpected ${direction})`}
+                            </span>
                         </label>
                     </div>
                     {balanceOn && (
@@ -697,10 +733,29 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                                 />
                                 <span className="text-sm text-gray-500">{currencyCode}</span>
                             </div>
+                            {paymentMonthDate && (
+                                <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+                                    {(['card', 'unexpected'] as const).map(k => (
+                                        <button
+                                            key={k}
+                                            type="button"
+                                            onClick={() => setBalanceKind(k)}
+                                            className={cn(
+                                                "flex-1 py-1.5 rounded-md text-xs font-semibold transition-all",
+                                                balanceKind === k
+                                                    ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm"
+                                                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                            )}
+                                        >
+                                            {k === 'card' ? `${monthLabel(date)}'s spending` : `Unexpected ${direction}`}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                             <p className="text-xs text-gray-400">
-                                {direction === 'expense'
-                                    ? 'Adds this amount to what this month needs from savings.'
-                                    : 'Takes this amount off what this month needs from savings.'}
+                                {paymentMonthDate && balanceKind === 'card'
+                                    ? `Paid by card, so ${monthLabel(date)} keeps this money: ${direction === 'expense' ? 'takes it off' : 'adds it to'} what ${monthLabel(date)} needs from savings.`
+                                    : `${direction === 'expense' ? 'Adds this amount to' : 'Takes this amount off'} what ${paymentMonthDate ? monthLabel(paymentMonthDate) : 'this month'} needs from savings.`}
                                 {' '}Defaults to the full amount — change it to balance only part.
                             </p>
                         </div>
