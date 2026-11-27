@@ -89,6 +89,9 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [balanceOn, setBalanceOn] = useState(false);
     const [balanceAmount, setBalanceAmount] = useState(amount);
     const [balanceAmountEdited, setBalanceAmountEdited] = useState(false);
+    // A card purchase lands in a later month (when the card is paid), but the money is out of
+    // savings now, so by default the balance goes to the month of the purchase.
+    const [balanceWhen, setBalanceWhen] = useState<'purchase' | 'payment'>('purchase');
     // Entries already made from this transaction (editing only). They don't follow the
     // transaction, so each is kept (amount editable), detached or removed on save.
     const [linkedEntries, setLinkedEntries] = useState<BalanceEntry[]>([]);
@@ -153,6 +156,37 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     }, []);
 
 
+    // The date the transaction is stored under: the card's payment date for a new/raw card
+    // purchase, the entered date otherwise.
+    const computeEffectiveDate = (): Date => {
+        let effectiveDate = parseLocalDate(date);
+        if (method === 'card') {
+            const card = creditCards.find(c => c.id === cardId);
+            if (!card) throw new Error("Selected card not found");
+            const shouldDerive = shouldDeriveCardEffectiveDate({
+                isNew: !initialData,
+                enteredDate: date,
+                storedDate: initialData?.date,
+                storedMethod: initialData?.payment_method,
+                storedCardId: initialData?.credit_card_id,
+                cardId,
+            });
+            if (shouldDerive) {
+                effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
+            }
+        }
+        return effectiveDate;
+    };
+
+    // The month the card statement pays this purchase in, when it isn't the purchase's own month.
+    let paymentMonthDate: string | null = null;
+    if (method === 'card' && cardId && creditCards.length > 0) {
+        try {
+            const eff = formatLocalDate(computeEffectiveDate());
+            if (eff.slice(0, 7) !== date.slice(0, 7)) paymentMonthDate = eff;
+        } catch { /* card not loaded yet */ }
+    }
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
@@ -190,23 +224,7 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             // Re-applying it to an already-shifted stored date is non-idempotent and would
             // silently push the transaction one month forward on every edit (see
             // shouldDeriveCardEffectiveDate).
-            let effectiveDate = parseLocalDate(date);
-            if (method === 'card') {
-                const card = creditCards.find(c => c.id === cardId);
-                if (!card) throw new Error("Selected card not found");
-                const shouldDerive = shouldDeriveCardEffectiveDate({
-                    isNew: !initialData,
-                    enteredDate: date,
-                    storedDate: initialData?.date,
-                    storedMethod: initialData?.payment_method,
-                    storedCardId: initialData?.credit_card_id,
-                    cardId,
-                });
-                if (shouldDerive) {
-                    effectiveDate = calculateCreditCardEffectiveDate(effectiveDate, card.closing_day, card.payment_day);
-                }
-            }
-
+            const effectiveDate = computeEffectiveDate();
             const dateStr = formatLocalDate(effectiveDate);
 
             // Exchange Rate
@@ -326,8 +344,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             }
 
             if (balanceValue !== null && savedId) {
+                // Balancing a card purchase now (default): put it in the purchase's month, not the
+                // month the card gets paid in, where it would be balanced a month too late.
+                const balanceDate = paymentMonthDate && balanceWhen === 'purchase' ? date : dateStr;
                 await insertBalanceEntry({
-                    date: dateStr,
+                    date: balanceDate,
                     amount_cents: signedBalanceCents(direction, Math.round(balanceValue * 100)),
                     currency_code: currencyCode,
                     exchange_rate_id: exchangeRateId,
@@ -697,7 +718,29 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                                 />
                                 <span className="text-sm text-gray-500">{currencyCode}</span>
                             </div>
+                            {paymentMonthDate && (
+                                <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
+                                    {(['purchase', 'payment'] as const).map(w => (
+                                        <button
+                                            key={w}
+                                            type="button"
+                                            onClick={() => setBalanceWhen(w)}
+                                            className={cn(
+                                                "flex-1 py-1.5 rounded-md text-xs font-semibold transition-all",
+                                                balanceWhen === w
+                                                    ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm"
+                                                    : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                                            )}
+                                        >
+                                            {w === 'purchase' ? 'This month' : 'When the card is paid'}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                             <p className="text-xs text-gray-400">
+                                {paymentMonthDate && (balanceWhen === 'purchase'
+                                    ? `Balanced now, in the month of the purchase — the card charge itself lands in ${paymentMonthDate.slice(0, 7)}. `
+                                    : `Balanced in ${paymentMonthDate.slice(0, 7)}, when the card is paid. `)}
                                 {direction === 'expense'
                                     ? 'Adds this amount to what this month needs from savings.'
                                     : 'Takes this amount off what this month needs from savings.'}
