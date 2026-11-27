@@ -29,6 +29,11 @@ import { signedBalanceCents } from '../lib/balance';
 
 type LinkedBalanceAction = 'keep' | 'detach' | 'remove';
 
+/** "November" for a YYYY-MM-DD date. */
+function monthLabel(dateStr: string): string {
+    return parseLocalDate(dateStr).toLocaleString('en-US', { month: 'long' });
+}
+
 const shortDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 /** "Nov 3, 2026" for a YYYY-MM-DD date. */
@@ -89,9 +94,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
     const [balanceOn, setBalanceOn] = useState(false);
     const [balanceAmount, setBalanceAmount] = useState(amount);
     const [balanceAmountEdited, setBalanceAmountEdited] = useState(false);
-    // A card purchase lands in a later month (when the card is paid), but the money is out of
-    // savings now, so by default the balance goes to the month of the purchase.
-    const [balanceWhen, setBalanceWhen] = useState<'purchase' | 'payment'>('purchase');
+    // How to balance a card purchase whose charge lands in a later month:
+    // - 'card': this month's day-to-day spending put on the card. The purchase month keeps
+    //   money it should have spent, so it gets the opposite entry (−20 for 20 of food).
+    // - 'unexpected': outside the budget, balanced when the charge lands (like cash, later).
+    const [balanceKind, setBalanceKind] = useState<'card' | 'unexpected'>('card');
     // Entries already made from this transaction (editing only). They don't follow the
     // transaction, so each is kept (amount editable), detached or removed on save.
     const [linkedEntries, setLinkedEntries] = useState<BalanceEntry[]>([]);
@@ -344,12 +351,13 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
             }
 
             if (balanceValue !== null && savedId) {
-                // Balancing a card purchase now (default): put it in the purchase's month, not the
-                // month the card gets paid in, where it would be balanced a month too late.
-                const balanceDate = paymentMonthDate && balanceWhen === 'purchase' ? date : dateStr;
+                // A card purchase of this month's spending: the opposite entry, in the purchase's
+                // month (the month that has the money left over), not the card's payment month.
+                const paidByCard = paymentMonthDate !== null && balanceKind === 'card';
+                const signed = signedBalanceCents(direction, Math.round(balanceValue * 100));
                 await insertBalanceEntry({
-                    date: balanceDate,
-                    amount_cents: signedBalanceCents(direction, Math.round(balanceValue * 100)),
+                    date: paidByCard ? date : dateStr,
+                    amount_cents: paidByCard ? -signed : signed,
                     currency_code: currencyCode,
                     exchange_rate_id: exchangeRateId,
                     transaction_id: savedId,
@@ -705,7 +713,11 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                         />
                         <label htmlFor="balanceOn" className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer select-none">
                             {linkedEntries.length > 0 ? 'Balance another amount' : 'Balance it'}{' '}
-                            <span className="text-gray-400 text-xs block sm:inline">(outside the budget, e.g. unexpected {direction})</span>
+                            <span className="text-gray-400 text-xs block sm:inline">
+                                {paymentMonthDate
+                                    ? `(charged in ${monthLabel(paymentMonthDate)})`
+                                    : `(outside the budget, e.g. unexpected ${direction})`}
+                            </span>
                         </label>
                     </div>
                     {balanceOn && (
@@ -720,30 +732,27 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                             </div>
                             {paymentMonthDate && (
                                 <div className="flex bg-gray-100 dark:bg-zinc-800 p-1 rounded-lg">
-                                    {(['purchase', 'payment'] as const).map(w => (
+                                    {(['card', 'unexpected'] as const).map(k => (
                                         <button
-                                            key={w}
+                                            key={k}
                                             type="button"
-                                            onClick={() => setBalanceWhen(w)}
+                                            onClick={() => setBalanceKind(k)}
                                             className={cn(
                                                 "flex-1 py-1.5 rounded-md text-xs font-semibold transition-all",
-                                                balanceWhen === w
+                                                balanceKind === k
                                                     ? "bg-white dark:bg-zinc-700 text-gray-900 dark:text-white shadow-sm"
                                                     : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                                             )}
                                         >
-                                            {w === 'purchase' ? 'This month' : 'When the card is paid'}
+                                            {k === 'card' ? `${monthLabel(date)}'s spending` : `Unexpected ${direction}`}
                                         </button>
                                     ))}
                                 </div>
                             )}
                             <p className="text-xs text-gray-400">
-                                {paymentMonthDate && (balanceWhen === 'purchase'
-                                    ? `Balanced now, in the month of the purchase — the card charge itself lands in ${paymentMonthDate.slice(0, 7)}. `
-                                    : `Balanced in ${paymentMonthDate.slice(0, 7)}, when the card is paid. `)}
-                                {direction === 'expense'
-                                    ? 'Adds this amount to what this month needs from savings.'
-                                    : 'Takes this amount off what this month needs from savings.'}
+                                {paymentMonthDate && balanceKind === 'card'
+                                    ? `Paid by card, so ${monthLabel(date)} keeps this money: ${direction === 'expense' ? 'takes it off' : 'adds it to'} what ${monthLabel(date)} needs from savings.`
+                                    : `${direction === 'expense' ? 'Adds this amount to' : 'Takes this amount off'} what ${paymentMonthDate ? monthLabel(paymentMonthDate) : 'this month'} needs from savings.`}
                                 {' '}Defaults to the full amount — change it to balance only part.
                             </p>
                         </div>
