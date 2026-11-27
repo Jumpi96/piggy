@@ -16,7 +16,7 @@ import {
     DEFAULT_IMPORT_SETTINGS, IMPORT_SETTINGS_KEY, entryInstallments, entryToDraft, installmentAmountCents,
     installmentEndDate, installmentNote, matchCardRule,
 } from '../lib/imports';
-import { calculateCreditCardEffectiveDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
+import { calculateCreditCardEffectiveDate, getPeriodForDate, getTodayLocalDate, parseLocalDate, formatLocalDate, shouldDeriveCardEffectiveDate } from '../lib/dates';
 import type { BalanceEntry, Currency, CreditCard, Direction, ImportEntry, ImportSettings, PaymentMethod, Transaction } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { cn, normalizeForComparison } from '../lib/utils';
@@ -29,9 +29,10 @@ import { signedBalanceCents } from '../lib/balance';
 
 type LinkedBalanceAction = 'keep' | 'detach' | 'remove';
 
-/** "November" for a YYYY-MM-DD date. */
+/** "November" for the financial period a YYYY-MM-DD date falls in (see month_start_day). */
 function monthLabel(dateStr: string): string {
-    return parseLocalDate(dateStr).toLocaleString('en-US', { month: 'long' });
+    const [year, month] = getPeriodForDate(dateStr).split('-').map(Number);
+    return new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long' });
 }
 
 const shortDateFormat = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -185,12 +186,13 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
         return effectiveDate;
     };
 
-    // The month the card statement pays this purchase in, when it isn't the purchase's own month.
+    // The date the card statement pays this purchase on, when it falls in a later financial
+    // period than the purchase (periods, not calendar months: see month_start_day).
     let paymentMonthDate: string | null = null;
     if (method === 'card' && cardId && creditCards.length > 0) {
         try {
             const eff = formatLocalDate(computeEffectiveDate());
-            if (eff.slice(0, 7) !== date.slice(0, 7)) paymentMonthDate = eff;
+            if (getPeriodForDate(eff) !== getPeriodForDate(date)) paymentMonthDate = eff;
         } catch { /* card not loaded yet */ }
     }
 
@@ -359,7 +361,8 @@ export function TransactionForm({ initialData, onSuccess, onCancel, mode = 'edit
                     date: paidByCard ? date : dateStr,
                     amount_cents: paidByCard ? -signed : signed,
                     currency_code: currencyCode,
-                    exchange_rate_id: exchangeRateId,
+                    // Valued at the rate of its own date, like a manual ledger entry.
+                    exchange_rate_id: paidByCard ? await fetchExchangeRate(currencyCode, date) : exchangeRateId,
                     transaction_id: savedId,
                 });
             }
